@@ -1,0 +1,10 @@
+{
+    "mappers": [
+      {
+        "name": "Primary Role to JWT role",
+        "fileName": "primary-role.js",
+        "description": "Chooses the highest-priority realm role and puts it into the 'role' claim"
+      }
+    ]
+  }
+  
