@@ -66,6 +66,7 @@ async function promptForConfig(projectName, options) {
     anonKey: fileUtils.generateRandomKey(32),
     serviceRoleKey: fileUtils.generateRandomKey(32),
     storageSigningKey: fileUtils.generateRandomKey(32),
+    pgrstJwtSecret: '{"kid": "g","alg":"RS256","e":"AQAB","key_ops":["verify"],"kty":"RSA","n":"PLACEHOLDER_RSA_MODULUS"}',
   };
 }
 
