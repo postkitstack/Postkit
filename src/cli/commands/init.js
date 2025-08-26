@@ -157,7 +157,7 @@ async function copyProjectTemplate(sourcePath, targetPath, config) {
   }
 }
 
-async function generateDockerCompose(targetPath, config) {
+async function generateDockerCompose(targetPath) {
   logger.startSpinner("Generating Docker Compose configuration...");
 
   try {
@@ -167,7 +167,7 @@ async function generateDockerCompose(targetPath, config) {
     );
     const targetDockerComposePath = path.join(targetPath, "docker-compose.yml");
 
-    await fileUtils.copyTemplate(templatePath, targetDockerComposePath, config);
+    await fileUtils.copyTemplate(templatePath, targetDockerComposePath);
 
     logger.stopSpinner("Docker Compose configuration generated");
   } catch (error) {
@@ -360,7 +360,7 @@ async function initCommand(projectName, options) {
     await copyProjectTemplate(__dirname + "/../../../", projectPath, config);
 
     // Generate Docker Compose file
-    await generateDockerCompose(projectPath, config);
+    await generateDockerCompose(projectPath);
 
     // Generate environment files
     await generateEnvironmentFiles(projectPath, config);

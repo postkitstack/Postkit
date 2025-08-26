@@ -17,7 +17,7 @@ wait_for_keycloak() {
     local retries=0
     
     while [ $retries -lt $MAX_RETRIES ]; do
-        if wget --quiet --tries=1 --timeout=5 --spider "$KEYCLOAK_URL/realms/master" 2>/dev/null; then
+        if wget --quiet --tries=1 --timeout=5 --spider "$KEYCLOAK_URL/health/live" 2>/dev/null; then
             echo "Keycloak is ready"
             return 0
         else
