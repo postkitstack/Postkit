@@ -91,7 +91,7 @@ async function copyProjectTemplate(sourcePath, targetPath, config) {
 
 
     // Move auth service to root
-    const authSourcePath = path.join(templatePath, "services/auth");
+    const authSourcePath = path.join(templatePath, "auth");
     const authTargetPath = path.join(targetPath, "auth");
     if (await fileUtils.fileExists(authSourcePath)) {
       await fileUtils.copyTemplateFiltered(
@@ -106,7 +106,7 @@ async function copyProjectTemplate(sourcePath, targetPath, config) {
     if (config.withWorker) {
       const workerSourcePath = path.join(
         templatePath,
-        "services/worker-service"
+        "worker"
       );
       const workerTargetPath = path.join(targetPath, "worker");
 
@@ -121,7 +121,7 @@ async function copyProjectTemplate(sourcePath, targetPath, config) {
 
     // Conditionally move storage service to root
     if (config.withStorage) {
-      const storageSourcePath = path.join(templatePath, "services/storage");
+      const storageSourcePath = path.join(templatePath, "storage");
       const storageTargetPath = path.join(targetPath, "storage");
 
       if (await fileUtils.fileExists(storageSourcePath)) {
@@ -135,7 +135,7 @@ async function copyProjectTemplate(sourcePath, targetPath, config) {
 
     // Conditionally move functions service to root
     if (config.withFunctions) {
-      const functionsSourcePath = path.join(templatePath, "services/functions");
+      const functionsSourcePath = path.join(templatePath, "functions");
       const functionsTargetPath = path.join(targetPath, "functions");
 
       if (await fileUtils.fileExists(functionsSourcePath)) {

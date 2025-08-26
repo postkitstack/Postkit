@@ -106,7 +106,7 @@ The Graphile Worker service processes background jobs:
 # View worker logs
 docker-compose logs -f worker
 
-# Add new job types in services/worker-service/src/tasks/
+# Add new job types in worker/src/tasks/
 ```
 {{/withWorker}}
 
@@ -133,7 +133,7 @@ Functions are automatically:
 - **Monitored**: Logs and metrics collected
 - **Scalable**: Multiple instances supported
 
-Add new functions in `services/functions/` directory.
+Add new functions in `functions/` directory.
 {{/withFunctions}}
 
 {{#withStorage}}### **File Storage**

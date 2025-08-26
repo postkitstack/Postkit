@@ -144,7 +144,6 @@ class FileUtils {
       'auth/config',
       'auth/providers/out',
       'functions',
-      'pg_rest',
       'storage/migrations',
       'worker/src/tasks',
       'worker/src/services',

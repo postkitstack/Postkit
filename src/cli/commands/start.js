@@ -87,6 +87,9 @@ async function startCommand(options) {
     logger.info('  • Functions Runtime: http://functions.localhost');
     logger.info('  • Storage API: http://storage.localhost');
     logger.info('  • Image Proxy: http://imgproxy.localhost');
+    if (isDev) {
+      logger.info('  • DBGate Database IDE: http://dbgate.localhost');
+    }
     
     if (!options.detached) {
       logger.info('\nPress Ctrl+C to stop all services');

@@ -1,12 +1,12 @@
 networks:
   traefik:
     driver: bridge
-    name: "{{projectName}}-backend_traefik"
+    name: "${PROJECT_NAME}-backend_traefik"
 
 services:
   traefik:
     image: traefik:v3.0
-    container_name: "{{projectName}}-traefik"
+    container_name: "${PROJECT_NAME}-traefik"
     restart: unless-stopped
     ports:
       - "80:80"
@@ -22,7 +22,7 @@ services:
       - --api.insecure=true
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
-      - --providers.docker.network={{projectName}}-backend_traefik
+      - --providers.docker.network=${PROJECT_NAME}-backend_traefik
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --log.level=INFO
@@ -34,34 +34,34 @@ services:
 
   db:
     image: postgres:latest
-    container_name: "{{projectName}}-db"
+    container_name: "${PROJECT_NAME}-db"
     restart: unless-stopped
     networks:
       - traefik
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: "{{projectName}}_db"
-      POSTGRES_USER: "{{dbUser}}"
-      POSTGRES_PASSWORD: "{{dbPassword}}"
+      POSTGRES_DB: "${PROJECT_NAME}_db"
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U {{dbUser}} -d {{projectName}}_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${PROJECT_NAME}_db"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   migrate:
     image: amacneil/dbmate:latest
-    container_name: "{{projectName}}-migrate"
+    container_name: "${PROJECT_NAME}-migrate"
     networks:
       - traefik
     depends_on:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: "postgres://{{dbUser}}:{{dbPassword}}@db:5432/{{projectName}}_db?sslmode=disable"
+      DATABASE_URL: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${PROJECT_NAME}_db?sslmode=disable"
     volumes:
       - ./db/migrations/db/migrations:/db/migrations
     command: up
@@ -69,7 +69,7 @@ services:
 
   rest:
     image: postgrest/postgrest:latest
-    container_name: "{{projectName}}-rest"
+    container_name: "${PROJECT_NAME}-rest"
     restart: unless-stopped
     networks:
       - traefik
@@ -79,17 +79,17 @@ services:
       - "traefik.http.routers.rest.entrypoints=web"
       - "traefik.http.services.rest.loadbalancer.server.port=3000"
     environment:
-      PGRST_DB_URI: "postgres://{{dbUser}}:{{dbPassword}}@db:5432/{{projectName}}_db"
+      PGRST_DB_URI: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${PROJECT_NAME}_db"
       PGRST_OPENAPI_SERVER_PROXY_URI: "http://localhost:3000"
       PGRST_DB_SCHEMA: "public"
-      PGRST_DB_ANON_ROLE: "{{dbUser}}"
+      PGRST_DB_ANON_ROLE: "${DB_USER}"
     depends_on:
       migrate:
         condition: service_completed_successfully
 
   swagger:
     image: swaggerapi/swagger-ui
-    container_name: "{{projectName}}-swagger"
+    container_name: "${PROJECT_NAME}-swagger"
     restart: unless-stopped
     networks:
       - traefik
@@ -105,7 +105,7 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:24.0.4
-    container_name: "{{projectName}}-keycloak"
+    container_name: "${PROJECT_NAME}-keycloak"
     restart: unless-stopped
     networks:
       - traefik
@@ -115,12 +115,12 @@ services:
       - "traefik.http.routers.keycloak.entrypoints=web"
       - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
     environment:
-      KEYCLOAK_ADMIN: "{{keycloakAdmin}}"
-      KEYCLOAK_ADMIN_PASSWORD: "{{keycloakAdminPassword}}"
+      KEYCLOAK_ADMIN: "${KEYCLOAK_ADMIN}"
+      KEYCLOAK_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD}"
       KC_DB: postgres
-      KC_DB_URL: "jdbc:postgresql://db:5432/{{projectName}}_db"
-      KC_DB_USERNAME: "{{dbUser}}"
-      KC_DB_PASSWORD: "{{dbPassword}}"
+      KC_DB_URL: "jdbc:postgresql://db:5432/${PROJECT_NAME}_db"
+      KC_DB_USERNAME: "${DB_USER}"
+      KC_DB_PASSWORD: "${DB_PASSWORD}"
       KC_HOSTNAME: auth.localhost
       KC_HOSTNAME_ADMIN: auth.localhost
       KC_HOSTNAME_STRICT: "false"
@@ -134,7 +134,7 @@ services:
       KC_PROXY: edge
       KC_HEALTH_ENABLED: "true"
     volumes:
-      - ./services/auth/providers/out:/opt/keycloak/providers
+      - ./auth/providers/out:/opt/keycloak/providers
     depends_on:
       db:
         condition: service_healthy
@@ -149,47 +149,47 @@ services:
   keycloak-config-cli:
     platform: linux/amd64 
     image: adorsys/keycloak-config-cli:6.4.0-24
-    container_name: "{{projectName}}-keycloak-config"
+    container_name: "${PROJECT_NAME}-keycloak-config"
     restart: on-failure
     networks:
       - traefik
     environment:
       KEYCLOAK_URL: "http://keycloak:8080"
-      KEYCLOAK_USER: "{{keycloakAdmin}}"
-      KEYCLOAK_PASSWORD: "{{keycloakAdminPassword}}"
+      KEYCLOAK_USER: "${KEYCLOAK_ADMIN}"
+      KEYCLOAK_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD}"
       KEYCLOAK_AVAILABILITYCHECK_ENABLED: true
       KEYCLOAK_AVAILABILITYCHECK_TIMEOUT: 120s
       IMPORT_FILES: /config/realm.json
     volumes:
-      - ./services/auth/config/realm.json:/config/realm.json
+      - ./auth/config/realm.json:/config/realm.json
     depends_on:
       - keycloak
 
   # Worker service (conditionally included)
   worker:
     build: 
-      context: ./services/worker-service
+      context: ./worker
       target: production
-    container_name: "{{projectName}}-worker"
+    container_name: "${PROJECT_NAME}-worker"
     restart: unless-stopped
     networks:
       - traefik
     environment:
-      NODE_ENV: "{{nodeEnv}}"
-      DATABASE_URL: "postgres://{{dbUser}}:{{dbPassword}}@db:5432/{{projectName}}_db?sslmode=disable"
+      NODE_ENV: "${NODE_ENV}"
+      DATABASE_URL: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${PROJECT_NAME}_db?sslmode=disable"
     depends_on:
       migrate:
         condition: service_completed_successfully
     volumes:
-      - ./services/worker-service/build:/worker/build:ro
-      - ./services/worker-service/graphile.config.js:/worker/graphile.config.js:ro
+      - ./worker/build:/worker/build:ro
+      - ./worker/graphile.config.js:/worker/graphile.config.js:ro
     profiles:
       - worker
 
   # Functions Runtime service (conditionally included)
   functions:
     image: ghcr.io/appritechnologies/functions-runtime:latest
-    container_name: "{{projectName}}-functions"
+    container_name: "${PROJECT_NAME}-functions"
     restart: unless-stopped
     networks:
       - traefik
@@ -203,9 +203,9 @@ services:
       FUNCTIONS_DIR: "/functions"
       JWKS_URL: "http://keycloak:8080/realms/application/protocol/openid-connect/certs"
       JWT_ISSUER: "http://keycloak:8080/realms/application"
-      NODE_ENV: "{{nodeEnv}}"
+      NODE_ENV: "${NODE_ENV}"
     volumes:
-      - ./services/functions:/functions:ro
+      - ./functions:/functions:ro
     depends_on:
       keycloak:
         condition: service_healthy
@@ -215,7 +215,7 @@ services:
   # Storage services (conditionally included)
   imgproxy:
     image: darthsim/imgproxy:latest
-    container_name: "{{projectName}}-imgproxy"
+    container_name: "${PROJECT_NAME}-imgproxy"
     restart: unless-stopped
     networks:
       - traefik
@@ -235,7 +235,7 @@ services:
 
   post-storage-migrate:
     image: amacneil/dbmate:latest
-    container_name: "{{projectName}}-storage-migrate"
+    container_name: "${PROJECT_NAME}-storage-migrate"
     restart: "no"
     networks:
       - traefik
@@ -243,15 +243,15 @@ services:
       storage:
         condition: service_completed_successfully
     environment:
-      DATABASE_URL: "postgres://{{dbUser}}:{{dbPassword}}@db:5432/{{projectName}}_db?sslmode=disable"
+      DATABASE_URL: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${PROJECT_NAME}_db?sslmode=disable"
     volumes:
-      - ./services/storage/migrations:/db/migrations
+      - ./storage/migrations:/db/migrations
     command: up
     profiles:
       - storage
 
   storage:
-    container_name: "{{projectName}}-storage"
+    container_name: "${PROJECT_NAME}-storage"
     build:
       context: https://github.com/appritechnologies/PG-storage.git
     restart: unless-stopped
@@ -270,7 +270,7 @@ services:
       - "traefik.http.routers.storage.middlewares=cors"
     volumes:
       - ./volumes/storage:/var/lib/storage:z
-      - ./services/storage/PG-storage-wget-entrypoint.sh:/entrypoint-jwk.sh
+      - ./storage/PG-storage-wget-entrypoint.sh:/entrypoint-jwk.sh
     healthcheck:
       test:
         - "CMD"
@@ -292,13 +292,13 @@ services:
     environment:
       KEYCLOAK_URL: "http://keycloak:8080"
       REALM_NAME: application
-      ANON_KEY: "{{anonKey}}"
-      SERVICE_KEY: "{{serviceRoleKey}}"
+      ANON_KEY: "${ANON_KEY}"
+      SERVICE_KEY: "${SERVICE_ROLE_KEY}"
       AUTH_JWT_ALGORITHM: RS256
-      STORAGE_URL_SIGNING_KEY: "{{storageSigningKey}}"
+      STORAGE_URL_SIGNING_KEY: "${STORAGE_SIGNING_KEY}"
       POSTGREST_URL: "http://rest:3000"
-      PGRST_JWT_SECRET: "{{jwtSecret}}"
-      DATABASE_URL: "postgres://{{dbUser}}:{{dbPassword}}@db:5432/{{projectName}}_db?sslmode=disable"
+      PGRST_JWT_SECRET: "${JWT_SECRET}"
+      DATABASE_URL: "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${PROJECT_NAME}_db?sslmode=disable"
       FILE_SIZE_LIMIT: 52428800
       STORAGE_BACKEND: file
       FILE_STORAGE_BACKEND_PATH: /var/lib/storage
@@ -309,6 +309,38 @@ services:
     profiles:
       - storage
 
+  # DBGate - Database IDE and query tool
+  dbgate:
+    image: dbgate/dbgate:latest
+    container_name: my_it_backend-dbgate
+    restart: unless-stopped
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dbgate.rule=Host(`dbgate.localhost`)"
+      - "traefik.http.routers.dbgate.entrypoints=web"
+      - "traefik.http.services.dbgate.loadbalancer.server.port=3000"
+    environment:
+      CONNECTIONS: con1
+      LABEL_con1: ${PROJECT_NAME} Database
+      SERVER_con1: db
+      USER_con1: ${DB_USER}
+      PASSWORD_con1: ${DB_PASSWORD}
+      PORT_con1: 5432
+      DATABASE_con1: ${PROJECT_NAME}_db
+      ENGINE_con1: postgres@dbgate-plugin-postgres
+      WEB_ROOT: ""
+      STORAGE_FOLDER_PATH: /root/dbgate-storage
+    volumes:
+      - dbgate_data:/root/dbgate-storage
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - dev
+
 volumes:
   pgdata:
   storage_data:
+  dbgate_data:
