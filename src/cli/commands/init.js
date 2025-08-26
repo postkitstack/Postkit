@@ -49,7 +49,7 @@ async function promptForConfig(projectName, options) {
     {
       type: "confirm",
       name: "installPackages",
-      message: "Install npm packages for worker service?",
+      message: "Install npm packages for services?",
       default: true,
     },
   ];
@@ -265,49 +265,64 @@ async function startServices(projectPath, config) {
 }
 
 async function installPackages(projectPath, config) {
-  if (!config.installPackages || !config.withWorker) {
+  if (!config.installPackages) {
     return;
   }
 
-  const workerPath = path.join(projectPath, "worker");
+  const {spawn} = require("child_process");
+  const services = [];
 
-  // Check if package.json exists in worker directory
-  if (!(await fileUtils.fileExists(path.join(workerPath, "package.json")))) {
-    logger.warning(
-      "No package.json found in worker directory, skipping package installation"
-    );
+  // Add worker service if enabled
+  if (config.withWorker) {
+    services.push({ name: "worker", path: path.join(projectPath, "worker") });
+  }
+
+  // Add functions service if enabled
+  if (config.withFunctions) {
+    services.push({ name: "functions", path: path.join(projectPath, "functions") });
+  }
+
+  if (services.length === 0) {
     return;
   }
 
-  logger.info("Installing npm packages for worker service...");
+  for (const service of services) {
+    // Check if package.json exists in service directory
+    if (!(await fileUtils.fileExists(path.join(service.path, "package.json")))) {
+      logger.warning(
+        `No package.json found in ${service.name} directory, skipping package installation`
+      );
+      continue;
+    }
 
-  try {
-    const {spawn} = require("child_process");
+    logger.info(`Installing npm packages for ${service.name} service...`);
 
-    await new Promise((resolve, reject) => {
-      const npmInstall = spawn("npm", ["install"], {
-        cwd: workerPath,
-        stdio: "inherit",
+    try {
+      await new Promise((resolve, reject) => {
+        const npmInstall = spawn("npm", ["install"], {
+          cwd: service.path,
+          stdio: "inherit",
+        });
+
+        npmInstall.on("close", (code) => {
+          if (code === 0) {
+            logger.success(`${service.name} packages installed successfully!`);
+            resolve();
+          } else {
+            reject(new Error(`npm install failed with exit code ${code}`));
+          }
+        });
+
+        npmInstall.on("error", (error) => {
+          reject(new Error(`Failed to run npm install: ${error.message}`));
+        });
       });
-
-      npmInstall.on("close", (code) => {
-        if (code === 0) {
-          logger.success("Packages installed successfully!");
-          resolve();
-        } else {
-          reject(new Error(`npm install failed with exit code ${code}`));
-        }
-      });
-
-      npmInstall.on("error", (error) => {
-        reject(new Error(`Failed to run npm install: ${error.message}`));
-      });
-    });
-  } catch (error) {
-    logger.error(`Package installation failed: ${error.message}`);
-    logger.info("You can manually install packages later by running:");
-    logger.info(`  cd ${path.relative(process.cwd(), workerPath)}`);
-    logger.info("  npm install");
+    } catch (error) {
+      logger.error(`${service.name} package installation failed: ${error.message}`);
+      logger.info("You can manually install packages later by running:");
+      logger.info(`  cd ${path.relative(process.cwd(), service.path)}`);
+      logger.info("  npm install");
+    }
   }
 }
 

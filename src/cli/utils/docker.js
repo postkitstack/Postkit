@@ -56,8 +56,8 @@ class DockerUtils {
   }
 
   async buildServices(cwd, services = []) {
-    const serviceArgs = services.length > 0 ? services.join(' ') : '';
-    await this.runDockerCompose(`build ${serviceArgs}`, { cwd });
+    const serviceArgs = services.length > 0 ? ` ${services.join(' ')}` : '';
+    await this.runDockerCompose(`build${serviceArgs}`, { cwd });
   }
 
   async startServices(cwd, options = {}) {

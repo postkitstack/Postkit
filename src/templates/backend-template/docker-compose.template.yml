@@ -147,6 +147,7 @@ services:
       start_period: 60s
 
   keycloak-config-cli:
+    platform: linux/amd64 
     image: adorsys/keycloak-config-cli:6.4.0-24
     container_name: "{{projectName}}-keycloak-config"
     restart: on-failure
