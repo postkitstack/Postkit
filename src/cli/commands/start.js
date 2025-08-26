@@ -62,9 +62,18 @@ async function startCommand(options) {
     
     await dockerUtils.startServices(projectPath, startOptions);
     
+    // Wait for services to be healthy in detached mode
     if (options.detached !== false) {
-      logger.success(`Services started in ${mode} mode`);
-      logger.info('Use "docker-compose logs -f" to view logs');
+      const servicesHealthy = await dockerUtils.waitForServices(projectPath);
+      
+      if (servicesHealthy) {
+        logger.success(`Services started successfully in ${mode} mode`);
+        logger.info('Use "docker-compose logs -f" to view logs');
+      } else {
+        logger.error('Some services failed to start properly');
+        logger.info('Check logs with: docker-compose logs');
+        process.exit(1);
+      }
     } else {
       logger.success(`Services started in ${mode} mode`);
     }
