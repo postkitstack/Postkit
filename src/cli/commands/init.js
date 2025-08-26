@@ -62,11 +62,7 @@ async function promptForConfig(projectName, options) {
     withWorker: options.withWorker,
     withStorage: options.withStorage,
     withFunctions: options.withFunctions,
-    jwtSecret: fileUtils.generateRandomKey(64),
-    anonKey: fileUtils.generateRandomKey(32),
-    serviceRoleKey: fileUtils.generateRandomKey(32),
-    storageSigningKey: fileUtils.generateRandomKey(32),
-    pgrstJwtSecret: '{"kid": "g","alg":"RS256","e":"AQAB","key_ops":["verify"],"kty":"RSA","n":"PLACEHOLDER_RSA_MODULUS"}',
+    storageSigningKey: "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
   };
 }
 
@@ -90,6 +86,16 @@ async function copyProjectTemplate(sourcePath, targetPath, config) {
       await fileUtils.copyTemplateFiltered(dbSourcePath, dbTargetPath, config);
     }
 
+    // Always copy postgrest to root
+    const postgrestSourcePath = path.join(templatePath, "postgrest");
+    const postgrestTargetPath = path.join(targetPath, "postgrest");
+    if (await fileUtils.fileExists(postgrestSourcePath)) {
+      await fileUtils.copyTemplateFiltered(
+        postgrestSourcePath,
+        postgrestTargetPath,
+        config
+      );
+    }
 
     // Move auth service to root
     const authSourcePath = path.join(templatePath, "auth");
@@ -102,13 +108,9 @@ async function copyProjectTemplate(sourcePath, targetPath, config) {
       );
     }
 
-
     // Conditionally move worker service to root
     if (config.withWorker) {
-      const workerSourcePath = path.join(
-        templatePath,
-        "worker"
-      );
+      const workerSourcePath = path.join(templatePath, "worker");
       const workerTargetPath = path.join(targetPath, "worker");
 
       if (await fileUtils.fileExists(workerSourcePath)) {
@@ -197,6 +199,10 @@ async function generateEnvironmentFiles(targetPath, config) {
     const dbmatePath = path.join(targetPath, ".dbmate.env");
     await fileUtils.copyTemplate(dbmateTemplatePath, dbmatePath, config);
 
+    // Generate .env.example file from the same template
+    const envExamplePath = path.join(targetPath, ".env.example");
+    await fileUtils.copyTemplate(templatePath, envExamplePath, config);
+
     logger.stopSpinner("Environment files generated");
   } catch (error) {
     logger.stopSpinner("Failed to generate environment files", false);
@@ -275,12 +281,15 @@ async function installPackages(projectPath, config) {
 
   // Add worker service if enabled
   if (config.withWorker) {
-    services.push({ name: "worker", path: path.join(projectPath, "worker") });
+    services.push({name: "worker", path: path.join(projectPath, "worker")});
   }
 
   // Add functions service if enabled
   if (config.withFunctions) {
-    services.push({ name: "functions", path: path.join(projectPath, "functions") });
+    services.push({
+      name: "functions",
+      path: path.join(projectPath, "functions"),
+    });
   }
 
   if (services.length === 0) {
@@ -289,7 +298,9 @@ async function installPackages(projectPath, config) {
 
   for (const service of services) {
     // Check if package.json exists in service directory
-    if (!(await fileUtils.fileExists(path.join(service.path, "package.json")))) {
+    if (
+      !(await fileUtils.fileExists(path.join(service.path, "package.json")))
+    ) {
       logger.warning(
         `No package.json found in ${service.name} directory, skipping package installation`
       );
@@ -319,7 +330,9 @@ async function installPackages(projectPath, config) {
         });
       });
     } catch (error) {
-      logger.error(`${service.name} package installation failed: ${error.message}`);
+      logger.error(
+        `${service.name} package installation failed: ${error.message}`
+      );
       logger.info("You can manually install packages later by running:");
       logger.info(`  cd ${path.relative(process.cwd(), service.path)}`);
       logger.info("  npm install");
@@ -374,7 +387,7 @@ async function initCommand(projectName, options) {
 
     // Start services unless explicitly skipped
     if (!options.skipDocker) {
-      await startServices(projectPath, config);
+      // await startServices(projectPath, config);
     }
 
     logger.info(`\nNext steps:`);

@@ -23,6 +23,9 @@ class Logger {
   }
 
   startSpinner(message) {
+    if (this.spinner) {
+      this.spinner.stop();
+    }
     this.spinner = ora(message).start();
   }
 
@@ -34,6 +37,12 @@ class Logger {
         this.spinner.fail(message);
       }
       this.spinner = null;
+    } else if (message) {
+      if (success) {
+        this.success(message);
+      } else {
+        this.error(message);
+      }
     }
   }
 
