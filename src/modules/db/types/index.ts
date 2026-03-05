@@ -30,12 +30,6 @@ export interface DatabaseConnectionInfo {
   password: string;
 }
 
-export interface ShellResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-}
-
 export interface PlanResult {
   hasChanges: boolean;
   planOutput: string;
@@ -56,10 +50,4 @@ export interface MigrationFile {
 export interface GrantStatement {
   schema: string;
   content: string;
-}
-
-export interface CommandOptions {
-  verbose?: boolean;
-  dryRun?: boolean;
-  force?: boolean;
 }

@@ -1,6 +1,6 @@
-import { exec, spawn } from 'child_process';
-import { promisify } from 'util';
-import type { ShellResult } from '../types/index.js';
+import {exec, spawn} from "child_process";
+import {promisify} from "util";
+import type {ShellResult} from "./types.js";
 
 const execAsync = promisify(exec);
 
@@ -10,12 +10,12 @@ export async function runCommand(
     cwd?: string;
     env?: Record<string, string>;
     timeout?: number;
-  } = {}
+  } = {},
 ): Promise<ShellResult> {
   try {
-    const { stdout, stderr } = await execAsync(command, {
+    const {stdout, stderr} = await execAsync(command, {
       cwd: options.cwd,
-      env: { ...process.env, ...options.env },
+      env: {...process.env, ...options.env},
       timeout: options.timeout || 300000, // 5 minute default timeout
       maxBuffer: 50 * 1024 * 1024, // 50MB buffer
     });
@@ -33,7 +33,7 @@ export async function runCommand(
       message: string;
     };
     return {
-      stdout: execError.stdout?.trim() || '',
+      stdout: execError.stdout?.trim() || "",
       stderr: execError.stderr?.trim() || execError.message,
       exitCode: execError.code || 1,
     };
@@ -46,28 +46,28 @@ export async function runCommandWithInput(
   options: {
     cwd?: string;
     env?: Record<string, string>;
-  } = {}
+  } = {},
 ): Promise<ShellResult> {
   return new Promise((resolve) => {
-    const [cmd, ...args] = command.split(' ');
+    const [cmd, ...args] = command.split(" ");
     const child = spawn(cmd, args, {
       cwd: options.cwd,
-      env: { ...process.env, ...options.env },
-      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {...process.env, ...options.env},
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
-    let stdout = '';
-    let stderr = '';
+    let stdout = "";
+    let stderr = "";
 
-    child.stdout.on('data', (data) => {
+    child.stdout.on("data", (data) => {
       stdout += data.toString();
     });
 
-    child.stderr.on('data', (data) => {
+    child.stderr.on("data", (data) => {
       stderr += data.toString();
     });
 
-    child.on('close', (code) => {
+    child.on("close", (code) => {
       resolve({
         stdout: stdout.trim(),
         stderr: stderr.trim(),
@@ -75,9 +75,9 @@ export async function runCommandWithInput(
       });
     });
 
-    child.on('error', (error) => {
+    child.on("error", (error) => {
       resolve({
-        stdout: '',
+        stdout: "",
         stderr: error.message,
         exitCode: 1,
       });

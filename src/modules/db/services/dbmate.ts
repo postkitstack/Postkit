@@ -1,9 +1,9 @@
-import type { MigrationFile, ApplyResult } from '../types/index.js';
-import { runCommand, commandExists } from '../utils/shell.js';
-import { getConfig } from '../utils/config.js';
-import fs from 'fs/promises';
-import path from 'path';
-import { existsSync } from 'fs';
+import type {MigrationFile, ApplyResult} from "../types/index.js";
+import {runCommand, commandExists} from "../../../common/shell.js";
+import {getConfig} from "../utils/db-config.js";
+import fs from "fs/promises";
+import path from "path";
+import {existsSync} from "fs";
 
 export async function checkDbmateInstalled(): Promise<boolean> {
   const config = getConfig();
@@ -13,17 +13,17 @@ export async function checkDbmateInstalled(): Promise<boolean> {
 export async function createMigrationFile(
   description: string,
   upSql: string,
-  downSql?: string
+  downSql?: string,
 ): Promise<MigrationFile> {
   const config = getConfig();
   const timestamp = generateTimestamp();
-  const safeName = description.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  const safeName = description.replace(/[^a-z0-9]/gi, "_").toLowerCase();
   const fileName = `${timestamp}_${safeName}.sql`;
   const filePath = path.join(config.migrationsPath, fileName);
 
   // Ensure migrations directory exists
   if (!existsSync(config.migrationsPath)) {
-    await fs.mkdir(config.migrationsPath, { recursive: true });
+    await fs.mkdir(config.migrationsPath, {recursive: true});
   }
 
   // Create migration file content
@@ -35,7 +35,7 @@ export async function createMigrationFile(
     content += `\n-- migrate:down\n-- Add rollback SQL here if needed\n`;
   }
 
-  await fs.writeFile(filePath, content, 'utf-8');
+  await fs.writeFile(filePath, content, "utf-8");
 
   return {
     name: fileName,
@@ -44,7 +44,9 @@ export async function createMigrationFile(
   };
 }
 
-export async function runDbmateMigrate(databaseUrl: string): Promise<ApplyResult> {
+export async function runDbmateMigrate(
+  databaseUrl: string,
+): Promise<ApplyResult> {
   const config = getConfig();
 
   const command = `${config.dbmateBin} --url "${databaseUrl}" --migrations-dir "${config.migrationsPath}" up`;
@@ -72,7 +74,9 @@ export async function runDbmateStatus(databaseUrl: string): Promise<string> {
   return result.stdout || result.stderr;
 }
 
-export async function runDbmateRollback(databaseUrl: string): Promise<ApplyResult> {
+export async function runDbmateRollback(
+  databaseUrl: string,
+): Promise<ApplyResult> {
   const config = getConfig();
 
   const command = `${config.dbmateBin} --url "${databaseUrl}" --migrations-dir "${config.migrationsPath}" down`;
@@ -102,7 +106,7 @@ export async function listMigrations(): Promise<MigrationFile[]> {
   const migrations: MigrationFile[] = [];
 
   for (const file of files) {
-    if (file.endsWith('.sql')) {
+    if (file.endsWith(".sql")) {
       const match = file.match(/^(\d+)_/);
       if (match) {
         migrations.push({
@@ -125,11 +129,11 @@ export async function getLatestMigration(): Promise<MigrationFile | null> {
 function generateTimestamp(): string {
   const now = new Date();
   const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const seconds = String(now.getSeconds()).padStart(2, "0");
 
   return `${year}${month}${day}${hours}${minutes}${seconds}`;
 }

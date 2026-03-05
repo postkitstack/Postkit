@@ -1,7 +1,7 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { existsSync } from 'fs';
-import { getConfig, getGeneratedSchemaPath } from '../utils/config.js';
+import fs from "fs/promises";
+import path from "path";
+import {existsSync} from "fs";
+import {getConfig, getGeneratedSchemaPath} from "../utils/db-config.js";
 
 interface SchemaSection {
   name: string;
@@ -10,20 +10,20 @@ interface SchemaSection {
 }
 
 const SCHEMA_ORDER: Record<string, number> = {
-  'extensions': 1,
-  'types': 2,
-  'enums': 3,
-  'domains': 4,
-  'sequences': 5,
-  'tables': 6,
-  'table': 6,
-  'views': 7,
-  'functions': 8,
-  'triggers': 9,
-  'indexes': 10,
-  'constraints': 11,
-  'policies': 12,
-  'grants': 13,
+  extensions: 1,
+  types: 2,
+  enums: 3,
+  domains: 4,
+  sequences: 5,
+  tables: 6,
+  table: 6,
+  views: 7,
+  functions: 8,
+  triggers: 9,
+  indexes: 10,
+  constraints: 11,
+  policies: 12,
+  grants: 13,
 };
 
 export async function generateSchemaSQL(): Promise<string> {
@@ -38,9 +38,9 @@ export async function generateSchemaSQL(): Promise<string> {
   const sortedSections = sections.sort((a, b) => a.order - b.order);
 
   const parts: string[] = [
-    '-- Generated schema file',
+    "-- Generated schema file",
     `-- Generated at: ${new Date().toISOString()}`,
-    '',
+    "",
   ];
 
   for (const section of sortedSections) {
@@ -49,23 +49,25 @@ export async function generateSchemaSQL(): Promise<string> {
       parts.push(`-- ============================================`);
       parts.push(`-- Section: ${section.name}`);
       parts.push(`-- ============================================`);
-      parts.push('');
+      parts.push("");
       parts.push(sectionContent);
-      parts.push('');
+      parts.push("");
     }
   }
 
-  const fullSchema = parts.join('\n');
+  const fullSchema = parts.join("\n");
 
   // Write to generated schema file
   const outputPath = getGeneratedSchemaPath();
-  await fs.writeFile(outputPath, fullSchema, 'utf-8');
+  await fs.writeFile(outputPath, fullSchema, "utf-8");
 
   return outputPath;
 }
 
-async function discoverSchemaSections(schemaPath: string): Promise<SchemaSection[]> {
-  const entries = await fs.readdir(schemaPath, { withFileTypes: true });
+async function discoverSchemaSections(
+  schemaPath: string,
+): Promise<SchemaSection[]> {
+  const entries = await fs.readdir(schemaPath, {withFileTypes: true});
   const sections: SchemaSection[] = [];
 
   for (const entry of entries) {
@@ -78,9 +80,9 @@ async function discoverSchemaSections(schemaPath: string): Promise<SchemaSection
         path: path.join(schemaPath, entry.name),
         order,
       });
-    } else if (entry.isFile() && entry.name.endsWith('.sql')) {
+    } else if (entry.isFile() && entry.name.endsWith(".sql")) {
       // Handle root-level SQL files
-      const baseName = path.basename(entry.name, '.sql').toLowerCase();
+      const baseName = path.basename(entry.name, ".sql").toLowerCase();
       const order = SCHEMA_ORDER[baseName] ?? 100;
 
       sections.push({
@@ -98,30 +100,28 @@ async function loadSectionFiles(sectionPath: string): Promise<string> {
   const stat = await fs.stat(sectionPath);
 
   if (stat.isFile()) {
-    return fs.readFile(sectionPath, 'utf-8');
+    return fs.readFile(sectionPath, "utf-8");
   }
 
   if (stat.isDirectory()) {
     const files = await fs.readdir(sectionPath);
-    const sqlFiles = files
-      .filter(f => f.endsWith('.sql'))
-      .sort(); // Sort alphabetically for consistent ordering
+    const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort(); // Sort alphabetically for consistent ordering
 
     const contents: string[] = [];
 
     for (const file of sqlFiles) {
       const filePath = path.join(sectionPath, file);
-      const content = await fs.readFile(filePath, 'utf-8');
+      const content = await fs.readFile(filePath, "utf-8");
 
       contents.push(`-- File: ${file}`);
       contents.push(content.trim());
-      contents.push('');
+      contents.push("");
     }
 
-    return contents.join('\n');
+    return contents.join("\n");
   }
 
-  return '';
+  return "";
 }
 
 export async function getSchemaFiles(): Promise<string[]> {
@@ -137,7 +137,7 @@ export async function getSchemaFiles(): Promise<string[]> {
 
 async function collectSqlFiles(dirPath: string): Promise<string[]> {
   const files: string[] = [];
-  const entries = await fs.readdir(dirPath, { withFileTypes: true });
+  const entries = await fs.readdir(dirPath, {withFileTypes: true});
 
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
@@ -145,7 +145,7 @@ async function collectSqlFiles(dirPath: string): Promise<string[]> {
     if (entry.isDirectory()) {
       const subFiles = await collectSqlFiles(fullPath);
       files.push(...subFiles);
-    } else if (entry.isFile() && entry.name.endsWith('.sql')) {
+    } else if (entry.isFile() && entry.name.endsWith(".sql")) {
       files.push(fullPath);
     }
   }

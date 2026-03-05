@@ -1,8 +1,8 @@
-import type { PlanResult, ApplyResult } from '../types/index.js';
-import { runCommand, commandExists } from '../utils/shell.js';
-import { getConfig, getPlanFilePath } from '../utils/config.js';
-import fs from 'fs/promises';
-import { existsSync } from 'fs';
+import type {PlanResult, ApplyResult} from "../types/index.js";
+import {runCommand, commandExists} from "../../../common/shell.js";
+import {getConfig, getPlanFilePath} from "../utils/db-config.js";
+import fs from "fs/promises";
+import {existsSync} from "fs";
 
 export async function checkPgschemaInstalled(): Promise<boolean> {
   const config = getConfig();
@@ -11,7 +11,7 @@ export async function checkPgschemaInstalled(): Promise<boolean> {
 
 export async function runPgschemaplan(
   schemaFile: string,
-  databaseUrl: string
+  databaseUrl: string,
 ): Promise<PlanResult> {
   const config = getConfig();
   const planFile = getPlanFilePath();
@@ -20,22 +20,27 @@ export async function runPgschemaplan(
   const command = `${config.pgSchemaBin} plan --schema "${schemaFile}" --database "${databaseUrl}" --output "${planFile}"`;
   const result = await runCommand(command);
 
-  if (result.exitCode !== 0 && !result.stderr.includes('No changes')) {
+  if (result.exitCode !== 0 && !result.stderr.includes("No changes")) {
     throw new Error(`pgschema plan failed: ${result.stderr || result.stdout}`);
   }
 
   // Check if plan file was created and has content
   let hasChanges = false;
-  let planOutput = '';
+  let planOutput = "";
 
   if (existsSync(planFile)) {
-    planOutput = await fs.readFile(planFile, 'utf-8');
-    hasChanges = planOutput.trim().length > 0 && !planOutput.includes('-- No changes');
+    planOutput = await fs.readFile(planFile, "utf-8");
+    hasChanges =
+      planOutput.trim().length > 0 && !planOutput.includes("-- No changes");
   }
 
   // If no changes detected via file, check command output
-  if (!hasChanges && (result.stdout.includes('No changes') || result.stderr.includes('No changes'))) {
-    planOutput = 'No changes detected';
+  if (
+    !hasChanges &&
+    (result.stdout.includes("No changes") ||
+      result.stderr.includes("No changes"))
+  ) {
+    planOutput = "No changes detected";
   }
 
   return {
@@ -47,7 +52,7 @@ export async function runPgschemaplan(
 
 export async function runPgschemaApply(
   planFile: string,
-  databaseUrl: string
+  databaseUrl: string,
 ): Promise<ApplyResult> {
   const config = getConfig();
 
@@ -75,7 +80,7 @@ export async function runPgschemaApply(
 
 export async function runPgschemaDiff(
   schemaFile: string,
-  databaseUrl: string
+  databaseUrl: string,
 ): Promise<string> {
   const config = getConfig();
 
@@ -83,11 +88,15 @@ export async function runPgschemaDiff(
   const command = `${config.pgSchemaBin} diff --schema "${schemaFile}" --database "${databaseUrl}"`;
   const result = await runCommand(command);
 
-  if (result.exitCode !== 0 && !result.stdout && !result.stderr.includes('No differences')) {
+  if (
+    result.exitCode !== 0 &&
+    !result.stdout &&
+    !result.stderr.includes("No differences")
+  ) {
     throw new Error(`pgschema diff failed: ${result.stderr}`);
   }
 
-  return result.stdout || result.stderr || 'No differences found';
+  return result.stdout || result.stderr || "No differences found";
 }
 
 export async function getPlanFileContent(): Promise<string | null> {
@@ -97,7 +106,7 @@ export async function getPlanFileContent(): Promise<string | null> {
     return null;
   }
 
-  return fs.readFile(planFile, 'utf-8');
+  return fs.readFile(planFile, "utf-8");
 }
 
 export async function deletePlanFile(): Promise<void> {

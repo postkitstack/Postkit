@@ -1,23 +1,25 @@
 {
-  "name": "migration-cli",
+  "name": "postkit",
   "version": "1.0.0",
-  "description": "TypeScript CLI tool for streamlined, session-based database migration workflow",
+  "description": "PostKit - Developer toolkit for database management and more",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "migr": "./dist/index.js"
+    "postkit": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "migr": "tsx src/index.ts"
+    "postkit": "tsx src/index.ts"
   },
   "keywords": [
+    "postkit",
     "migration",
     "database",
     "postgresql",
-    "cli"
+    "cli",
+    "toolkit"
   ],
   "author": "",
   "license": "ISC",

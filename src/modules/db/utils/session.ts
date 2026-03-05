@@ -1,7 +1,7 @@
-import fs from 'fs/promises';
-import { existsSync } from 'fs';
-import type { SessionState } from '../types/index.js';
-import { getSessionFilePath } from './config.js';
+import fs from "fs/promises";
+import {existsSync} from "fs";
+import type {SessionState} from "../types/index.js";
+import {getSessionFilePath} from "./db-config.js";
 
 export async function getSession(): Promise<SessionState | null> {
   const sessionPath = getSessionFilePath();
@@ -11,7 +11,7 @@ export async function getSession(): Promise<SessionState | null> {
   }
 
   try {
-    const content = await fs.readFile(sessionPath, 'utf-8');
+    const content = await fs.readFile(sessionPath, "utf-8");
     return JSON.parse(content) as SessionState;
   } catch {
     return null;
@@ -20,7 +20,7 @@ export async function getSession(): Promise<SessionState | null> {
 
 export async function createSession(
   remoteDbUrl: string,
-  localDbUrl: string
+  localDbUrl: string,
 ): Promise<SessionState> {
   const now = new Date();
   const session: SessionState = {
@@ -41,31 +41,31 @@ export async function createSession(
 }
 
 export async function updateSession(
-  updates: Partial<SessionState>
+  updates: Partial<SessionState>,
 ): Promise<SessionState> {
   const session = await getSession();
 
   if (!session) {
-    throw new Error('No active session found');
+    throw new Error("No active session found");
   }
 
-  const updatedSession = { ...session, ...updates };
+  const updatedSession = {...session, ...updates};
   await saveSession(updatedSession);
   return updatedSession;
 }
 
 export async function updatePendingChanges(
-  updates: Partial<SessionState['pendingChanges']>
+  updates: Partial<SessionState["pendingChanges"]>,
 ): Promise<SessionState> {
   const session = await getSession();
 
   if (!session) {
-    throw new Error('No active session found');
+    throw new Error("No active session found");
   }
 
   const updatedSession = {
     ...session,
-    pendingChanges: { ...session.pendingChanges, ...updates },
+    pendingChanges: {...session.pendingChanges, ...updates},
   };
   await saveSession(updatedSession);
   return updatedSession;
@@ -86,16 +86,16 @@ export async function hasActiveSession(): Promise<boolean> {
 
 async function saveSession(session: SessionState): Promise<void> {
   const sessionPath = getSessionFilePath();
-  await fs.writeFile(sessionPath, JSON.stringify(session, null, 2), 'utf-8');
+  await fs.writeFile(sessionPath, JSON.stringify(session, null, 2), "utf-8");
 }
 
 function formatTimestamp(date: Date): string {
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
 
   return `${year}${month}${day}${hours}${minutes}${seconds}`;
 }
