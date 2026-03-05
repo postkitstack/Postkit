@@ -1,376 +1,465 @@
-## 📦 **Project Specification: PostKit**
+# Migration CLI
 
-### 🔧 **Overview**
+A TypeScript CLI tool for streamlined, session-based database migration workflow. This tool provides a safe way to develop and test schema changes locally before applying them to production.
 
-**PostKit** is a CLI tool designed to streamline the setup process for backend applications using the Appri open-source stack. It helps developers scaffold the file structure, initialize database migrations, and prepare project environments with best practices.
+## Overview
 
-The stack includes:
+The migration workflow follows these steps:
 
-* **PostgreSQL** – Core database
-* **PostgREST** – Auto-generated REST API
-* **Keycloak** – Authentication and authorization
-* **Graphile Worker** – Background job processing
-* **Appri Function Runtime** – Serverless-style JS/TS function handler
-* **PG-Storage** – Supabase Storage fork
-* **Traefik** – API Gateway and reverse proxy
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      STREAMLINED MIGRATION FLOW                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   $ migr start                    $ migr plan                                │
+│   ┌──────────────────┐            ┌──────────────────┐                       │
+│   │ 1. Clone remote  │            │ 3. Generate      │                       │
+│   │    to local DB   │            │    schema.sql    │                       │
+│   │ 2. Start session │            │ 4. Run pgschema  │                       │
+│   │    (track state) │            │    plan (diff)   │                       │
+│   └────────┬─────────┘            └────────┬─────────┘                       │
+│            │                               │                                 │
+│            ▼                               ▼                                 │
+│   ┌──────────────────┐            ┌──────────────────┐                       │
+│   │ User modifies    │            │ Shows changes    │                       │
+│   │ schema files     │            │ to apply         │                       │
+│   │ (db/schema/*)    │            │                  │                       │
+│   └──────────────────┘            └──────────────────┘                       │
+│                                            │                                 │
+│   $ migr apply                             ▼                                 │
+│   ┌──────────────────┐            ┌──────────────────┐                       │
+│   │ 5. Apply changes │            │ 6. Validate on   │                       │
+│   │    to local DB   │◄───────────│    cloned DB     │                       │
+│   │    (pgschema)    │            │                  │                       │
+│   └────────┬─────────┘            └──────────────────┘                       │
+│            │                                                                 │
+│            ▼                                                                 │
+│   $ migr commit "description"                                                │
+│   ┌──────────────────┐            ┌──────────────────┐                       │
+│   │ 7. Create dbmate │            │ 8. Apply to      │                       │
+│   │    migration     │───────────►│    remote DB     │                       │
+│   │    file          │            │    (dbmate)      │                       │
+│   └──────────────────┘            └──────────────────┘                       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Prerequisites
+
+Before using this tool, ensure you have the following installed:
+
+- **Node.js** (v18 or higher)
+- **PostgreSQL** client tools (`pg_dump`, `psql`)
+- **pgschema** - Schema diffing tool ([installation guide](https://github.com/pgschema/pgschema))
+- **dbmate** - Database migration tool
+  ```bash
+  # macOS
+  brew install dbmate
+
+  # Go
+  go install github.com/amacneil/dbmate@latest
+  ```
+
+## Installation
+
+1. Navigate to the migration-cli directory:
+   ```bash
+   cd db/tools/migration-cli
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Build the project:
+   ```bash
+   npm run build
+   ```
+
+4. Create your environment file:
+   ```bash
+   cp .env.example .env
+   ```
+
+5. Configure your database connections in `.env`:
+   ```env
+   REMOTE_DATABASE_URL=postgres://user:password@host:5432/dbname
+   LOCAL_DATABASE_URL=postgres://user:password@localhost:5432/dbname_local
+   ```
+
+## Commands
+
+### `migr start`
+
+Clone the remote database to local and initialize a migration session.
+
+```bash
+npm run migr start
+```
+
+**What it does:**
+1. Checks prerequisites (pgschema, dbmate installed)
+2. Tests connection to remote database
+3. Clones remote database to local using `pg_dump` and `psql`
+4. Creates a session file (`.session.json`) to track state
+
+**Options:**
+- `--dry-run` - Show what would happen without making changes
+- `--verbose` - Enable detailed output
 
 ---
 
-### 🎯 **Goals**
+### `migr plan`
 
-* Scaffold project folder with all required structure and configuration
-* Bootstrap a Postgres database with initial migrations
-* Configure connections for PostgREST, Keycloak, and Graphile Worker
-* Simplify onboarding for new projects and new developers
-
----
-
-### 🧰 **Core Features**
-
-#### 1. **CLI Initialization**
+Generate a schema diff showing what changes will be applied.
 
 ```bash
-postkit init my-app
+npm run migr plan
 ```
 
-* Creates the full project directory
-* Prompts user for:
-  * Project name
-  * Database credentials
-  * Keycloak admin credentials
-  * Environment (development/production)
-  * Enable optional components (Worker, Storage, Functions)
+**What it does:**
+1. Combines all schema files from `db/schema/` into a single SQL file
+2. Runs `pgschema plan` to compare against local database
+3. Displays the migration plan
+4. Saves the plan to `.plan.sql`
 
-#### 2. **File Structure Generation**
-
-Creates a modular backend structure:
-
-```
-my-app/
-├── db/
-│   ├── migrations/         # SQL migration files
-│   └── utils/              # Database utility scripts
-├── auth/                   # Keycloak authentication service
-│   ├── config/             # Realm configurations (JSON files)
-│   └── providers/          # Custom Keycloak providers
-├── functions/              # Appri runtime functions (optional)
-│   ├── *.ts                # Individual function files
-│   └── package.json        # Node.js dependencies
-├── worker/                 # Graphile worker jobs (optional)
-│   ├── src/
-│   │   ├── tasks/          # Job task definitions
-│   │   └── services/       # Shared services
-│   └── package.json        # Node.js dependencies
-├── storage/                # PG-Storage setup (optional)
-├── .env                    # Environment variables
-├── .dbmate.env             # Database migration config
-└── docker-compose.yml      # Service orchestration
-```
-
-#### 3. **Initial Database Migrations**
-
-* Generates a default schema migration with:
-  * Users table (linked to Keycloak)
-  * Roles and permissions
-  * Basic audit fields (created_at, updated_at)
-* Includes sample tables for common use cases
-
-#### 4. **PostgREST Configuration**
-
-* Auto-generates PostgREST configuration
-* Maps environment variables
-* Supports RLS template scaffolding
-
-#### 5. **Keycloak Integration**
-
-* Adds Keycloak service configuration
-* Prepares example Keycloak realm and client config files
-* Realm import/export capabilities via Admin API
-
-#### 6. **Graphile Worker Support**
-
-* Optional flag `--with-worker`
-* Adds job runner scaffolding
-* Includes sample jobs: `send_email`, `audit_log`
-
-#### 7. **Function Runtime Bootstrap**
-
-* Creates base `functions/hello.ts`
-* Includes routing template and request/response interfaces
-* TypeScript support with proper package.json
-
----
-
-## 🚀 **Quick Start**
-
-### **Installation**
-
-```bash
-# Install dependencies
-npm install
-
-# Make CLI executable
-chmod +x src/cli.js
-```
-
-### **Initialize a New Project**
-
-```bash
-# Create a new PostKit project
-./src/cli.js init my-awesome-app
-
-# Or using npm
-npm run start init my-awesome-app
-```
-
-### **Interactive Setup**
-The CLI will prompt you for:
-- Database credentials
-- Keycloak admin credentials  
-- Environment (development/production)
-- Optional services (Worker, Storage, Functions)
-
-### **Start Development**
-
-```bash
-cd my-awesome-app
-
-# Start all services
-docker-compose up -d
-
-# Or use PostKit commands
-postkit start --dev
+**Output example:**
+```sql
+-- Migration Plan
+ALTER TABLE users ADD COLUMN email_verified boolean DEFAULT false;
+CREATE INDEX idx_users_email ON users(email);
 ```
 
 ---
 
-### 🚀 **Planned Commands**
+### `migr apply`
 
-| Command                     | Description                         | Status |
-| --------------------------- | ----------------------------------- | ------ |
-| `postkit init <name>`       | Scaffold a new project              | ✅ Done |
-| `postkit start [options]`   | Start services (dev/prod modes)    | ✅ Done |
-| `postkit restart <service>` | Restart specific service            | ✅ Done |
-| `postkit migrate:create`    | Create new migration file           | ✅ Done |
-| `postkit migrate:up`        | Apply pending migrations            | ✅ Done |
-| `postkit migrate:down`      | Rollback last migration             | ✅ Done |
-| `postkit migrate:status`    | Show migration status               | ✅ Done |
-| `postkit auth:import`       | Import Keycloak realm configuration | ✅ Done |
-| `postkit auth:export`       | Export Keycloak realm configuration | ✅ Done |
-| `postkit create task`       | Create new Graphile Worker task     | ✅ Done |
-| `postkit create function`   | Create new serverless function      | ✅ Done |
-| `postkit help`              | Show detailed CLI help              | ✅ Done |
-
-### **Command Examples**
+Apply the planned schema changes to the local cloned database.
 
 ```bash
-# Initialize a new project
-postkit init my-app --with-functions --with-worker
-
-# Start in development mode
-postkit start --dev
-
-# Start specific services
-postkit start --dev --services worker,functions
-
-# Restart a service
-postkit restart keycloak
-
-# Create a new task
-postkit create task send-email
-
-# Create a new function
-postkit create function user-profile
-postkit create function get-data --typescript
-
-# Database migrations
-postkit migrate:create add_users_table
-postkit migrate:up
-postkit migrate:status
-
-# Authentication management
-postkit auth:export my-realm
-postkit auth:import realm-config.json
+npm run migr apply
 ```
 
-### **Init Command Options**
+**What it does:**
+1. Loads the previously generated plan
+2. Prompts for confirmation
+3. Applies changes to the local database using `pgschema apply`
+4. Updates session state
+
+**Options:**
+- `-f, --force` - Skip confirmation prompt
+- `--dry-run` - Show what would happen without applying
+
+---
+
+### `migr commit <description>`
+
+Create a migration file and apply changes to the remote database.
 
 ```bash
-postkit init my-app [options]
+npm run migr commit "add_user_email_verification"
+```
 
-Options:
-  --with-worker     Include Graphile Worker service (default: true)
-  --with-storage    Include PG-Storage service (default: true)
-  --with-functions  Include Functions Runtime service (default: true)
-  --skip-docker     Skip automatic Docker startup
-  -h, --help        Display help
+**What it does:**
+1. Creates a dbmate migration file in `db/migrations/`
+2. Applies the migration to the remote database
+3. Cleans up session files
+4. Ends the migration session
+
+**Options:**
+- `-f, --force` - Skip confirmation prompt
+- `--dry-run` - Show what would happen without committing
+
+**Migration file format:**
+```sql
+-- migrate:up
+ALTER TABLE users ADD COLUMN email_verified boolean DEFAULT false;
+
+-- migrate:down
+-- Add rollback SQL here if needed
 ```
 
 ---
 
-## 📂 **PostKit CLI Project Structure**
+### `migr status`
 
-### **CLI Source Code**
+Show the current session state and pending changes.
+
+```bash
+npm run migr status
+```
+
+**Output includes:**
+- Session information (start time, duration)
+- Pending changes status (planned, applied)
+- Database connection status
+- Plan preview (first 20 lines)
+- Suggested next steps
+
+---
+
+### `migr abort`
+
+Cancel the current session and clean up all local resources.
+
+```bash
+npm run migr abort
+```
+
+**What it does:**
+1. Removes the plan file
+2. Removes generated schema file
+3. Drops the local clone database
+4. Deletes the session file
+
+**Options:**
+- `-f, --force` - Skip confirmation prompt
+- `--dry-run` - Show what would happen without aborting
+
+---
+
+### `migr grants`
+
+Regenerate and display grant statements from schema files.
+
+```bash
+npm run migr grants
+```
+
+**Options:**
+- `--apply` - Apply grants to database
+- `--target <local|remote>` - Target database (default: local)
+
+**Examples:**
+```bash
+# Show grants
+npm run migr grants
+
+# Apply to local database
+npm run migr grants -- --apply
+
+# Apply to remote database
+npm run migr grants -- --apply --target=remote
+```
+
+## Global Options
+
+These options can be used with any command:
+
+| Option | Description |
+|--------|-------------|
+| `-v, --verbose` | Enable verbose/debug output |
+| `--dry-run` | Show what would be done without making changes |
+| `-V, --version` | Output version number |
+| `-h, --help` | Display help for command |
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `REMOTE_DATABASE_URL` | PostgreSQL connection URL for remote/production database | Yes |
+| `LOCAL_DATABASE_URL` | PostgreSQL connection URL for local clone database | Yes |
+| `SCHEMA_PATH` | Path to schema files (relative to CLI root) | No (default: `../../schema`) |
+| `MIGRATIONS_PATH` | Path to migrations directory | No (default: `../../migrations`) |
+| `PGSCHEMA_BIN` | Path to pgschema binary | No (default: `pgschema`) |
+| `DBMATE_BIN` | Path to dbmate binary | No (default: `dbmate`) |
+
+### Schema Directory Structure
+
+The tool expects schema files organized in `db/schema/`:
+
+```
+db/schema/
+├── extensions/
+│   └── uuid.sql
+├── types/
+│   └── custom_types.sql
+├── enums/
+│   └── status_enum.sql
+├── tables/
+│   ├── users.sql
+│   ├── posts.sql
+│   └── comments.sql
+├── views/
+│   └── user_stats.sql
+├── functions/
+│   └── helpers.sql
+├── triggers/
+│   └── updated_at.sql
+├── indexes/
+│   └── performance.sql
+└── grants/
+    └── app_user.sql
+```
+
+**Schema ordering:**
+1. extensions
+2. types
+3. enums
+4. domains
+5. sequences
+6. tables
+7. views
+8. functions
+9. triggers
+10. indexes
+11. constraints
+12. policies
+13. grants
+
+## Session State
+
+The session state is stored in `.session.json`:
+
+```json
+{
+  "active": true,
+  "startedAt": "2026-02-11T12:00:00Z",
+  "remoteSnapshot": "20260211120000",
+  "localDbUrl": "postgres://...",
+  "remoteDbUrl": "postgres://...",
+  "pendingChanges": {
+    "planned": false,
+    "applied": false,
+    "planFile": null
+  }
+}
+```
+
+## Typical Workflow
+
+### 1. Start a new migration session
+
+```bash
+npm run migr start
+```
+
+This clones your remote database locally for safe testing.
+
+### 2. Make schema changes
+
+Edit files in `db/schema/`:
+
+```sql
+-- db/schema/tables/users.sql
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT NOT NULL UNIQUE,
+    email_verified BOOLEAN DEFAULT false,  -- New column
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+### 3. Preview changes
+
+```bash
+npm run migr plan
+```
+
+Review the generated SQL to ensure it matches your expectations.
+
+### 4. Test locally
+
+```bash
+npm run migr apply
+```
+
+This applies changes to your local clone. Test your application against the local database.
+
+### 5. Commit when ready
+
+```bash
+npm run migr commit "add_email_verification_column"
+```
+
+This creates a migration file and applies it to the remote database.
+
+### If something goes wrong
+
+```bash
+npm run migr abort
+```
+
+This cancels the session and cleans up all local changes.
+
+## Global Installation (Optional)
+
+To use `migr` as a global command:
+
+```bash
+npm link
+```
+
+Then you can run commands directly:
+
+```bash
+migr start
+migr plan
+migr apply
+migr commit "description"
+```
+
+## Troubleshooting
+
+### "pgschema is not installed"
+
+Install pgschema following the instructions at [pgschema repository](https://github.com/pgschema/pgschema).
+
+### "dbmate is not installed"
+
+Install dbmate:
+```bash
+# macOS
+brew install dbmate
+
+# Go
+go install github.com/amacneil/dbmate@latest
+```
+
+### "Failed to connect to remote database"
+
+Check your `REMOTE_DATABASE_URL` in `.env`:
+- Ensure the host is accessible
+- Verify credentials are correct
+- Check if the database exists
+
+### "No active migration session"
+
+Run `npm run migr start` to begin a new session before running other commands.
+
+### "Plan file is empty"
+
+Your schema files match the current database state. Make changes to `db/schema/` files first.
+
+## Development
+
+### Running in development mode
+
+```bash
+npm run dev -- <command>
+# Example: npm run dev -- status
+```
+
+### Building
+
+```bash
+npm run build
+```
+
+### Project structure
+
 ```
 src/
-├── cli/
-│   ├── index.js            # Main CLI entry point  
-│   ├── commands/           # Command implementations
-│   │   ├── init.js         # Project initialization
-│   │   ├── start.js        # Service management
-│   │   ├── restart.js      # Service restart
-│   │   ├── create.js       # Component generation
-│   │   ├── migrate-*.js    # Database migration commands
-│   │   ├── auth-import.js  # Keycloak realm import
-│   │   ├── auth-export.js  # Keycloak realm export
-│   │   └── help.js         # Interactive help system
-│   └── utils/              # Utility modules
-│       ├── logger.js       # Colored logging
-│       ├── docker.js       # Docker operations
-│       └── file-utils.js   # File operations
-└── templates/
-    └── backend-template/   # Project templates
-        ├── db/             # Database templates
-        ├── services/       # Service templates
-        │   ├── auth/       # Keycloak templates
-        │   ├── functions/  # Function templates
-        │   ├── worker-service/ # Worker templates
-        │   └── storage/    # Storage templates
-        ├── docker-compose.template.yml
-        ├── .env.template
-        └── README.template.md
+├── index.ts              # CLI entry point (commander)
+├── commands/             # Command handlers
+├── services/             # Core business logic
+├── utils/                # Utility functions
+└── types/                # TypeScript interfaces
 ```
 
-### **Generated Project Structure**
-```
-my-app/
-├── db/
-│   ├── migrations/         # SQL migration files
-│   └── utils/              # Database utility scripts
-├── auth/                   # Keycloak authentication service
-│   ├── config/             # Realm configurations (JSON files)
-│   └── providers/          # Custom Keycloak providers
-├── functions/              # Appri runtime functions (optional)
-│   ├── *.ts                # Individual function files
-│   └── package.json        # Node.js dependencies
-├── worker/                 # Graphile worker jobs (optional)
-│   ├── src/
-│   │   ├── tasks/          # Job task definitions
-│   │   └── services/       # Shared services
-│   └── package.json        # Node.js dependencies
-├── storage/                # PG-Storage setup (optional)
-│   └── migrations/         # Storage-specific migrations
-├── volumes/                # Docker volumes for persistence
-├── .env                    # Environment variables
-├── .dbmate.env             # Database migration configuration
-├── docker-compose.yml      # Service orchestration
-└── README.md               # Generated project documentation
-```
+## License
 
----
-
-## 🌐 **Default Service URLs**
-
-After initialization, access your services at:
-
-- **API Documentation**: http://swagger.localhost
-- **PostgREST API**: http://rest.localhost  
-- **Keycloak Admin**: http://auth.localhost
-- **Traefik Dashboard**: http://traefik.localhost:8080
-- **Storage API**: http://storage.localhost *(if enabled)*
-- **Image Proxy**: http://imgproxy.localhost *(if enabled)*
-
----
-
-### 🧱 **Dependencies**
-
-* Node.js >= 18.0.0 (CLI runtime)
-* Docker & Docker Compose (recommended for services)
-* PostgreSQL CLI (`psql`) - for direct database access
-* `dbmate` - for database migrations
-* Keycloak Admin CLI (optional) - for realm management
-
----
-
-## 🔧 **Development**
-
-### **Adding New Templates**
-
-1. Add template files to `src/templates/`
-2. Use Mustache syntax for variables: `{{projectName}}`
-3. Update `src/commands/init.js` to copy new templates
-
-### **Template Variables**
-
-Available variables in templates:
-- `{{projectName}}` - Project name
-- `{{dbUser}}` - Database username  
-- `{{dbPassword}}` - Database password
-- `{{keycloakAdmin}}` - Keycloak admin username
-- `{{jwtSecret}}` - JWT secret key
-- `{{nodeEnv}}` - Environment (development/production)
-- `{{withWorker}}` - Boolean for worker service
-- `{{withStorage}}` - Boolean for storage service
-
----
-
-## 🔐 **Security Features**
-
-- **Auto-generated Secrets** - JWT keys, API keys, and signing keys
-- **Secure Defaults** - Production-ready configurations
-- **Environment Isolation** - Proper .env file generation
-- **No Hardcoded Credentials** - All secrets are configurable
-
----
-
-## 🐳 **Docker Integration**
-
-PostKit uses Docker Compose profiles for optional services:
-
-```bash
-# Start with worker service
-docker-compose --profile worker up -d
-
-# Start with storage services  
-docker-compose --profile storage up -d
-
-# Start everything
-docker-compose --profile worker --profile storage up -d
-```
-
----
-
-## 🤝 **Contributing**
-
-1. Fork the repository
-2. Create a feature branch
-3. Add your changes
-4. Test with a sample project
-5. Submit a pull request
-
----
-
-## 📋 **Requirements**
-
-- **Node.js** >= 16.0.0
-- **Docker** & **Docker Compose**
-- **Git** (for cloning)
-
----
-
-## 📖 **Documentation**
-
-- [PostgREST Docs](https://postgrest.org/en/stable/)
-- [Keycloak Docs](https://www.keycloak.org/documentation)  
-- [Graphile Worker Docs](https://github.com/graphile/worker)
-- [Docker Compose Docs](https://docs.docker.com/compose/)
-
----
-
-## 📄 **License**
-
-MIT License - see LICENSE file for details.
-
----
-
-**Built with ❤️ by the Appri Team**
+ISC

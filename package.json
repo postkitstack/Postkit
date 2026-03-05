@@ -1,55 +1,39 @@
 {
-  "name": "postkit",
+  "name": "migration-cli",
   "version": "1.0.0",
-  "description": "CLI tool for initializing PostKit projects with the Appri stack",
-  "main": "src/cli/index.js",
+  "description": "TypeScript CLI tool for streamlined, session-based database migration workflow",
+  "type": "module",
+  "main": "dist/index.js",
   "bin": {
-    "postkit": "./src/cli/index.js"
+    "migr": "./dist/index.js"
   },
-  "preferGlobal": true,
-  "files": [
-    "src/",
-    "README.md",
-    "package.json"
-  ],
   "scripts": {
-    "start": "node src/cli/index.js",
-    "dev": "node src/cli/index.js start --dev",
-    "migrate": "node src/cli/index.js migrate",
-    "create:task": "node src/cli/index.js create task",
-    "create:function": "node src/cli/index.js create function",
-    "migrate:create": "node src/cli/index.js migrate:create",
-    "migrate:up": "node src/cli/index.js migrate:up",
-    "migrate:down": "node src/cli/index.js migrate:down",
-    "migrate:status": "node src/cli/index.js migrate:status"
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "migr": "tsx src/index.ts"
   },
   "keywords": [
-    "cli",
-    "postkit",
+    "migration",
+    "database",
     "postgresql",
-    "postgrest",
-    "keycloak",
-    "graphile-worker",
-    "functions-runtime",
-    "docker"
+    "cli"
   ],
-  "author": "Appri Technologies",
-  "license": "MIT",
+  "author": "",
+  "license": "ISC",
   "dependencies": {
-    "commander": "^11.1.0",
-    "inquirer": "^9.2.12",
-    "chalk": "^4.1.2",
-    "fs-extra": "^11.2.0",
-    "mustache": "^4.2.0",
-    "dotenv": "^16.3.1",
-    "ora": "^5.4.1",
-    "axios": "^1.6.0"
+    "chalk": "^5.3.0",
+    "commander": "^12.0.0",
+    "dotenv": "^16.4.0",
+    "inquirer": "^9.2.0",
+    "ora": "^8.0.0",
+    "pg": "^8.14.0"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
-    "dbmate": "^2.21.0"
-  },
-  "engines": {
-    "node": ">=16.0.0"
+    "@types/inquirer": "^9.0.0",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
   }
 }
