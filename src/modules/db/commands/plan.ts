@@ -1,9 +1,9 @@
 import ora from "ora";
-import {logger} from "../../../common/logger.js";
-import {getSession, updatePendingChanges} from "../utils/session.js";
-import {generateSchemaSQL} from "../services/schema-generator.js";
-import {runPgschemaplan} from "../services/pgschema.js";
-import type {CommandOptions} from "../../../common/types.js";
+import {logger} from "../../../common/logger";
+import {getSession, updatePendingChanges} from "../utils/session";
+import {generateSchemaSQL} from "../services/schema-generator";
+import {runPgschemaplan} from "../services/pgschema";
+import type {CommandOptions} from "../../../common/types";
 
 export async function planCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();

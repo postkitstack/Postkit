@@ -1,6 +1,6 @@
-import type {PlanResult, ApplyResult} from "../types/index.js";
-import {runCommand, commandExists} from "../../../common/shell.js";
-import {getConfig, getPlanFilePath} from "../utils/db-config.js";
+import type {PlanResult, ApplyResult} from "../types/index";
+import {runCommand, commandExists} from "../../../common/shell";
+import {getConfig, getPlanFilePath} from "../utils/db-config";
 import fs from "fs/promises";
 import {existsSync} from "fs";
 

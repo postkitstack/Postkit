@@ -1,11 +1,11 @@
 import ora from "ora";
 import inquirer from "inquirer";
-import {logger} from "../../../common/logger.js";
-import {getSession, deleteSession} from "../utils/session.js";
-import {deletePlanFile} from "../services/pgschema.js";
-import {deleteGeneratedSchema} from "../services/schema-generator.js";
-import {dropDatabase, parseConnectionUrl} from "../services/database.js";
-import type {CommandOptions} from "../../../common/types.js";
+import {logger} from "../../../common/logger";
+import {getSession, deleteSession} from "../utils/session";
+import {deletePlanFile} from "../services/pgschema";
+import {deleteGeneratedSchema} from "../services/schema-generator";
+import {dropDatabase, parseConnectionUrl} from "../services/database";
+import type {CommandOptions} from "../../../common/types";
 
 export async function abortCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();

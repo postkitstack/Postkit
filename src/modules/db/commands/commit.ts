@@ -1,12 +1,12 @@
 import ora from "ora";
 import inquirer from "inquirer";
-import {logger} from "../../../common/logger.js";
-import {getSession, deleteSession} from "../utils/session.js";
-import {getPlanFileContent, deletePlanFile} from "../services/pgschema.js";
-import {createMigrationFile, runDbmateMigrate} from "../services/dbmate.js";
-import {deleteGeneratedSchema} from "../services/schema-generator.js";
-import {testConnection} from "../services/database.js";
-import type {CommandOptions} from "../../../common/types.js";
+import {logger} from "../../../common/logger";
+import {getSession, deleteSession} from "../utils/session";
+import {getPlanFileContent, deletePlanFile} from "../services/pgschema";
+import {createMigrationFile, runDbmateMigrate} from "../services/dbmate";
+import {deleteGeneratedSchema} from "../services/schema-generator";
+import {testConnection} from "../services/database";
+import type {CommandOptions} from "../../../common/types";
 
 export async function commitCommand(
   description: string,

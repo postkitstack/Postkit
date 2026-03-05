@@ -1,13 +1,13 @@
 import ora from "ora";
-import {logger} from "../../../common/logger.js";
+import {logger} from "../../../common/logger";
 import {
   generateGrants,
   getGrantsSQL,
   applyGrants,
-} from "../services/grant-generator.js";
-import {getSession} from "../utils/session.js";
-import {testConnection} from "../services/database.js";
-import type {CommandOptions} from "../../../common/types.js";
+} from "../services/grant-generator";
+import {getSession} from "../utils/session";
+import {testConnection} from "../services/database";
+import type {CommandOptions} from "../../../common/types";
 
 interface GrantsOptions extends CommandOptions {
   apply?: boolean;
@@ -60,7 +60,7 @@ export async function grantsCommand(options: GrantsOptions): Promise<void> {
         if (session) {
           targetUrl = session.remoteDbUrl;
         } else {
-          const {getConfig} = await import("../utils/db-config.js");
+          const {getConfig} = await import("../utils/db-config");
           const config = getConfig();
           targetUrl = config.remoteDbUrl;
         }

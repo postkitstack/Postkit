@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
-import {getConfig, getGeneratedSchemaPath} from "../utils/db-config.js";
+import {getConfig, getGeneratedSchemaPath} from "../utils/db-config";
 
 interface SchemaSection {
   name: string;

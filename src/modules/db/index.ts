@@ -1,11 +1,11 @@
 import {Command} from "commander";
-import {startCommand} from "./commands/start.js";
-import {planCommand} from "./commands/plan.js";
-import {applyCommand} from "./commands/apply.js";
-import {commitCommand} from "./commands/commit.js";
-import {statusCommand} from "./commands/status.js";
-import {abortCommand} from "./commands/abort.js";
-import {grantsCommand} from "./commands/grants.js";
+import {startCommand} from "./commands/start";
+import {planCommand} from "./commands/plan";
+import {applyCommand} from "./commands/apply";
+import {commitCommand} from "./commands/commit";
+import {statusCommand} from "./commands/status";
+import {abortCommand} from "./commands/abort";
+import {grantsCommand} from "./commands/grants";
 
 export function registerDbModule(program: Command): void {
   const db = program

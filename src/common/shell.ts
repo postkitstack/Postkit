@@ -1,6 +1,6 @@
 import {exec, spawn} from "child_process";
 import {promisify} from "util";
-import type {ShellResult} from "./types.js";
+import type {ShellResult} from "./types";
 
 const execAsync = promisify(exec);
 

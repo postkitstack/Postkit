@@ -1,8 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
-import {getConfig} from "../utils/db-config.js";
-import type {GrantStatement} from "../types/index.js";
+import {getConfig} from "../utils/db-config";
+import type {GrantStatement} from "../types/index";
 
 export async function generateGrants(): Promise<GrantStatement[]> {
   const config = getConfig();
@@ -103,7 +103,7 @@ export async function getGrantsSQL(): Promise<string> {
 }
 
 export async function applyGrants(databaseUrl: string): Promise<void> {
-  const {executeSQL} = await import("./database.js");
+  const {executeSQL} = await import("./database");
   const grants = await generateGrants();
 
   for (const grant of grants) {

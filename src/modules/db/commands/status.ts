@@ -1,10 +1,10 @@
 import chalk from "chalk";
-import {logger} from "../../../common/logger.js";
-import {getSession, formatSessionDuration} from "../utils/session.js";
-import {testConnection, getTableCount} from "../services/database.js";
-import {getPlanFileContent} from "../services/pgschema.js";
-import {runDbmateStatus} from "../services/dbmate.js";
-import type {CommandOptions} from "../../../common/types.js";
+import {logger} from "../../../common/logger";
+import {getSession, formatSessionDuration} from "../utils/session";
+import {testConnection, getTableCount} from "../services/database";
+import {getPlanFileContent} from "../services/pgschema";
+import {runDbmateStatus} from "../services/dbmate";
+import type {CommandOptions} from "../../../common/types";
 
 export async function statusCommand(options: CommandOptions): Promise<void> {
   try {
@@ -139,7 +139,7 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
 
 async function showDbmateStatus(): Promise<void> {
   try {
-    const {getConfig} = await import("../utils/db-config.js");
+    const {getConfig} = await import("../utils/db-config");
     const config = getConfig();
 
     logger.blank();

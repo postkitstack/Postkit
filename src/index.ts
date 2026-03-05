@@ -1,7 +1,5 @@
-#!/usr/bin/env node
-
 import {Command} from "commander";
-import {registerDbModule} from "./modules/db/index.js";
+import {registerDbModule} from "./modules/db/index";
 
 const program = new Command();
 

@@ -1,6 +1,6 @@
-import type {MigrationFile, ApplyResult} from "../types/index.js";
-import {runCommand, commandExists} from "../../../common/shell.js";
-import {getConfig} from "../utils/db-config.js";
+import type {MigrationFile, ApplyResult} from "../types/index";
+import {runCommand, commandExists} from "../../../common/shell";
+import {getConfig} from "../utils/db-config";
 import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";

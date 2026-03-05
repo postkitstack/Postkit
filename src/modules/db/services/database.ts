@@ -1,6 +1,6 @@
 import pg from "pg";
-import type {DatabaseConnectionInfo} from "../types/index.js";
-import {runCommand} from "../../../common/shell.js";
+import type {DatabaseConnectionInfo} from "../types/index";
+import {runCommand} from "../../../common/shell";
 
 const {Client} = pg;
 

@@ -1,10 +1,10 @@
 import ora from "ora";
 import inquirer from "inquirer";
-import {logger} from "../../../common/logger.js";
-import {getSession, updatePendingChanges} from "../utils/session.js";
-import {runPgschemaApply, getPlanFileContent} from "../services/pgschema.js";
-import {testConnection} from "../services/database.js";
-import type {CommandOptions} from "../../../common/types.js";
+import {logger} from "../../../common/logger";
+import {getSession, updatePendingChanges} from "../utils/session";
+import {runPgschemaApply, getPlanFileContent} from "../services/pgschema";
+import {testConnection} from "../services/database";
+import type {CommandOptions} from "../../../common/types";
 
 export async function applyCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();

@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import {existsSync} from "fs";
-import type {SessionState} from "../types/index.js";
-import {getSessionFilePath} from "./db-config.js";
+import type {SessionState} from "../types/index";
+import {getSessionFilePath} from "./db-config";
 
 export async function getSession(): Promise<SessionState | null> {
   const sessionPath = getSessionFilePath();

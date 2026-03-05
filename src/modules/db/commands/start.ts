@@ -1,15 +1,15 @@
 import ora from "ora";
-import {logger} from "../../../common/logger.js";
-import {getConfig} from "../utils/db-config.js";
-import {createSession, hasActiveSession, getSession} from "../utils/session.js";
+import {logger} from "../../../common/logger";
+import {getConfig} from "../utils/db-config";
+import {createSession, hasActiveSession, getSession} from "../utils/session";
 import {
   testConnection,
   cloneDatabase,
   getTableCount,
-} from "../services/database.js";
-import {checkPgschemaInstalled} from "../services/pgschema.js";
-import {checkDbmateInstalled} from "../services/dbmate.js";
-import type {CommandOptions} from "../../../common/types.js";
+} from "../services/database";
+import {checkPgschemaInstalled} from "../services/pgschema";
+import {checkDbmateInstalled} from "../services/dbmate";
+import type {CommandOptions} from "../../../common/types";
 
 export async function startCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();

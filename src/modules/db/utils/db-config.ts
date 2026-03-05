@@ -1,6 +1,6 @@
 import path from "path";
-import {cliRoot, projectRoot} from "../../../common/config.js";
-import type {Config} from "../types/index.js";
+import {cliRoot, projectRoot} from "../../../common/config";
+import type {Config} from "../types/index";
 
 export function getConfig(): Config {
   const remoteDbUrl = process.env.REMOTE_DATABASE_URL;
