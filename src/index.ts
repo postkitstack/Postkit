@@ -1,5 +1,6 @@
 import {Command} from "commander";
 import {registerDbModule} from "./modules/db/index";
+import {registerAuthModule} from "./modules/auth/index";
 
 const program = new Command();
 
@@ -15,6 +16,7 @@ program
 
 // Register modules
 registerDbModule(program);
+registerAuthModule(program);
 
 // Parse and run
 program.parse();

@@ -62,6 +62,7 @@ postkit <module> <command> [options]
 | Module | Command | Description | Docs |
 |--------|---------|-------------|------|
 | **db** | `postkit db <command>` | Session-based database migration workflow | [docs/db.md](docs/db.md) |
+| **auth** | `postkit auth <command>` | Keycloak realm config management | [docs/auth.md](docs/auth.md) |
 
 ### **Example Commands**
 
@@ -74,6 +75,11 @@ postkit db commit "add_users_table"       # Commit to remote
 postkit db status                         # Show session state
 postkit db abort                          # Cancel session
 postkit db grants                         # Manage grant statements
+
+# Keycloak auth
+postkit auth export                       # Export realm config
+postkit auth import                       # Import to target Keycloak
+postkit auth sync                         # Export + Import
 ```
 
 ---
@@ -89,12 +95,17 @@ src/
 │   ├── shell.ts              # Shell command runner
 │   └── types.ts              # Shared TypeScript types
 └── modules/                  # Pluggable command modules
-    └── db/                   # Database migration module
+    ├── db/                   # Database migration module
+    │   ├── index.ts          # Module registration
+    │   ├── commands/         # Command handlers
+    │   ├── services/         # Core business logic
+    │   ├── types/            # Module-specific types
+    │   └── utils/            # Module-specific utilities
+    └── auth/                 # Keycloak auth module
         ├── index.ts          # Module registration
-        ├── commands/         # Command handlers
-        ├── services/         # Core business logic
-        ├── types/            # Module-specific types
-        └── utils/            # Module-specific utilities
+        ├── commands/         # export, import, sync
+        ├── services/         # Keycloak API, Docker importer
+        └── utils/            # Auth-specific config
 ```
 
 ### **Adding a New Module**
@@ -132,6 +143,7 @@ npm run build
 ## 📖 **Documentation**
 
 * [Database Module (postkit db)](docs/db.md)
+* [Auth Module (postkit auth)](docs/auth.md)
 * [PostgREST Docs](https://postgrest.org/en/stable/)
 * [Keycloak Docs](https://www.keycloak.org/documentation)
 * [Graphile Worker Docs](https://github.com/graphile/worker)
