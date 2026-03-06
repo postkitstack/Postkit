@@ -1,21 +1,7 @@
-# Dependencies
 node_modules/
-
-# Build output
-dist/
-
-# Environment files
 .env
-.env.local
-
-# Session and generated files
-.session.json
-.plan.sql
-.schema.sql
-
-# OS files
+.env.*
+!.env.example
 .DS_Store
-
-# IDE
-.idea/
-.vscode/
+.tmp-config/
+realm-config/
