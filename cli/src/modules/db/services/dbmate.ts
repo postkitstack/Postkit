@@ -126,6 +126,14 @@ export async function getLatestMigration(): Promise<MigrationFile | null> {
   return migrations.length > 0 ? migrations[migrations.length - 1] : null;
 }
 
+export async function deleteMigrationFile(filePath: string): Promise<boolean> {
+  if (existsSync(filePath)) {
+    await fs.unlink(filePath);
+    return true;
+  }
+  return false;
+}
+
 function generateTimestamp(): string {
   const now = new Date();
   const year = now.getFullYear();

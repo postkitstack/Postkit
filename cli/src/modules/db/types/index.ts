@@ -1,3 +1,11 @@
+export interface CommitState {
+  migrationFile: { name: string; path: string } | null;
+  remoteApplied: boolean;
+  grantsApplied: boolean;
+  seedsApplied: boolean;
+  description: string;
+}
+
 export interface SessionState {
   active: boolean;
   startedAt: string;
@@ -9,6 +17,7 @@ export interface SessionState {
     applied: boolean;
     planFile: string | null;
   };
+  commitState?: CommitState;
 }
 
 export interface Config {
