@@ -10,7 +10,7 @@ dist/
 
 # Session and generated files
 .session.json
-.plan.sql
+.migration.sql
 .schema.sql
 
 # OS files

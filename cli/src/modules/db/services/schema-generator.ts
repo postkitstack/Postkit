@@ -10,20 +10,25 @@ interface SchemaSection {
 }
 
 const SCHEMA_ORDER: Record<string, number> = {
+  core: 1, // Core extensions / setup
   extensions: 1,
+  type: 2,
   types: 2,
   enums: 3,
   domains: 4,
   sequences: 5,
-  tables: 6,
-  table: 6,
-  views: 7,
-  functions: 8,
+  function: 6, // Functions should generally come before tables if tables use them as defaults
+  functions: 6,
+  table: 7,
+  tables: 7,
+  view: 8,
+  views: 8,
+  trigger: 9,
   triggers: 9,
   indexes: 10,
   constraints: 11,
+  rls: 12, // RLS policies
   policies: 12,
-  grants: 13,
 };
 
 export async function generateSchemaSQL(): Promise<string> {
@@ -73,6 +78,18 @@ async function discoverSchemaSections(
   for (const entry of entries) {
     if (entry.isDirectory()) {
       const sectionName = entry.name.toLowerCase();
+
+      // Skip seed and grant directories - they are applied separately as post-steps
+      if (
+        sectionName === "seed" ||
+        sectionName === "seeds" ||
+        sectionName === "grant" ||
+        sectionName === "grants" ||
+        sectionName === "grant-permissions"
+      ) {
+        continue;
+      }
+
       const order = SCHEMA_ORDER[sectionName] ?? 100;
 
       sections.push({
@@ -135,7 +152,18 @@ export async function getSchemaFiles(): Promise<string[]> {
   return collectSqlFiles(schemaPath);
 }
 
-async function collectSqlFiles(dirPath: string): Promise<string[]> {
+const SKIP_DIRECTORIES = new Set([
+  "seed",
+  "seeds",
+  "grant",
+  "grants",
+  "grant-permissions",
+]);
+
+async function collectSqlFiles(
+  dirPath: string,
+  isRoot = true,
+): Promise<string[]> {
   const files: string[] = [];
   const entries = await fs.readdir(dirPath, {withFileTypes: true});
 
@@ -143,7 +171,11 @@ async function collectSqlFiles(dirPath: string): Promise<string[]> {
     const fullPath = path.join(dirPath, entry.name);
 
     if (entry.isDirectory()) {
-      const subFiles = await collectSqlFiles(fullPath);
+      // Skip seed and grant directories at the schema root level
+      if (isRoot && SKIP_DIRECTORIES.has(entry.name.toLowerCase())) {
+        continue;
+      }
+      const subFiles = await collectSqlFiles(fullPath, false);
       files.push(...subFiles);
     } else if (entry.isFile() && entry.name.endsWith(".sql")) {
       files.push(fullPath);

@@ -6,6 +6,8 @@ import {getPlanFileContent, deletePlanFile} from "../services/pgschema";
 import {createMigrationFile, runDbmateMigrate} from "../services/dbmate";
 import {deleteGeneratedSchema} from "../services/schema-generator";
 import {testConnection} from "../services/database";
+import {applyGrants, generateGrants} from "../services/grant-generator";
+import {applySeeds, generateSeeds} from "../services/seed-generator";
 import type {CommandOptions} from "../../../common/types";
 
 export async function commitCommand(
@@ -41,7 +43,7 @@ export async function commitCommand(
     logger.heading("Committing Migration");
 
     // Show the plan
-    logger.step(1, 5, "Loading plan...");
+    logger.step(1, 7, "Loading plan...");
     const planContent = await getPlanFileContent();
 
     if (!planContent || planContent.trim().length === 0) {
@@ -73,7 +75,7 @@ export async function commitCommand(
     }
 
     // Create migration file
-    logger.step(2, 5, "Creating migration file...");
+    logger.step(2, 7, "Creating migration file...");
     spinner.start("Writing migration file...");
 
     let migrationFile;
@@ -92,7 +94,7 @@ export async function commitCommand(
     }
 
     // Test remote connection
-    logger.step(3, 5, "Testing remote database connection...");
+    logger.step(3, 7, "Testing remote database connection...");
     spinner.start("Connecting to remote database...");
 
     const remoteConnected = await testConnection(session.remoteDbUrl);
@@ -108,7 +110,7 @@ export async function commitCommand(
     spinner.succeed("Connected to remote database");
 
     // Apply to remote
-    logger.step(4, 5, "Applying migration to remote database...");
+    logger.step(4, 7, "Applying migration to remote database...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping remote apply");
@@ -133,8 +135,42 @@ export async function commitCommand(
       }
     }
 
+    // Apply grants to remote
+    logger.step(5, 7, "Applying grants to remote...");
+
+    if (options.dryRun) {
+      spinner.info("Dry run - skipping grants");
+    } else {
+      const grants = await generateGrants();
+
+      if (grants.length === 0) {
+        spinner.info("No grant files found - skipping");
+      } else {
+        spinner.start("Applying grants to remote database...");
+        await applyGrants(session.remoteDbUrl);
+        spinner.succeed(`Grants applied to remote (${grants.length} file(s))`);
+      }
+    }
+
+    // Apply seeds to remote
+    logger.step(6, 7, "Applying seeds to remote...");
+
+    if (options.dryRun) {
+      spinner.info("Dry run - skipping seeds");
+    } else {
+      const seeds = await generateSeeds();
+
+      if (seeds.length === 0) {
+        spinner.info("No seed files found - skipping");
+      } else {
+        spinner.start("Applying seed data to remote database...");
+        await applySeeds(session.remoteDbUrl);
+        spinner.succeed(`Seeds applied to remote (${seeds.length} file(s))`);
+      }
+    }
+
     // Cleanup session
-    logger.step(5, 5, "Cleaning up session...");
+    logger.step(7, 7, "Cleaning up session...");
 
     if (!options.dryRun) {
       await deletePlanFile();

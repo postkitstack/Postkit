@@ -4,6 +4,8 @@ import {logger} from "../../../common/logger";
 import {getSession, updatePendingChanges} from "../utils/session";
 import {runPgschemaApply, getPlanFileContent} from "../services/pgschema";
 import {testConnection} from "../services/database";
+import {applyGrants, generateGrants} from "../services/grant-generator";
+import {applySeeds, generateSeeds} from "../services/seed-generator";
 import type {CommandOptions} from "../../../common/types";
 
 export async function applyCommand(options: CommandOptions): Promise<void> {
@@ -39,7 +41,7 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     logger.heading("Applying Migration to Local Database");
 
     // Show the plan
-    logger.step(1, 4, "Loading plan...");
+    logger.step(1, 6, "Loading plan...");
     const planContent = await getPlanFileContent();
 
     if (planContent) {
@@ -67,7 +69,7 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     }
 
     // Test local connection
-    logger.step(2, 4, "Testing local database connection...");
+    logger.step(2, 6, "Testing local database connection...");
     spinner.start("Connecting to local database...");
 
     const localConnected = await testConnection(session.localDbUrl);
@@ -84,7 +86,7 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     spinner.succeed("Connected to local database");
 
     // Apply changes
-    logger.step(3, 4, "Applying changes...");
+    logger.step(3, 6, "Applying schema changes...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping apply");
@@ -110,8 +112,42 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
       }
     }
 
+    // Apply grants
+    logger.step(4, 6, "Applying grants...");
+
+    if (options.dryRun) {
+      spinner.info("Dry run - skipping grants");
+    } else {
+      const grants = await generateGrants();
+
+      if (grants.length === 0) {
+        spinner.info("No grant files found - skipping");
+      } else {
+        spinner.start("Applying grants...");
+        await applyGrants(session.localDbUrl);
+        spinner.succeed(`Grants applied (${grants.length} file(s))`);
+      }
+    }
+
+    // Apply seeds
+    logger.step(5, 6, "Applying seeds...");
+
+    if (options.dryRun) {
+      spinner.info("Dry run - skipping seeds");
+    } else {
+      const seeds = await generateSeeds();
+
+      if (seeds.length === 0) {
+        spinner.info("No seed files found - skipping");
+      } else {
+        spinner.start("Applying seed data...");
+        await applySeeds(session.localDbUrl);
+        spinner.succeed(`Seeds applied (${seeds.length} file(s))`);
+      }
+    }
+
     // Update session
-    logger.step(4, 4, "Updating session state...");
+    logger.step(6, 6, "Updating session state...");
 
     if (!options.dryRun) {
       await updatePendingChanges({

@@ -6,6 +6,7 @@ import {commitCommand} from "./commands/commit";
 import {statusCommand} from "./commands/status";
 import {abortCommand} from "./commands/abort";
 import {grantsCommand} from "./commands/grants";
+import {seedCommand} from "./commands/seed";
 
 export function registerDbModule(program: Command): void {
   const db = program
@@ -71,5 +72,15 @@ export function registerDbModule(program: Command): void {
     .action(async (cmdOptions) => {
       const options = {...program.opts(), ...cmdOptions};
       await grantsCommand(options);
+    });
+
+  // Seed command
+  db.command("seed")
+    .description("Show and apply seed data")
+    .option("--apply", "Apply seeds to database")
+    .option("--target <target>", "Target database: local or remote", "local")
+    .action(async (cmdOptions) => {
+      const options = {...program.opts(), ...cmdOptions};
+      await seedCommand(options);
     });
 }

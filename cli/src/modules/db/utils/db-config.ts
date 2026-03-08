@@ -15,11 +15,11 @@ export function getConfig(): Config {
   }
 
   const schemaPath = process.env.SCHEMA_PATH
-    ? path.resolve(cliRoot, process.env.SCHEMA_PATH)
+    ? path.resolve(projectRoot, process.env.SCHEMA_PATH)
     : path.resolve(projectRoot, "schema");
 
   const migrationsPath = process.env.MIGRATIONS_PATH
-    ? path.resolve(cliRoot, process.env.MIGRATIONS_PATH)
+    ? path.resolve(projectRoot, process.env.MIGRATIONS_PATH)
     : path.resolve(projectRoot, "migrations");
 
   return {
@@ -35,13 +35,13 @@ export function getConfig(): Config {
 }
 
 export function getSessionFilePath(): string {
-  return path.join(cliRoot, ".session.json");
+  return path.join(projectRoot, ".session.json");
 }
 
 export function getPlanFilePath(): string {
-  return path.join(cliRoot, ".plan.sql");
+  return path.join(projectRoot, ".migration.sql");
 }
 
 export function getGeneratedSchemaPath(): string {
-  return path.join(cliRoot, ".schema.sql");
+  return path.join(projectRoot, ".schema.sql");
 }

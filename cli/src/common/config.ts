@@ -11,9 +11,8 @@ export const cliRoot = isBuilt
   ? path.resolve(__dirname, "..")
   : path.resolve(__dirname, "..", "..");
 
-// Load .env from CLI root
-dotenvConfig({path: path.join(cliRoot, ".env")});
+// Project root is where the user runs the command
+export const projectRoot = process.cwd();
 
-// Project root is the db directory (parent of tools)
-// Since cli is inside Postkit, we adjust this to point to the same relative parent as before (Postkit's parent's parent)
-export const projectRoot = path.resolve(cliRoot, "..", "..", "..");
+// Load .env from project root
+dotenvConfig({path: path.join(projectRoot, ".env")});
