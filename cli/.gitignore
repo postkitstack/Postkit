@@ -19,3 +19,9 @@ dist/
 # IDE
 .idea/
 .vscode/
+
+# Postkit
+.postkit/session
+.postkit/plan
+.postkit/schema
+postkit.config.json
