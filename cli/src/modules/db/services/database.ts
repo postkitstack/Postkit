@@ -110,14 +110,15 @@ export async function cloneDatabase(
   // Create target database
   await createDatabase(targetUrl);
 
-  // Use pg_dump and psql to clone
+  // Use pg_dump and psql to clone (pipefail ensures pg_dump errors are caught)
   const dumpCmd = `PGPASSWORD="${sourceInfo.password}" pg_dump -h ${sourceInfo.host} -p ${sourceInfo.port} -U ${sourceInfo.user} -d ${sourceInfo.database} --no-owner --no-acl`;
   const restoreCmd = `PGPASSWORD="${targetInfo.password}" psql -h ${targetInfo.host} -p ${targetInfo.port} -U ${targetInfo.user} -d ${targetInfo.database}`;
 
-  const result = await runCommand(`${dumpCmd} | ${restoreCmd}`);
+  const result = await runCommand(`bash -c 'set -o pipefail; ${dumpCmd} | ${restoreCmd}'`);
 
   if (result.exitCode !== 0) {
-    throw new Error(`Failed to clone database: ${result.stderr}`);
+    const errorDetail = result.stderr || result.stdout || "Unknown error (no output captured)";
+    throw new Error(`Failed to clone database: ${errorDetail}`);
   }
 }
 

@@ -1,4 +1,4 @@
-import {runCommand, commandExists} from "../../../common/shell";
+import {runSpawnCommand, commandExists} from "../../../common/shell";
 import type {AuthConfig} from "../utils/auth-config";
 
 export async function checkDockerInstalled(): Promise<boolean> {
@@ -14,20 +14,20 @@ export async function importRealm(config: AuthConfig): Promise<void> {
   }
 
   const command = [
-    "docker run --rm",
-    "--network host",
+    "docker", "run", "--rm",
+    "--network", "host",
     "--platform=linux/amd64",
-    `-e KEYCLOAK_URL="${config.targetUrl}/"`,
-    `-e KEYCLOAK_USER="${config.targetAdminUser}"`,
-    `-e KEYCLOAK_PASSWORD="${config.targetAdminPass}"`,
-    `-e KEYCLOAK_AVAILABILITYCHECK_ENABLED=true`,
-    `-e KEYCLOAK_AVAILABILITYCHECK_TIMEOUT=120s`,
-    `-e IMPORT_FILES_LOCATIONS="/config/realm.json"`,
-    `-v "${config.cleanFilePath}:/config/realm.json"`,
-    `"${config.configCliImage}"`,
-  ].join(" ");
+    "-e", `KEYCLOAK_URL=${config.targetUrl}/`,
+    "-e", `KEYCLOAK_USER=${config.targetAdminUser}`,
+    "-e", `KEYCLOAK_PASSWORD=${config.targetAdminPass}`,
+    "-e", "KEYCLOAK_AVAILABILITYCHECK_ENABLED=true",
+    "-e", "KEYCLOAK_AVAILABILITYCHECK_TIMEOUT=120s",
+    "-e", "IMPORT_FILES_LOCATIONS=/config/realm.json",
+    "-v", `${config.cleanFilePath}:/config/realm.json`,
+    config.configCliImage,
+  ];
 
-  const result = await runCommand(command);
+  const result = await runSpawnCommand(command);
 
   if (result.exitCode !== 0) {
     throw new Error(

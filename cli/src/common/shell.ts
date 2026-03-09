@@ -88,6 +88,50 @@ export async function runCommandWithInput(
   });
 }
 
+export async function runSpawnCommand(
+  args: string[],
+  options: {
+    cwd?: string;
+    env?: Record<string, string>;
+  } = {},
+): Promise<ShellResult> {
+  const [cmd, ...rest] = args;
+  return new Promise((resolve) => {
+    const child = spawn(cmd, rest, {
+      cwd: options.cwd,
+      env: {...process.env, ...options.env},
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    child.on("close", (code) => {
+      resolve({
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+        exitCode: code || 0,
+      });
+    });
+
+    child.on("error", (error) => {
+      resolve({
+        stdout: "",
+        stderr: error.message,
+        exitCode: 1,
+      });
+    });
+  });
+}
+
 export async function commandExists(command: string): Promise<boolean> {
   const result = await runCommand(`which ${command}`);
   return result.exitCode === 0;
