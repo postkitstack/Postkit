@@ -1,5 +1,5 @@
 import path from "path";
-import {cliRoot, projectRoot} from "../../../common/config";
+import {projectRoot, loadPostkitConfig} from "../../../common/config";
 
 export interface AuthConfig {
   // Source Keycloak (export from)
@@ -27,33 +27,35 @@ export interface AuthConfig {
 }
 
 export function getAuthConfig(): AuthConfig {
-  const sourceUrl = process.env.KC_SOURCE_URL;
-  const sourceAdminUser = process.env.KC_SOURCE_ADMIN_USER;
-  const sourceAdminPass = process.env.KC_SOURCE_ADMIN_PASS;
-  const sourceRealm = process.env.KC_SOURCE_REALM;
+  const config = loadPostkitConfig();
+
+  const sourceUrl = config.auth.source.url;
+  const sourceAdminUser = config.auth.source.adminUser;
+  const sourceAdminPass = config.auth.source.adminPass;
+  const sourceRealm = config.auth.source.realm;
 
   if (!sourceUrl || !sourceAdminUser || !sourceAdminPass || !sourceRealm) {
     throw new Error(
-      "Missing source Keycloak config. Set KC_SOURCE_URL, KC_SOURCE_ADMIN_USER, KC_SOURCE_ADMIN_PASS, KC_SOURCE_REALM in .env",
+      "Missing source Keycloak config. Set auth.source.url, auth.source.adminUser, auth.source.adminPass, auth.source.realm in postkit.config.json",
     );
   }
 
-  const targetUrl = process.env.KC_TARGET_URL;
-  const targetAdminUser = process.env.KC_TARGET_ADMIN_USER;
-  const targetAdminPass = process.env.KC_TARGET_ADMIN_PASS;
+  const targetUrl = config.auth.target.url;
+  const targetAdminUser = config.auth.target.adminUser;
+  const targetAdminPass = config.auth.target.adminPass;
 
   if (!targetUrl || !targetAdminUser || !targetAdminPass) {
     throw new Error(
-      "Missing target Keycloak config. Set KC_TARGET_URL, KC_TARGET_ADMIN_USER, KC_TARGET_ADMIN_PASS in .env",
+      "Missing target Keycloak config. Set auth.target.url, auth.target.adminUser, auth.target.adminPass in postkit.config.json",
     );
   }
 
-  const rawExportDir = process.env.RAW_EXPORT_DIR || ".tmp-config";
-  const cleanOutputDir = process.env.CLEAN_OUTPUT_DIR || "realm-config";
+  const rawExportDir = config.auth.rawExportDir || ".tmp-config";
+  const cleanOutputDir = config.auth.cleanOutputDir || "realm-config";
   const outputFilename =
-    process.env.OUTPUT_FILENAME || "pro-application-realm.json";
+    config.auth.outputFilename || "pro-application-realm.json";
   const configCliImage =
-    process.env.KC_CONFIG_CLI_IMAGE || "adorsys/keycloak-config-cli:6.4.0-24";
+    config.auth.configCliImage || "adorsys/keycloak-config-cli:6.4.0-24";
 
   // Resolve paths relative to project root
   const rawDir = path.resolve(projectRoot, rawExportDir);

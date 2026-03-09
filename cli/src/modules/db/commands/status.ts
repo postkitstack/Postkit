@@ -62,6 +62,51 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
 
     logger.table(["Stage", "Status"], changeRows);
 
+    // Commit state (if a previous commit failed partway)
+    if (session.commitState) {
+      logger.blank();
+      logger.info("Commit Recovery State:");
+      logger.blank();
+
+      const cs = session.commitState;
+      const commitRows: string[][] = [];
+
+      if (cs.migrationFile) {
+        commitRows.push(["Migration File", cs.migrationFile.name]);
+      }
+
+      commitRows.push([
+        "Remote Applied",
+        cs.remoteApplied ? chalk.green("Yes") : chalk.red("No"),
+      ]);
+      commitRows.push([
+        "Grants Applied",
+        cs.grantsApplied ? chalk.green("Yes") : chalk.yellow("No"),
+      ]);
+      commitRows.push([
+        "Seeds Applied",
+        cs.seedsApplied ? chalk.green("Yes") : chalk.yellow("No"),
+      ]);
+      commitRows.push(["Description", cs.description]);
+
+      logger.table(["Property", "Status"], commitRows);
+
+      logger.blank();
+      if (cs.remoteApplied) {
+        logger.warn(
+          "A previous commit was partially applied to the remote database.",
+        );
+        logger.info(
+          'Run "postkit db commit" to resume from where it left off.',
+        );
+      } else {
+        logger.warn("A previous commit failed before applying to remote.");
+        logger.info(
+          'Run "postkit db commit" to clean up and start fresh, or "postkit db abort" to cancel.',
+        );
+      }
+    }
+
     logger.blank();
 
     // Database connection status
@@ -120,7 +165,18 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
     // Next steps
     logger.info("Next Steps:");
 
-    if (!session.pendingChanges.planned) {
+    if (session.commitState) {
+      if (session.commitState.remoteApplied) {
+        logger.info(
+          '  - Run "postkit db commit" to resume the failed commit',
+        );
+      } else {
+        logger.info(
+          '  - Run "postkit db commit" to clean up and retry',
+        );
+        logger.info('  - Run "postkit db abort" to cancel the session');
+      }
+    } else if (!session.pendingChanges.planned) {
       logger.info("  - Modify schema files in db/schema/");
       logger.info('  - Run "postkit db plan" to generate a plan');
     } else if (!session.pendingChanges.applied) {
@@ -130,7 +186,9 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
       logger.info('  - Run "postkit db commit <description>" to finalize');
     }
 
-    logger.info('  - Run "postkit db abort" to cancel the session');
+    if (!session.commitState) {
+      logger.info('  - Run "postkit db abort" to cancel the session');
+    }
   } catch (error) {
     logger.error(error instanceof Error ? error.message : String(error));
     process.exit(1);

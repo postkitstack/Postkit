@@ -1,4 +1,7 @@
 import ora from "ora";
+import path from "path";
+import {existsSync} from "fs";
+import fs from "fs/promises";
 import {logger} from "../../../common/logger";
 import {getConfig} from "../utils/db-config";
 import {createSession, hasActiveSession, getSession} from "../utils/session";
@@ -63,6 +66,9 @@ export async function startCommand(options: CommandOptions): Promise<void> {
       options.verbose,
     );
 
+    // Ensure .pgschemaignore exists in schema directory
+    await ensurePgschemaIgnore(config.schemaPath);
+
     // Step 3: Test remote connection
     logger.step(3, 5, "Testing remote database connection...");
     spinner.start("Connecting to remote database...");
@@ -122,6 +128,22 @@ export async function startCommand(options: CommandOptions): Promise<void> {
     logger.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
+}
+
+async function ensurePgschemaIgnore(schemaPath: string): Promise<void> {
+  const ignorePath = path.join(schemaPath, ".pgschemaignore");
+
+  if (existsSync(ignorePath)) {
+    return;
+  }
+
+  const content = [
+    "[tables]",
+    'patterns = ["schema_migrations"]',
+    "",
+  ].join("\n");
+
+  await fs.writeFile(ignorePath, content, "utf-8");
 }
 
 function maskConnectionUrl(url: string): string {

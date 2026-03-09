@@ -1,4 +1,4 @@
-import {config as dotenvConfig} from "dotenv";
+import fs from "fs";
 import path from "path";
 import {fileURLToPath} from "url";
 
@@ -11,9 +11,66 @@ export const cliRoot = isBuilt
   ? path.resolve(__dirname, "..")
   : path.resolve(__dirname, "..", "..");
 
-// Load .env from CLI root
-dotenvConfig({path: path.join(cliRoot, ".env")});
+// Project root is where the user runs the command
+export const projectRoot = process.cwd();
 
-// Project root is the db directory (parent of tools)
-// Since cli is inside Postkit, we adjust this to point to the same relative parent as before (Postkit's parent's parent)
-export const projectRoot = path.resolve(cliRoot, "..", "..", "..");
+// Postkit project paths
+export const POSTKIT_CONFIG_FILE = "postkit.config.json";
+export const POSTKIT_DIR = ".postkit";
+
+export function getConfigFilePath(): string {
+  return path.join(projectRoot, POSTKIT_CONFIG_FILE);
+}
+
+export function getPostkitDir(): string {
+  return path.join(projectRoot, POSTKIT_DIR);
+}
+
+// PostkitConfig interface matching the JSON structure
+export interface PostkitConfig {
+  db: {
+    remoteDbUrl: string;
+    localDbUrl: string;
+    schemaPath: string;
+    migrationsPath: string;
+    pgSchemaBin: string;
+    dbmateBin: string;
+  };
+  auth: {
+    source: {
+      url: string;
+      adminUser: string;
+      adminPass: string;
+      realm: string;
+    };
+    target: {
+      url: string;
+      adminUser: string;
+      adminPass: string;
+    };
+    rawExportDir: string;
+    cleanOutputDir: string;
+    outputFilename: string;
+    configCliImage: string;
+  };
+}
+
+let cachedConfig: PostkitConfig | null = null;
+
+export function loadPostkitConfig(): PostkitConfig {
+  if (cachedConfig) {
+    return cachedConfig;
+  }
+
+  const configPath = getConfigFilePath();
+
+  if (!fs.existsSync(configPath)) {
+    throw new Error(
+      `Config file not found: ${POSTKIT_CONFIG_FILE}\nRun "postkit init" to initialize your project.`,
+    );
+  }
+
+  const raw = fs.readFileSync(configPath, "utf-8");
+  cachedConfig = JSON.parse(raw) as PostkitConfig;
+  return cachedConfig;
+}
