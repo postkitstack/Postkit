@@ -25,6 +25,7 @@ export interface Config {
   localDbUrl: string;
   schemaPath: string;
   migrationsPath: string;
+  schema: string;
   pgSchemaBin: string;
   dbmateBin: string;
   cliRoot: string;

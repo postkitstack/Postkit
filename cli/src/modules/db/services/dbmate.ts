@@ -49,7 +49,7 @@ export async function runDbmateMigrate(
 ): Promise<ApplyResult> {
   const config = getConfig();
 
-  const command = `${config.dbmateBin} --url "${databaseUrl}" --migrations-dir "${config.migrationsPath}" up`;
+  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${config.migrationsPath}" up`;
   const result = await runCommand(command);
 
   if (result.exitCode !== 0) {
@@ -68,7 +68,7 @@ export async function runDbmateMigrate(
 export async function runDbmateStatus(databaseUrl: string): Promise<string> {
   const config = getConfig();
 
-  const command = `${config.dbmateBin} --url "${databaseUrl}" --migrations-dir "${config.migrationsPath}" status`;
+  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${config.migrationsPath}" status`;
   const result = await runCommand(command);
 
   return result.stdout || result.stderr;
@@ -79,7 +79,7 @@ export async function runDbmateRollback(
 ): Promise<ApplyResult> {
   const config = getConfig();
 
-  const command = `${config.dbmateBin} --url "${databaseUrl}" --migrations-dir "${config.migrationsPath}" down`;
+  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${config.migrationsPath}" down`;
   const result = await runCommand(command);
 
   if (result.exitCode !== 0) {

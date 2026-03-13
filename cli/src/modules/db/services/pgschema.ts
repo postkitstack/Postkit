@@ -19,7 +19,7 @@ export async function runPgschemaplan(
   const dbInfo = parseConnectionUrl(databaseUrl);
 
   // Run pgschema plan command
-  const command = `${config.pgSchemaBin} plan --file "${schemaFile}" --output-sql "${planFile}"`;
+  const command = `${config.pgSchemaBin} plan --schema "${config.schema}" --file "${schemaFile}" --output-sql "${planFile}"`;
   const result = await runCommand(command, {
     env: {
       PGHOST: dbInfo.host,
@@ -105,7 +105,7 @@ export async function runPgschemaApply(
   // Our previous command was `plan --schema "<file>" --output "<planFile>"`. Wait, according to docs, `plan` outputs human-readable state by default. `apply` accepts either `--file` (desired state schema) or `--plan` (JSON plan file). Let's use `--file` with the original schema file, or if we persist with planFile, let's just make sure it's valid.
   // Actually, since we generated a plan text output, it can't be applied with --plan. We should run `apply --file` using the original schema if we just want to apply. But wait, `postkit db commit` runs `dbmate migrate`, not `pgschema apply`. Let me check `applyCommand`. In `apply.ts`, it calls `runPgschemaApply(planFile, url)`. This means it expects `planFile` to be used.
   // Wait, let's just update the command environment vars.
-  const command = `${config.pgSchemaBin} apply --file "${planFile}" --auto-approve`;
+  const command = `${config.pgSchemaBin} apply --schema "${config.schema}" --file "${planFile}" --auto-approve`;
   const result = await runCommand(command, {
     env: {
       PGHOST: dbInfo.host,
@@ -137,7 +137,7 @@ export async function runPgschemaDiff(
   const dbInfo = parseConnectionUrl(databaseUrl);
 
   // Run pgschema diff command to show differences
-  const command = `${config.pgSchemaBin} diff --file "${schemaFile}"`;
+  const command = `${config.pgSchemaBin} diff --schema "${config.schema}" --file "${schemaFile}"`;
   const result = await runCommand(command, {
     env: {
       PGHOST: dbInfo.host,

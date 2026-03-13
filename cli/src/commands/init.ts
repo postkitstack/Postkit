@@ -27,6 +27,7 @@ const SCAFFOLD_CONFIG: PostkitConfig = {
     localDbUrl: "",
     schemaPath: "schema",
     migrationsPath: "migrations",
+    schema: "public",
     pgSchemaBin: "pgschema",
     dbmateBin: "dbmate",
   },

@@ -33,6 +33,7 @@ export function getConfig(): Config {
     localDbUrl,
     schemaPath,
     migrationsPath,
+    schema: config.db.schema || "public",
     pgSchemaBin: config.db.pgSchemaBin || "pgschema",
     dbmateBin: config.db.dbmateBin || "dbmate",
     cliRoot,

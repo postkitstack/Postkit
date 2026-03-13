@@ -25,17 +25,24 @@ process.exit(isValid ? 0 : 1);
     echo "❌ Error: Node.js version $NODE_VERSION is not supported. Please install Node.js version 16 or higher."
     exit 1
 fi
-
 # Install dependencies
 echo "📦 Installing dependencies..."
 npm install
 
+# Build the project
+echo "🔨 Building PostKit..."
+npm run build
+
 # Create global symlink for development or install globally
 if [[ "$1" == "--dev" ]]; then
+    echo "🔗 Removing existing development symlink..."
+    npm unlink -g postkit 2>/dev/null || true
     echo "🔗 Creating development symlink..."
     npm link
-    echo "✅ PostKit installed in development mode. Use 'npm unlink postkit' to remove."
+    echo "✅ PostKit installed in development mode. Use 'npm unlink -g postkit' to remove."
 else
+    echo "🗑️ Removing existing global installation..."
+    npm uninstall -g postkit 2>/dev/null || true
     echo "🌐 Installing globally..."
     npm install -g .
     echo "✅ PostKit installed globally."
