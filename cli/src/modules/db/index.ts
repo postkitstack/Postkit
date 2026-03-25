@@ -5,6 +5,7 @@ import {applyCommand} from "./commands/apply";
 import {commitCommand} from "./commands/commit";
 import {statusCommand} from "./commands/status";
 import {abortCommand} from "./commands/abort";
+import {infraCommand} from "./commands/infra";
 import {grantsCommand} from "./commands/grants";
 import {seedCommand} from "./commands/seed";
 
@@ -62,6 +63,16 @@ export function registerDbModule(program: Command): void {
     .action(async (cmdOptions) => {
       const options = {...program.opts(), ...cmdOptions};
       await abortCommand(options);
+    });
+
+  // Infra command
+  db.command("infra")
+    .description("Show and apply infrastructure statements (roles, schemas, extensions)")
+    .option("--apply", "Apply infra to database")
+    .option("--target <target>", "Target database: local or remote", "local")
+    .action(async (cmdOptions) => {
+      const options = {...program.opts(), ...cmdOptions};
+      await infraCommand(options);
     });
 
   // Grants command

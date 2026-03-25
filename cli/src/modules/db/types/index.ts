@@ -1,6 +1,7 @@
 export interface CommitState {
   migrationFile: { name: string; path: string } | null;
   remoteApplied: boolean;
+  infraApplied: boolean;
   grantsApplied: boolean;
   seedsApplied: boolean;
   description: string;
@@ -63,6 +64,11 @@ export interface GrantStatement {
 }
 
 export interface SeedStatement {
+  name: string;
+  content: string;
+}
+
+export interface InfraStatement {
   name: string;
   content: string;
 }

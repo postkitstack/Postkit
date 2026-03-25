@@ -10,10 +10,27 @@ import {
 } from "../services/dbmate";
 import {deleteGeneratedSchema} from "../services/schema-generator";
 import {testConnection} from "../services/database";
+import {applyInfra, generateInfra} from "../services/infra-generator";
 import {applyGrants, generateGrants} from "../services/grant-generator";
 import {applySeeds, generateSeeds} from "../services/seed-generator";
 import type {CommandOptions} from "../../../common/types";
 import type {CommitState, SessionState} from "../types/index";
+
+async function applyInfraStep(
+  remoteDbUrl: string,
+  spinner: ReturnType<typeof ora>,
+): Promise<void> {
+  const infra = await generateInfra();
+
+  if (infra.length === 0) {
+    spinner.info("No infra files found - skipping");
+    return;
+  }
+
+  spinner.start("Applying infra to remote database...");
+  await applyInfra(remoteDbUrl);
+  spinner.succeed(`Infra applied to remote (${infra.length} file(s))`);
+}
 
 async function applyGrantsStep(
   remoteDbUrl: string,
@@ -134,9 +151,40 @@ async function handleResume(
   const description = commitState.description;
   const migrationFile = commitState.migrationFile;
 
-  // Step 5: Grants (if not already done)
+  // Step 5: Infra (if not already done)
+  if (!commitState.infraApplied) {
+    logger.step(5, 8, "Applying infra to remote...");
+
+    if (options.dryRun) {
+      spinner.info("Dry run - skipping infra");
+    } else {
+      try {
+        await applyInfraStep(session.remoteDbUrl, spinner);
+      } catch (error) {
+        spinner.fail("Failed to apply infra");
+        logger.error(error instanceof Error ? error.message : String(error));
+        await saveCommitState({
+          ...commitState,
+          infraApplied: false,
+        });
+        logger.blank();
+        logger.warn("Infra failed. The migration has already been applied to remote.");
+        logger.info('Run "postkit db commit" again to retry from infra.');
+        process.exit(1);
+      }
+
+      await saveCommitState({
+        ...commitState,
+        infraApplied: true,
+      });
+    }
+  } else {
+    logger.step(5, 8, "Infra already applied - skipping");
+  }
+
+  // Step 6: Grants (if not already done)
   if (!commitState.grantsApplied) {
-    logger.step(5, 7, "Applying grants to remote...");
+    logger.step(6, 8, "Applying grants to remote...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping grants");
@@ -148,6 +196,7 @@ async function handleResume(
         logger.error(error instanceof Error ? error.message : String(error));
         await saveCommitState({
           ...commitState,
+          infraApplied: true,
           grantsApplied: false,
         });
         logger.blank();
@@ -158,16 +207,17 @@ async function handleResume(
 
       await saveCommitState({
         ...commitState,
+        infraApplied: true,
         grantsApplied: true,
       });
     }
   } else {
-    logger.step(5, 7, "Grants already applied - skipping");
+    logger.step(6, 8, "Grants already applied - skipping");
   }
 
-  // Step 6: Seeds (if not already done)
+  // Step 7: Seeds (if not already done)
   if (!commitState.seedsApplied) {
-    logger.step(6, 7, "Applying seeds to remote...");
+    logger.step(7, 8, "Applying seeds to remote...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping seeds");
@@ -179,6 +229,7 @@ async function handleResume(
         logger.error(error instanceof Error ? error.message : String(error));
         await saveCommitState({
           ...commitState,
+          infraApplied: true,
           grantsApplied: true,
           seedsApplied: false,
         });
@@ -189,11 +240,11 @@ async function handleResume(
       }
     }
   } else {
-    logger.step(6, 7, "Seeds already applied - skipping");
+    logger.step(7, 8, "Seeds already applied - skipping");
   }
 
-  // Step 7: Cleanup
-  logger.step(7, 7, "Cleaning up session...");
+  // Step 8: Cleanup
+  logger.step(8, 8, "Cleaning up session...");
 
   if (!options.dryRun) {
     try {
@@ -239,7 +290,7 @@ async function handleFreshCommit(
   logger.heading("Committing Migration");
 
   // Step 1: Load plan
-  logger.step(1, 7, "Loading plan...");
+  logger.step(1, 8, "Loading plan...");
   const planContent = await getPlanFileContent();
 
   if (!planContent || planContent.trim().length === 0) {
@@ -271,7 +322,7 @@ async function handleFreshCommit(
   }
 
   // Step 2: Create migration file
-  logger.step(2, 7, "Creating migration file...");
+  logger.step(2, 8, "Creating migration file...");
   spinner.start("Writing migration file...");
 
   let migrationFile;
@@ -292,6 +343,7 @@ async function handleFreshCommit(
     await saveCommitState({
       migrationFile: {name: migrationFile.name, path: migrationFile.path},
       remoteApplied: false,
+      infraApplied: false,
       grantsApplied: false,
       seedsApplied: false,
       description,
@@ -299,7 +351,7 @@ async function handleFreshCommit(
   }
 
   // Step 3: Test remote connection
-  logger.step(3, 7, "Testing remote database connection...");
+  logger.step(3, 8, "Testing remote database connection...");
   spinner.start("Connecting to remote database...");
 
   const remoteConnected = await testConnection(session.remoteDbUrl);
@@ -321,8 +373,29 @@ async function handleFreshCommit(
 
   spinner.succeed("Connected to remote database");
 
-  // Step 4: Apply migration to remote
-  logger.step(4, 7, "Applying migration to remote database...");
+  // Step 4: Apply infra to remote
+  logger.step(4, 8, "Applying infra to remote...");
+
+  if (options.dryRun) {
+    spinner.info("Dry run - skipping infra");
+  } else {
+    try {
+      await applyInfraStep(session.remoteDbUrl, spinner);
+    } catch (error) {
+      spinner.fail("Failed to apply infra");
+      logger.error(error instanceof Error ? error.message : String(error));
+
+      // Delete orphaned migration file since infra failed before migration
+      await deleteMigrationFile(migrationFile.path);
+      await clearCommitState();
+      logger.info("Migration file has been cleaned up.");
+      logger.info("Fix the issue and retry with: postkit db commit");
+      process.exit(1);
+    }
+  }
+
+  // Step 5: Apply migration to remote
+  logger.step(5, 8, "Applying migration to remote database...");
 
   if (options.dryRun) {
     spinner.info("Dry run - skipping remote apply");
@@ -354,14 +427,15 @@ async function handleFreshCommit(
     await saveCommitState({
       migrationFile: {name: migrationFile.name, path: migrationFile.path},
       remoteApplied: true,
+      infraApplied: true,
       grantsApplied: false,
       seedsApplied: false,
       description,
     });
   }
 
-  // Step 5: Apply grants to remote
-  logger.step(5, 7, "Applying grants to remote...");
+  // Step 6: Apply grants to remote
+  logger.step(6, 8, "Applying grants to remote...");
 
   if (options.dryRun) {
     spinner.info("Dry run - skipping grants");
@@ -374,6 +448,7 @@ async function handleFreshCommit(
       await saveCommitState({
         migrationFile: {name: migrationFile.name, path: migrationFile.path},
         remoteApplied: true,
+        infraApplied: true,
         grantsApplied: false,
         seedsApplied: false,
         description,
@@ -387,14 +462,15 @@ async function handleFreshCommit(
     await saveCommitState({
       migrationFile: {name: migrationFile.name, path: migrationFile.path},
       remoteApplied: true,
+      infraApplied: true,
       grantsApplied: true,
       seedsApplied: false,
       description,
     });
   }
 
-  // Step 6: Apply seeds to remote
-  logger.step(6, 7, "Applying seeds to remote...");
+  // Step 7: Apply seeds to remote
+  logger.step(7, 8, "Applying seeds to remote...");
 
   if (options.dryRun) {
     spinner.info("Dry run - skipping seeds");
@@ -407,6 +483,7 @@ async function handleFreshCommit(
       await saveCommitState({
         migrationFile: {name: migrationFile.name, path: migrationFile.path},
         remoteApplied: true,
+        infraApplied: true,
         grantsApplied: true,
         seedsApplied: false,
         description,
@@ -418,8 +495,8 @@ async function handleFreshCommit(
     }
   }
 
-  // Step 7: Cleanup session
-  logger.step(7, 7, "Cleaning up session...");
+  // Step 8: Cleanup session
+  logger.step(8, 8, "Cleaning up session...");
 
   if (!options.dryRun) {
     try {

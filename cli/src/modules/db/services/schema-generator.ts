@@ -79,13 +79,14 @@ async function discoverSchemaSections(
     if (entry.isDirectory()) {
       const sectionName = entry.name.toLowerCase();
 
-      // Skip seed and grant directories - they are applied separately as post-steps
+      // Skip seed, grant, and infra directories - they are applied separately
       if (
         sectionName === "seed" ||
         sectionName === "seeds" ||
         sectionName === "grant" ||
         sectionName === "grants" ||
-        sectionName === "grant-permissions"
+        sectionName === "grant-permissions" ||
+        sectionName === "infra"
       ) {
         continue;
       }
@@ -158,6 +159,7 @@ const SKIP_DIRECTORIES = new Set([
   "grant",
   "grants",
   "grant-permissions",
+  "infra",
 ]);
 
 async function collectSqlFiles(
