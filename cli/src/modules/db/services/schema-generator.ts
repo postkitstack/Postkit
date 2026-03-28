@@ -10,6 +10,7 @@ interface SchemaSection {
 }
 
 const SCHEMA_ORDER: Record<string, number> = {
+  infra: 0, // Infrastructure (schemas, extensions) — must come first
   core: 1, // Core extensions / setup
   extensions: 1,
   type: 2,
@@ -79,15 +80,8 @@ async function discoverSchemaSections(
     if (entry.isDirectory()) {
       const sectionName = entry.name.toLowerCase();
 
-      // Skip seed, grant, and infra directories - they are applied separately
-      if (
-        sectionName === "seed" ||
-        sectionName === "seeds" ||
-        sectionName === "grant" ||
-        sectionName === "grants" ||
-        sectionName === "grant-permissions" ||
-        sectionName === "infra"
-      ) {
+      // Skip seed directories - they contain data, not schema
+      if (sectionName === "seed" || sectionName === "seeds") {
         continue;
       }
 
@@ -153,14 +147,7 @@ export async function getSchemaFiles(): Promise<string[]> {
   return collectSqlFiles(schemaPath);
 }
 
-const SKIP_DIRECTORIES = new Set([
-  "seed",
-  "seeds",
-  "grant",
-  "grants",
-  "grant-permissions",
-  "infra",
-]);
+const SKIP_DIRECTORIES = new Set(["seed", "seeds"]);
 
 async function collectSqlFiles(
   dirPath: string,
