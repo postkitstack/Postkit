@@ -4,6 +4,7 @@ import {getConfig, getPlanFilePath} from "../utils/db-config";
 import {parseConnectionUrl} from "./database";
 import fs from "fs/promises";
 import {existsSync} from "fs";
+import pg from "pg";
 
 export async function checkPgschemaInstalled(): Promise<boolean> {
   const config = getConfig();
@@ -89,44 +90,20 @@ export async function runPgschemaplan(
   };
 }
 
-export async function runPgschemaApply(
-  planFile: string,
-  databaseUrl: string,
-): Promise<ApplyResult> {
+export async function wrapPlanSQL(planFile: string): Promise<string> {
   const config = getConfig();
-  const dbInfo = parseConnectionUrl(databaseUrl);
 
-  // Check if plan file exists
   if (!existsSync(planFile)) {
     throw new Error(`Plan file not found: ${planFile}`);
   }
 
-  // Run pgschema apply command (note: the apply command uses the desired state SQL file with --file, but we can also use --plan for a JSON plan. If we are using SQL output, we must use --file, wait, no, the docs say --file or --plan. Let's assume --file if planFile is SQL)
-  // Our previous command was `plan --schema "<file>" --output "<planFile>"`. Wait, according to docs, `plan` outputs human-readable state by default. `apply` accepts either `--file` (desired state schema) or `--plan` (JSON plan file). Let's use `--file` with the original schema file, or if we persist with planFile, let's just make sure it's valid.
-  // Actually, since we generated a plan text output, it can't be applied with --plan. We should run `apply --file` using the original schema if we just want to apply. But wait, `postkit db commit` runs `dbmate migrate`, not `pgschema apply`. Let me check `applyCommand`. In `apply.ts`, it calls `runPgschemaApply(planFile, url)`. This means it expects `planFile` to be used.
-  // Wait, let's just update the command environment vars.
-  const command = `${config.pgSchemaBin} apply --schema "${config.schema}" --file "${planFile}" --auto-approve`;
-  const result = await runCommand(command, {
-    env: {
-      PGHOST: dbInfo.host,
-      PGPORT: dbInfo.port.toString(),
-      PGUSER: dbInfo.user,
-      PGPASSWORD: dbInfo.password,
-      PGDATABASE: dbInfo.database,
-    },
-  });
+  const planSQL = await fs.readFile(planFile, "utf-8");
 
-  if (result.exitCode !== 0) {
-    return {
-      success: false,
-      output: result.stderr || result.stdout,
-    };
+  if (!planSQL.trim() || planSQL.includes("-- No changes")) {
+    return "";
   }
 
-  return {
-    success: true,
-    output: result.stdout,
-  };
+  return `SET search_path TO "${config.schema}";\nBEGIN;\n\n${planSQL.trim()}\n\nCOMMIT;\n`;
 }
 
 export async function runPgschemaDiff(

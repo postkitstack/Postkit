@@ -2,8 +2,9 @@ import ora from "ora";
 import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
 import {getSession, updatePendingChanges} from "../utils/session";
-import {runPgschemaApply, getPlanFileContent} from "../services/pgschema";
-import {testConnection} from "../services/database";
+import {wrapPlanSQL, getPlanFileContent} from "../services/pgschema";
+import {testConnection, executeSQL} from "../services/database";
+import {applyInfra, generateInfra} from "../services/infra-generator";
 import {applyGrants, generateGrants} from "../services/grant-generator";
 import {applySeeds, generateSeeds} from "../services/seed-generator";
 import type {CommandOptions} from "../../../common/types";
@@ -41,7 +42,7 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     logger.heading("Applying Migration to Local Database");
 
     // Show the plan
-    logger.step(1, 6, "Loading plan...");
+    logger.step(1, 7, "Loading plan...");
     const planContent = await getPlanFileContent();
 
     if (planContent) {
@@ -69,7 +70,7 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     }
 
     // Test local connection
-    logger.step(2, 6, "Testing local database connection...");
+    logger.step(2, 7, "Testing local database connection...");
     spinner.start("Connecting to local database...");
 
     const localConnected = await testConnection(session.localDbUrl);
@@ -85,35 +86,51 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
 
     spinner.succeed("Connected to local database");
 
+    // Apply infra (roles, schemas, extensions)
+    logger.step(3, 7, "Applying infrastructure...");
+
+    if (options.dryRun) {
+      spinner.info("Dry run - skipping infra");
+    } else {
+      const infra = await generateInfra();
+
+      if (infra.length === 0) {
+        spinner.info("No infra files found - skipping");
+      } else {
+        spinner.start("Applying infra...");
+        await applyInfra(session.localDbUrl);
+        spinner.succeed(`Infra applied (${infra.length} file(s))`);
+      }
+    }
+
     // Apply changes
-    logger.step(3, 6, "Applying schema changes...");
+    logger.step(4, 7, "Applying schema changes...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping apply");
     } else {
       spinner.start("Applying migration plan...");
 
-      const applyResult = await runPgschemaApply(
-        session.pendingChanges.planFile,
-        session.localDbUrl,
-      );
+      const wrappedSQL = await wrapPlanSQL(session.pendingChanges.planFile);
 
-      if (!applyResult.success) {
-        spinner.fail("Failed to apply changes");
-        logger.error("Migration apply failed:");
-        console.log(applyResult.output);
-        process.exit(1);
-      }
-
-      spinner.succeed("Changes applied successfully");
-
-      if (applyResult.output) {
-        logger.debug(applyResult.output, options.verbose);
+      if (!wrappedSQL) {
+        spinner.succeed("No changes to apply");
+      } else {
+        try {
+          const result = await executeSQL(session.localDbUrl, wrappedSQL);
+          spinner.succeed("Changes applied successfully");
+          logger.debug(result, options.verbose);
+        } catch (error) {
+          spinner.fail("Failed to apply changes");
+          logger.error("Migration apply failed:");
+          console.log(error instanceof Error ? error.message : String(error));
+          process.exit(1);
+        }
       }
     }
 
     // Apply grants
-    logger.step(4, 6, "Applying grants...");
+    logger.step(5, 7, "Applying grants...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping grants");
@@ -130,7 +147,7 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     }
 
     // Apply seeds
-    logger.step(5, 6, "Applying seeds...");
+    logger.step(6, 7, "Applying seeds...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping seeds");
@@ -147,7 +164,7 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     }
 
     // Update session
-    logger.step(6, 6, "Updating session state...");
+    logger.step(7, 7, "Updating session state...");
 
     if (!options.dryRun) {
       await updatePendingChanges({
