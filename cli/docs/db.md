@@ -57,15 +57,8 @@ A session-based database migration workflow for safe schema changes. Clone your 
 ## 🧰 Prerequisites
 
 - **PostgreSQL** client tools (`pg_dump`, `psql`)
-- **pgschema** — Schema diffing tool ([installation guide](https://github.com/pgschema/pgschema))
-- **dbmate** — Database migration tool
-  ```bash
-  # macOS
-  brew install dbmate
-
-  # Go
-  go install github.com/amacneil/dbmate@latest
-  ```
+- **pgschema** — Bundled with PostKit. Platform-specific binaries are shipped in `vendor/pgschema/` and resolved automatically. No separate installation needed.
+- **dbmate** — Installed automatically as an npm dependency. No separate installation needed.
 
 ---
 
@@ -79,8 +72,26 @@ A session-based database migration workflow for safe schema changes. Clone your 
 | `LOCAL_DATABASE_URL` | PostgreSQL connection URL for local clone database | Yes |
 | `SCHEMA_PATH` | Path to schema files (relative to CLI root) | No |
 | `MIGRATIONS_PATH` | Path to migrations directory | No |
-| `PGSCHEMA_BIN` | Path to pgschema binary | No (default: `pgschema`) |
-| `DBMATE_BIN` | Path to dbmate binary | No (default: `dbmate`) |
+| `PGSCHEMA_BIN` | Path to pgschema binary | No (auto-resolved, see below) |
+| `DBMATE_BIN` | Path to dbmate binary | No (auto-resolved, see below) |
+
+### Binary Resolution
+
+Both `pgschema` and `dbmate` binaries are resolved automatically using the following priority:
+
+**pgschema:**
+
+1. Custom path set in `postkit.config.json` (`db.pgSchemaBin`) — if explicitly set to something other than `"pgschema"`
+2. Bundled binary in `vendor/pgschema/pgschema-{platform}-{arch}[.exe]`
+3. System PATH fallback (`pgschema`)
+
+Bundled binaries are included for: `darwin-arm64`, `darwin-amd64`, `linux-arm64`, `linux-amd64`, `windows-amd64`, `windows-arm64`.
+
+**dbmate:**
+
+1. Custom path set in `postkit.config.json` (`db.dbmateBin`) — if explicitly set to something other than `"dbmate"`
+2. npm-installed binary (via the `dbmate` npm package, installed automatically with PostKit)
+3. System PATH fallback (`dbmate`)
 
 ### Schema Directory Structure
 
@@ -360,8 +371,8 @@ Migration files are staged in `.postkit/migrations/` during the session and copi
 
 | Issue | Solution |
 |-------|----------|
-| `pgschema is not installed` | Install from [pgschema repo](https://github.com/pgschema/pgschema) |
-| `dbmate is not installed` | `brew install dbmate` or `go install github.com/amacneil/dbmate@latest` |
+| `pgschema is not installed` | Should be bundled in `vendor/pgschema/`. Verify the binary for your platform exists, or install manually and set `db.pgSchemaBin` in config. |
+| `dbmate is not installed` | Should be installed via npm. Run `npm install` in the CLI directory, or install manually (`brew install dbmate`) and set `db.dbmateBin` in config. |
 | `Failed to connect to remote database` | Check `REMOTE_DATABASE_URL` in `.env` |
 | `No active migration session` | Run `postkit db start` first |
 | `Plan file is empty` | Schema files match current DB — make changes first |
