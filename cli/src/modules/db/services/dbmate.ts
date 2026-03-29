@@ -14,16 +14,18 @@ export async function createMigrationFile(
   description: string,
   upSql: string,
   downSql?: string,
+  migrationsDir?: string,
 ): Promise<MigrationFile> {
   const config = getConfig();
+  const targetDir = migrationsDir || config.migrationsPath;
   const timestamp = generateTimestamp();
   const safeName = description.replace(/[^a-z0-9]/gi, "_").toLowerCase();
   const fileName = `${timestamp}_${safeName}.sql`;
-  const filePath = path.join(config.migrationsPath, fileName);
+  const filePath = path.join(targetDir, fileName);
 
   // Ensure migrations directory exists
-  if (!existsSync(config.migrationsPath)) {
-    await fs.mkdir(config.migrationsPath, {recursive: true});
+  if (!existsSync(targetDir)) {
+    await fs.mkdir(targetDir, {recursive: true});
   }
 
   // Create migration file content
@@ -46,10 +48,12 @@ export async function createMigrationFile(
 
 export async function runDbmateMigrate(
   databaseUrl: string,
+  migrationsDir?: string,
 ): Promise<ApplyResult> {
   const config = getConfig();
+  const targetDir = migrationsDir || config.migrationsPath;
 
-  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${config.migrationsPath}" up`;
+  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${targetDir}" up`;
   const result = await runCommand(command);
 
   if (result.exitCode !== 0) {
@@ -63,6 +67,43 @@ export async function runDbmateMigrate(
     success: true,
     output: result.stdout,
   };
+}
+
+export async function copySessionMigrations(
+  sessionMigrationsDir: string,
+): Promise<{name: string; path: string}[]> {
+  const config = getConfig();
+
+  if (!existsSync(sessionMigrationsDir)) {
+    return [];
+  }
+
+  // Ensure root migrations directory exists
+  if (!existsSync(config.migrationsPath)) {
+    await fs.mkdir(config.migrationsPath, {recursive: true});
+  }
+
+  const files = await fs.readdir(sessionMigrationsDir);
+  const copied: {name: string; path: string}[] = [];
+
+  for (const file of files) {
+    if (file.endsWith(".sql")) {
+      const src = path.join(sessionMigrationsDir, file);
+      const dest = path.join(config.migrationsPath, file);
+      await fs.copyFile(src, dest);
+      copied.push({name: file, path: dest});
+    }
+  }
+
+  return copied;
+}
+
+export async function deleteSessionMigrations(
+  sessionMigrationsDir: string,
+): Promise<void> {
+  if (existsSync(sessionMigrationsDir)) {
+    await fs.rm(sessionMigrationsDir, {recursive: true, force: true});
+  }
 }
 
 export async function runDbmateStatus(databaseUrl: string): Promise<string> {

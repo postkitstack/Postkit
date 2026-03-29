@@ -17,6 +17,8 @@ export interface SessionState {
     planned: boolean;
     applied: boolean;
     planFile: string | null;
+    migrationFiles: { name: string; path: string }[];
+    description: string | null;
   };
   commitState?: CommitState;
 }

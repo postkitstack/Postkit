@@ -2,8 +2,10 @@ import ora from "ora";
 import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
 import {getSession, updatePendingChanges} from "../utils/session";
+import {getSessionMigrationsPath} from "../utils/db-config";
 import {wrapPlanSQL, getPlanFileContent} from "../services/pgschema";
-import {testConnection, executeSQL} from "../services/database";
+import {testConnection} from "../services/database";
+import {createMigrationFile, runDbmateMigrate, deleteMigrationFile} from "../services/dbmate";
 import {applyInfra, generateInfra} from "../services/infra-generator";
 import {applyGrants, generateGrants} from "../services/grant-generator";
 import {applySeeds, generateSeeds} from "../services/seed-generator";
@@ -29,20 +31,10 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
       process.exit(1);
     }
 
-    // Check if already applied
-    if (session.pendingChanges.applied) {
-      logger.warn("Changes have already been applied to the local database.");
-      logger.info(
-        'Run "postkit db commit <description>" to create a migration file.',
-      );
-      logger.info('Or run "postkit db plan" again if you made more changes.');
-      return;
-    }
-
     logger.heading("Applying Migration to Local Database");
 
-    // Show the plan
-    logger.step(1, 7, "Loading plan...");
+    // Step 1: Show the plan
+    logger.step(1, 8, "Loading plan...");
     const planContent = await getPlanFileContent();
 
     if (planContent) {
@@ -50,6 +42,24 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
       logger.blank();
       console.log(planContent);
       logger.blank();
+    }
+
+    // Ask for migration description
+    let description: string;
+
+    if (options.dryRun) {
+      description = "dry_run";
+    } else {
+      const {desc} = await inquirer.prompt([
+        {
+          type: "input",
+          name: "desc",
+          message: "Migration description (e.g. add_users_table):",
+          validate: (input: string) =>
+            input.trim().length > 0 || "Description is required",
+        },
+      ]);
+      description = desc.trim();
     }
 
     // Confirm unless force flag
@@ -69,8 +79,8 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
       }
     }
 
-    // Test local connection
-    logger.step(2, 7, "Testing local database connection...");
+    // Step 2: Test local connection
+    logger.step(2, 8, "Testing local database connection...");
     spinner.start("Connecting to local database...");
 
     const localConnected = await testConnection(session.localDbUrl);
@@ -86,8 +96,8 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
 
     spinner.succeed("Connected to local database");
 
-    // Apply infra (roles, schemas, extensions)
-    logger.step(3, 7, "Applying infrastructure...");
+    // Step 3: Apply infra (roles, schemas, extensions)
+    logger.step(3, 8, "Applying infrastructure...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping infra");
@@ -103,34 +113,67 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
       }
     }
 
-    // Apply changes
-    logger.step(4, 7, "Applying schema changes...");
+    // Step 4: Create migration file in session migrations dir
+    logger.step(4, 8, "Creating migration file...");
+
+    const sessionMigrationsDir = getSessionMigrationsPath();
+    let migrationFile;
 
     if (options.dryRun) {
-      spinner.info("Dry run - skipping apply");
+      spinner.info("Dry run - skipping migration file creation");
+      migrationFile = {
+        name: `00000000000000_${description}.sql`,
+        path: "/path/to/migration.sql",
+        timestamp: "00000000000000",
+      };
     } else {
-      spinner.start("Applying migration plan...");
+      spinner.start("Wrapping plan and creating migration file...");
 
       const wrappedSQL = await wrapPlanSQL(session.pendingChanges.planFile);
 
       if (!wrappedSQL) {
         spinner.succeed("No changes to apply");
-      } else {
-        try {
-          const result = await executeSQL(session.localDbUrl, wrappedSQL);
-          spinner.succeed("Changes applied successfully");
-          logger.debug(result, options.verbose);
-        } catch (error) {
-          spinner.fail("Failed to apply changes");
-          logger.error("Migration apply failed:");
-          console.log(error instanceof Error ? error.message : String(error));
-          process.exit(1);
-        }
+        await updatePendingChanges({applied: true, description});
+        logger.blank();
+        logger.success("No schema changes to apply.");
+        return;
+      }
+
+      migrationFile = await createMigrationFile(description, wrappedSQL, undefined, sessionMigrationsDir);
+      spinner.succeed(`Migration file created: ${migrationFile.name}`);
+      logger.info(`Path: ${migrationFile.path}`);
+    }
+
+    // Step 5: Apply migration via dbmate on local (using session migrations dir)
+    logger.step(5, 8, "Applying migration to local database...");
+
+    if (options.dryRun) {
+      spinner.info("Dry run - skipping apply");
+    } else {
+      spinner.start("Running dbmate migrate...");
+
+      const migrateResult = await runDbmateMigrate(session.localDbUrl, sessionMigrationsDir);
+
+      if (!migrateResult.success) {
+        spinner.fail("Failed to apply migration");
+        logger.error("Migration apply failed:");
+        console.log(migrateResult.output);
+
+        // Clean up the failed migration file
+        await deleteMigrationFile(migrationFile.path);
+        logger.info("Migration file has been cleaned up.");
+        process.exit(1);
+      }
+
+      spinner.succeed("Migration applied to local database");
+
+      if (migrateResult.output) {
+        logger.debug(migrateResult.output, options.verbose);
       }
     }
 
-    // Apply grants
-    logger.step(5, 7, "Applying grants...");
+    // Step 6: Apply grants
+    logger.step(6, 8, "Applying grants...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping grants");
@@ -146,8 +189,8 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
       }
     }
 
-    // Apply seeds
-    logger.step(6, 7, "Applying seeds...");
+    // Step 7: Apply seeds
+    logger.step(7, 8, "Applying seeds...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping seeds");
@@ -163,24 +206,32 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
       }
     }
 
-    // Update session
-    logger.step(7, 7, "Updating session state...");
+    // Step 8: Update session
+    logger.step(8, 8, "Updating session state...");
 
     if (!options.dryRun) {
+      // Append to existing migration files array
+      const existingFiles = session.pendingChanges.migrationFiles || [];
       await updatePendingChanges({
         applied: true,
+        migrationFiles: [...existingFiles, {name: migrationFile.name, path: migrationFile.path}],
+        description,
       });
     }
 
     logger.blank();
     logger.success("Migration applied to local database!");
     logger.blank();
-    logger.info("The changes have been tested on your local clone.");
+    logger.info(`Migration: ${migrationFile.name}`);
+    logger.info(`Description: ${description}`);
     logger.blank();
     logger.info("Next steps:");
     logger.info("  - Verify the changes work correctly");
     logger.info(
-      '  - Run "postkit db commit <description>" to create migration and apply to remote',
+      '  - Run "postkit db commit" to apply migration to remote',
+    );
+    logger.info(
+      '  - Or run "postkit db plan" again if you need more changes',
     );
     logger.info(
       '  - Or run "postkit db abort" to cancel if something is wrong',

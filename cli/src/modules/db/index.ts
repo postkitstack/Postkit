@@ -40,12 +40,12 @@ export function registerDbModule(program: Command): void {
     });
 
   // Commit command
-  db.command("commit <description>")
-    .description("Create migration file and apply to remote database")
+  db.command("commit")
+    .description("Apply migration to remote database")
     .option("-f, --force", "Skip confirmation prompt")
-    .action(async (description, cmdOptions) => {
+    .action(async (cmdOptions) => {
       const options = {...program.opts(), ...cmdOptions};
-      await commitCommand(description, options);
+      await commitCommand(options);
     });
 
   // Status command

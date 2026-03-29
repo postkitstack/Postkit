@@ -1,10 +1,9 @@
-import type {PlanResult, ApplyResult} from "../types/index";
+import type {PlanResult} from "../types/index";
 import {runCommand, commandExists} from "../../../common/shell";
 import {getConfig, getPlanFilePath} from "../utils/db-config";
 import {parseConnectionUrl} from "./database";
 import fs from "fs/promises";
 import {existsSync} from "fs";
-import pg from "pg";
 
 export async function checkPgschemaInstalled(): Promise<boolean> {
   const config = getConfig();
@@ -103,7 +102,7 @@ export async function wrapPlanSQL(planFile: string): Promise<string> {
     return "";
   }
 
-  return `SET search_path TO "${config.schema}";\nBEGIN;\n\n${planSQL.trim()}\n\nCOMMIT;\n`;
+  return `SET search_path TO "${config.schema}";\n\n${planSQL.trim()}\n`;
 }
 
 export async function runPgschemaDiff(

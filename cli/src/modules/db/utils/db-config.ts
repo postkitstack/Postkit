@@ -52,3 +52,7 @@ export function getPlanFilePath(): string {
 export function getGeneratedSchemaPath(): string {
   return path.join(getPostkitDir(), "schema.sql");
 }
+
+export function getSessionMigrationsPath(): string {
+  return path.join(getPostkitDir(), "migrations");
+}
