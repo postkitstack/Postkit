@@ -84,6 +84,9 @@ export async function planCommand(options: CommandOptions): Promise<void> {
       applied: false,
       planFile: planResult.planFile,
       schemaFingerprint,
+      migrationApplied: false,
+      grantsApplied: false,
+      seedsApplied: false,
     });
 
     // Display the plan

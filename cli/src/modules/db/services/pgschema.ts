@@ -18,9 +18,10 @@ export async function runPgschemaplan(
   const planFile = getPlanFilePath();
   const dbInfo = parseConnectionUrl(databaseUrl);
 
-  // Run pgschema plan command
+  // Run pgschema plan command (cwd set to schemaPath so .pgschemaignore is picked up)
   const command = `${config.pgSchemaBin} plan --schema "${config.schema}" --file "${schemaFile}" --output-sql "${planFile}"`;
   const result = await runCommand(command, {
+    cwd: config.schemaPath,
     env: {
       PGHOST: dbInfo.host,
       PGPORT: dbInfo.port.toString(),
@@ -112,9 +113,10 @@ export async function runPgschemaDiff(
   const config = getConfig();
   const dbInfo = parseConnectionUrl(databaseUrl);
 
-  // Run pgschema diff command to show differences
+  // Run pgschema diff command to show differences (cwd set to schemaPath so .pgschemaignore is picked up)
   const command = `${config.pgSchemaBin} diff --schema "${config.schema}" --file "${schemaFile}"`;
   const result = await runCommand(command, {
+    cwd: config.schemaPath,
     env: {
       PGHOST: dbInfo.host,
       PGPORT: dbInfo.port.toString(),
