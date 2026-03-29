@@ -33,6 +33,12 @@ export async function createSession(
       planned: false,
       applied: false,
       planFile: null,
+      migrationFiles: [],
+      description: null,
+      schemaFingerprint: null,
+      migrationApplied: false,
+      grantsApplied: false,
+      seedsApplied: false,
     },
   };
 

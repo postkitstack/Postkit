@@ -1,6 +1,7 @@
 export interface CommitState {
   migrationFile: { name: string; path: string } | null;
   remoteApplied: boolean;
+  infraApplied: boolean;
   grantsApplied: boolean;
   seedsApplied: boolean;
   description: string;
@@ -16,6 +17,12 @@ export interface SessionState {
     planned: boolean;
     applied: boolean;
     planFile: string | null;
+    migrationFiles: { name: string; path: string }[];
+    description: string | null;
+    schemaFingerprint: string | null;
+    migrationApplied: boolean;
+    grantsApplied: boolean;
+    seedsApplied: boolean;
   };
   commitState?: CommitState;
 }
@@ -25,10 +32,12 @@ export interface Config {
   localDbUrl: string;
   schemaPath: string;
   migrationsPath: string;
+  schema: string;
   pgSchemaBin: string;
   dbmateBin: string;
   cliRoot: string;
   projectRoot: string;
+  environments: Record<string, string>;
 }
 
 export interface DatabaseConnectionInfo {
@@ -62,6 +71,11 @@ export interface GrantStatement {
 }
 
 export interface SeedStatement {
+  name: string;
+  content: string;
+}
+
+export interface InfraStatement {
   name: string;
   content: string;
 }

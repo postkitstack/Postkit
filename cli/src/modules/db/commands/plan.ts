@@ -1,8 +1,10 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
 import {getSession, updatePendingChanges} from "../utils/session";
-import {generateSchemaSQL} from "../services/schema-generator";
+import {generateSchemaSQL, generateSchemaFingerprint} from "../services/schema-generator";
 import {runPgschemaplan} from "../services/pgschema";
+import {testConnection} from "../services/database";
+import {applyInfra, generateInfra} from "../services/infra-generator";
 import type {CommandOptions} from "../../../common/types";
 
 export async function planCommand(options: CommandOptions): Promise<void> {
@@ -20,15 +22,46 @@ export async function planCommand(options: CommandOptions): Promise<void> {
 
     logger.heading("Generating Migration Plan");
 
-    // Step 1: Generate combined schema
-    logger.step(1, 3, "Generating schema SQL...");
+    // Step 1: Test local connection
+    logger.step(1, 5, "Testing local database connection...");
+    spinner.start("Connecting to local database...");
+
+    const localConnected = await testConnection(session.localDbUrl);
+
+    if (!localConnected) {
+      spinner.fail("Failed to connect to local database");
+      logger.error("Could not connect to the local database.");
+      logger.info(
+        'The local clone may have been removed. Run "postkit db start" again.',
+      );
+      process.exit(1);
+    }
+
+    spinner.succeed("Connected to local database");
+
+    // Step 2: Apply infra (pre-step so pgschema can resolve schemas/extensions/roles)
+    logger.step(2, 5, "Applying infrastructure...");
+
+    const infra = await generateInfra();
+
+    if (infra.length === 0) {
+      spinner.info("No infra files found - skipping");
+    } else {
+      spinner.start("Applying infra...");
+      await applyInfra(session.localDbUrl);
+      spinner.succeed(`Infra applied (${infra.length} file(s))`);
+    }
+
+    // Step 3: Generate combined schema
+    logger.step(3, 5, "Generating schema SQL...");
     spinner.start("Combining schema files...");
 
     const schemaFile = await generateSchemaSQL();
+    const schemaFingerprint = await generateSchemaFingerprint();
     spinner.succeed(`Schema generated: ${schemaFile}`);
 
-    // Step 2: Run pgschema plan
-    logger.step(2, 3, "Running pgschema plan...");
+    // Step 4: Run pgschema plan
+    logger.step(4, 5, "Running pgschema plan...");
     spinner.start("Comparing schema against local database...");
 
     const planResult = await runPgschemaplan(schemaFile, session.localDbUrl);
@@ -43,13 +76,17 @@ export async function planCommand(options: CommandOptions): Promise<void> {
 
     spinner.succeed("Plan generated");
 
-    // Step 3: Update session
-    logger.step(3, 3, "Updating session state...");
+    // Step 5: Update session
+    logger.step(5, 5, "Updating session state...");
 
     await updatePendingChanges({
       planned: true,
       applied: false,
       planFile: planResult.planFile,
+      schemaFingerprint,
+      migrationApplied: false,
+      grantsApplied: false,
+      seedsApplied: false,
     });
 
     // Display the plan

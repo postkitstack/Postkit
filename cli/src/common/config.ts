@@ -33,8 +33,10 @@ export interface PostkitConfig {
     localDbUrl: string;
     schemaPath: string;
     migrationsPath: string;
+    schema: string;
     pgSchemaBin: string;
     dbmateBin: string;
+    environments?: Record<string, string>;
   };
   auth: {
     source: {

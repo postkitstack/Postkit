@@ -33,10 +33,12 @@ export function getConfig(): Config {
     localDbUrl,
     schemaPath,
     migrationsPath,
+    schema: config.db.schema || "public",
     pgSchemaBin: config.db.pgSchemaBin || "pgschema",
     dbmateBin: config.db.dbmateBin || "dbmate",
     cliRoot,
     projectRoot,
+    environments: config.db.environments || {},
   };
 }
 
@@ -50,4 +52,8 @@ export function getPlanFilePath(): string {
 
 export function getGeneratedSchemaPath(): string {
   return path.join(getPostkitDir(), "schema.sql");
+}
+
+export function getSessionMigrationsPath(): string {
+  return path.join(getPostkitDir(), "migrations");
 }

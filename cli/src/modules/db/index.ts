@@ -5,8 +5,10 @@ import {applyCommand} from "./commands/apply";
 import {commitCommand} from "./commands/commit";
 import {statusCommand} from "./commands/status";
 import {abortCommand} from "./commands/abort";
+import {infraCommand} from "./commands/infra";
 import {grantsCommand} from "./commands/grants";
 import {seedCommand} from "./commands/seed";
+import {deployCommand} from "./commands/deploy";
 
 export function registerDbModule(program: Command): void {
   const db = program
@@ -39,12 +41,12 @@ export function registerDbModule(program: Command): void {
     });
 
   // Commit command
-  db.command("commit <description>")
-    .description("Create migration file and apply to remote database")
+  db.command("commit")
+    .description("Apply migration to remote database")
     .option("-f, --force", "Skip confirmation prompt")
-    .action(async (description, cmdOptions) => {
+    .action(async (cmdOptions) => {
       const options = {...program.opts(), ...cmdOptions};
-      await commitCommand(description, options);
+      await commitCommand(options);
     });
 
   // Status command
@@ -62,6 +64,16 @@ export function registerDbModule(program: Command): void {
     .action(async (cmdOptions) => {
       const options = {...program.opts(), ...cmdOptions};
       await abortCommand(options);
+    });
+
+  // Infra command
+  db.command("infra")
+    .description("Show and apply infrastructure statements (roles, schemas, extensions)")
+    .option("--apply", "Apply infra to database")
+    .option("--target <target>", "Target database: local or remote", "local")
+    .action(async (cmdOptions) => {
+      const options = {...program.opts(), ...cmdOptions};
+      await infraCommand(options);
     });
 
   // Grants command
@@ -82,5 +94,16 @@ export function registerDbModule(program: Command): void {
     .action(async (cmdOptions) => {
       const options = {...program.opts(), ...cmdOptions};
       await seedCommand(options);
+    });
+
+  // Deploy command
+  db.command("deploy")
+    .description("Deploy migrations to a target environment (staging, production)")
+    .option("--target <target>", "Target environment name (from config environments)")
+    .option("--url <url>", "Direct database URL to deploy to")
+    .option("-f, --force", "Skip confirmation prompts")
+    .action(async (cmdOptions) => {
+      const options = {...program.opts(), ...cmdOptions};
+      await deployCommand(options);
     });
 }

@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
+import {createHash} from "crypto";
 import {getConfig, getGeneratedSchemaPath} from "../utils/db-config";
 
 interface SchemaSection {
@@ -10,6 +11,7 @@ interface SchemaSection {
 }
 
 const SCHEMA_ORDER: Record<string, number> = {
+  infra: 0, // Infrastructure (schemas, extensions) — must come first
   core: 1, // Core extensions / setup
   extensions: 1,
   type: 2,
@@ -79,14 +81,8 @@ async function discoverSchemaSections(
     if (entry.isDirectory()) {
       const sectionName = entry.name.toLowerCase();
 
-      // Skip seed and grant directories - they are applied separately as post-steps
-      if (
-        sectionName === "seed" ||
-        sectionName === "seeds" ||
-        sectionName === "grant" ||
-        sectionName === "grants" ||
-        sectionName === "grant-permissions"
-      ) {
+      // Skip seed directories - they contain data, not schema
+      if (sectionName === "seed" || sectionName === "seeds") {
         continue;
       }
 
@@ -152,13 +148,7 @@ export async function getSchemaFiles(): Promise<string[]> {
   return collectSqlFiles(schemaPath);
 }
 
-const SKIP_DIRECTORIES = new Set([
-  "seed",
-  "seeds",
-  "grant",
-  "grants",
-  "grant-permissions",
-]);
+const SKIP_DIRECTORIES = new Set(["seed", "seeds"]);
 
 async function collectSqlFiles(
   dirPath: string,
@@ -183,6 +173,19 @@ async function collectSqlFiles(
   }
 
   return files.sort();
+}
+
+export async function generateSchemaFingerprint(): Promise<string> {
+  const schemaFiles = await getSchemaFiles();
+  const hash = createHash("sha256");
+
+  for (const filePath of schemaFiles) {
+    const content = await fs.readFile(filePath, "utf-8");
+    hash.update(filePath);
+    hash.update(content);
+  }
+
+  return hash.digest("hex");
 }
 
 export async function deleteGeneratedSchema(): Promise<void> {
