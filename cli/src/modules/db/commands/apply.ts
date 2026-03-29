@@ -6,6 +6,7 @@ import {getSessionMigrationsPath} from "../utils/db-config";
 import {wrapPlanSQL, getPlanFileContent} from "../services/pgschema";
 import {testConnection} from "../services/database";
 import {createMigrationFile, runDbmateMigrate, deleteMigrationFile} from "../services/dbmate";
+import {generateSchemaFingerprint} from "../services/schema-generator";
 import {applyInfra, generateInfra} from "../services/infra-generator";
 import {applyGrants, generateGrants} from "../services/grant-generator";
 import {applySeeds, generateSeeds} from "../services/seed-generator";
@@ -29,6 +30,17 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
       logger.error("No migration plan found.");
       logger.info('Run "postkit db plan" first to generate a plan.');
       process.exit(1);
+    }
+
+    // Validate schema fingerprint
+    if (session.pendingChanges.schemaFingerprint) {
+      const currentFingerprint = await generateSchemaFingerprint();
+
+      if (currentFingerprint !== session.pendingChanges.schemaFingerprint) {
+        logger.error("Schema files have changed since the plan was generated.");
+        logger.info('Run "postkit db plan" again to regenerate the plan.');
+        process.exit(1);
+      }
     }
 
     logger.heading("Applying Migration to Local Database");

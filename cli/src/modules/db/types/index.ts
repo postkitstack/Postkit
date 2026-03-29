@@ -19,6 +19,7 @@ export interface SessionState {
     planFile: string | null;
     migrationFiles: { name: string; path: string }[];
     description: string | null;
+    schemaFingerprint: string | null;
   };
   commitState?: CommitState;
 }

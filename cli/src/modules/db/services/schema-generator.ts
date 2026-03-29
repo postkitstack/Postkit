@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
+import {createHash} from "crypto";
 import {getConfig, getGeneratedSchemaPath} from "../utils/db-config";
 
 interface SchemaSection {
@@ -172,6 +173,19 @@ async function collectSqlFiles(
   }
 
   return files.sort();
+}
+
+export async function generateSchemaFingerprint(): Promise<string> {
+  const schemaFiles = await getSchemaFiles();
+  const hash = createHash("sha256");
+
+  for (const filePath of schemaFiles) {
+    const content = await fs.readFile(filePath, "utf-8");
+    hash.update(filePath);
+    hash.update(content);
+  }
+
+  return hash.digest("hex");
 }
 
 export async function deleteGeneratedSchema(): Promise<void> {

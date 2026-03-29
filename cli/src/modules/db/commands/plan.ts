@@ -1,7 +1,7 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
 import {getSession, updatePendingChanges} from "../utils/session";
-import {generateSchemaSQL} from "../services/schema-generator";
+import {generateSchemaSQL, generateSchemaFingerprint} from "../services/schema-generator";
 import {runPgschemaplan} from "../services/pgschema";
 import {testConnection} from "../services/database";
 import {applyInfra, generateInfra} from "../services/infra-generator";
@@ -57,6 +57,7 @@ export async function planCommand(options: CommandOptions): Promise<void> {
     spinner.start("Combining schema files...");
 
     const schemaFile = await generateSchemaSQL();
+    const schemaFingerprint = await generateSchemaFingerprint();
     spinner.succeed(`Schema generated: ${schemaFile}`);
 
     // Step 4: Run pgschema plan
@@ -82,6 +83,7 @@ export async function planCommand(options: CommandOptions): Promise<void> {
       planned: true,
       applied: false,
       planFile: planResult.planFile,
+      schemaFingerprint,
     });
 
     // Display the plan

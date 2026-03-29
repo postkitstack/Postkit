@@ -35,6 +35,7 @@ export async function createSession(
       planFile: null,
       migrationFiles: [],
       description: null,
+      schemaFingerprint: null,
     },
   };
 
