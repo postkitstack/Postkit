@@ -165,8 +165,10 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       logger.blank();
     }
 
-    // Step 3: Test target DB connection
-    logger.step(1, 9, "Testing target database connection...");
+    const totalSteps = 11;
+
+    // Step 1: Test target DB connection
+    logger.step(1, totalSteps, "Testing target database connection...");
     spinner.start("Connecting to target database...");
     const targetConnected = await testConnection(targetUrl);
 
@@ -179,21 +181,21 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     const targetTableCount = await getTableCount(targetUrl);
     spinner.succeed(`Connected to target database (${targetTableCount} tables)`);
 
-    // Step 4: Clone target DB to local
+    // Step 2: Clone target DB to local
     const localDbUrl = config.localDbUrl;
 
-    logger.step(2, 9, "Cloning target database to local...");
+    logger.step(2, totalSteps, "Cloning target database to local...");
     spinner.start("Cloning target database to local for dry-run verification...");
     await cloneDatabase(targetUrl, localDbUrl);
     const localTableCount = await getTableCount(localDbUrl);
     spinner.succeed(`Target cloned to local (${localTableCount} tables)`);
 
-    // Step 5: Dry run on local clone (steps 3-6 of 9)
+    // Steps 3-6: Dry run on local clone
     logger.blank();
     logger.heading("Dry Run (local verification)");
 
     try {
-      await runSteps(localDbUrl, "local clone", spinner, 3, 9);
+      await runSteps(localDbUrl, "local clone", spinner, 3, totalSteps);
     } catch (error) {
       spinner.fail("Dry run failed on local clone");
       logger.error(error instanceof Error ? error.message : String(error));
@@ -215,7 +217,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     logger.success("Dry run passed!");
     logger.blank();
 
-    // Step 6: Confirm deployment
+    // Confirm deployment
     if (!options.force) {
       const {confirm} = await inquirer.prompt([
         {
@@ -238,36 +240,16 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       }
     }
 
-    // Step 7: Apply to target (steps 7-9... but really 4 sub-steps mapped to last steps)
+    // Steps 7-10: Apply to target
     logger.blank();
     logger.heading("Deploying to Target");
 
-    // We use a simpler step numbering for the target deploy phase
-    const targetStepOffset = 7;
-    const targetTotalSteps = 9;
-
-    // Infra
-    logger.step(targetStepOffset, targetTotalSteps, `Applying infra to ${targetLabel}...`);
-    const infra = await generateInfra();
-
-    if (infra.length === 0) {
-      spinner.info("No infra files found - skipping");
-    } else {
-      spinner.start(`Applying infra to ${targetLabel}...`);
-      await applyInfra(targetUrl);
-      spinner.succeed(`Infra applied to ${targetLabel} (${infra.length} file(s))`);
-    }
-
-    // Migrate
-    logger.step(targetStepOffset + 1, targetTotalSteps, `Running migrations on ${targetLabel}...`);
-    spinner.start(`Running dbmate migrate on ${targetLabel}...`);
-    const migrateResult = await runDbmateMigrate(targetUrl);
-
-    if (!migrateResult.success) {
-      spinner.fail(`Failed to run migrations on ${targetLabel}`);
-      logger.error(migrateResult.output);
+    try {
+      await runSteps(targetUrl, targetLabel, spinner, 7, totalSteps);
+    } catch (error) {
+      logger.error(error instanceof Error ? error.message : String(error));
       logger.blank();
-      logger.error("Target deployment failed during migrations. The target database may be in a partial state.");
+      logger.error("Target deployment failed. The target database may be in a partial state.");
       logger.info("Investigate and fix manually, then retry: postkit db deploy");
 
       // Clean up local clone
@@ -280,28 +262,8 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       process.exit(1);
     }
 
-    spinner.succeed(`Migrations applied to ${targetLabel}`);
-
-    // Grants
-    const grants = await generateGrants();
-
-    if (grants.length > 0) {
-      spinner.start(`Applying grants to ${targetLabel}...`);
-      await applyGrants(targetUrl);
-      spinner.succeed(`Grants applied to ${targetLabel} (${grants.length} file(s))`);
-    }
-
-    // Seeds
-    const seeds = await generateSeeds();
-
-    if (seeds.length > 0) {
-      spinner.start(`Applying seeds to ${targetLabel}...`);
-      await applySeeds(targetUrl);
-      spinner.succeed(`Seeds applied to ${targetLabel} (${seeds.length} file(s))`);
-    }
-
-    // Step 8: Drop local clone
-    logger.step(9, 9, "Cleaning up local clone...");
+    // Step 11: Drop local clone
+    logger.step(11, totalSteps, "Cleaning up local clone...");
     spinner.start("Dropping local clone database...");
 
     try {
