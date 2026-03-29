@@ -72,14 +72,6 @@ async function cleanupStep(
   spinner.succeed("Session cleaned up");
 }
 
-async function clearCommitState(): Promise<void> {
-  try {
-    await updateSession({commitState: undefined});
-  } catch {
-    // Session may already be deleted during cleanup
-  }
-}
-
 async function saveCommitState(
   commitState: CommitState,
 ): Promise<void> {
@@ -101,7 +93,7 @@ export async function commitCommand(options: CommandOptions): Promise<void> {
 
     // Check for resume from previous failed commit
     if (session.commitState) {
-      await handleResume(session, options, spinner);
+      await handleResume(session, spinner);
       return;
     }
 
@@ -116,7 +108,6 @@ export async function commitCommand(options: CommandOptions): Promise<void> {
 
 async function handleResume(
   session: SessionState,
-  options: CommandOptions,
   spinner: ReturnType<typeof ora>,
 ): Promise<void> {
   const commitState = session.commitState!;
@@ -129,29 +120,26 @@ async function handleResume(
 
     // Retry dbmate migrate on remote
     logger.step(1, 4, "Applying migration to remote...");
+    spinner.start("Running dbmate migrate on remote...");
 
-    if (!options.dryRun) {
-      spinner.start("Running dbmate migrate on remote...");
+    const migrateResult = await runDbmateMigrate(session.remoteDbUrl);
 
-      const migrateResult = await runDbmateMigrate(session.remoteDbUrl);
-
-      if (!migrateResult.success) {
-        spinner.fail("Failed to apply migration to remote");
-        logger.error(migrateResult.output);
-        logger.info('Run "postkit db commit" again to retry.');
-        process.exit(1);
-      }
-
-      spinner.succeed("Migration applied to remote database");
-
-      await saveCommitState({
-        ...commitState,
-        remoteApplied: true,
-      });
+    if (!migrateResult.success) {
+      spinner.fail("Failed to apply migration to remote");
+      logger.error(migrateResult.output);
+      logger.info('Run "postkit db commit" again to retry.');
+      process.exit(1);
     }
 
+    spinner.succeed("Migration applied to remote database");
+
+    await saveCommitState({
+      ...commitState,
+      remoteApplied: true,
+    });
+
     // Continue with grants/seeds/cleanup
-    await finishCommit(session, commitState, options, spinner, 2, 4);
+    await finishCommit(session, commitState, spinner, 2, 4);
     return;
   }
 
@@ -160,13 +148,12 @@ async function handleResume(
   logger.info("Migration was already applied to remote. Resuming...");
   logger.blank();
 
-  await finishCommit(session, commitState, options, spinner, 1, 3);
+  await finishCommit(session, commitState, spinner, 1, 3);
 }
 
 async function finishCommit(
   session: SessionState,
   commitState: CommitState,
-  options: CommandOptions,
   spinner: ReturnType<typeof ora>,
   startStep: number,
   totalSteps: number,
@@ -177,33 +164,29 @@ async function finishCommit(
   if (!commitState.grantsApplied) {
     logger.step(step, totalSteps, "Applying grants to remote...");
 
-    if (options.dryRun) {
-      spinner.info("Dry run - skipping grants");
-    } else {
-      try {
-        await applyGrantsStep(session.remoteDbUrl, spinner);
-      } catch (error) {
-        spinner.fail("Failed to apply grants");
-        logger.error(error instanceof Error ? error.message : String(error));
-        await saveCommitState({
-          ...commitState,
-          remoteApplied: true,
-          infraApplied: true,
-          grantsApplied: false,
-        });
-        logger.blank();
-        logger.warn("Grants failed. The migration has already been applied to remote.");
-        logger.info('Run "postkit db commit" again to retry.');
-        process.exit(1);
-      }
-
+    try {
+      await applyGrantsStep(session.remoteDbUrl, spinner);
+    } catch (error) {
+      spinner.fail("Failed to apply grants");
+      logger.error(error instanceof Error ? error.message : String(error));
       await saveCommitState({
         ...commitState,
         remoteApplied: true,
         infraApplied: true,
-        grantsApplied: true,
+        grantsApplied: false,
       });
+      logger.blank();
+      logger.warn("Grants failed. The migration has already been applied to remote.");
+      logger.info('Run "postkit db commit" again to retry.');
+      process.exit(1);
     }
+
+    await saveCommitState({
+      ...commitState,
+      remoteApplied: true,
+      infraApplied: true,
+      grantsApplied: true,
+    });
   } else {
     logger.step(step, totalSteps, "Grants already applied - skipping");
   }
@@ -214,26 +197,22 @@ async function finishCommit(
   if (!commitState.seedsApplied) {
     logger.step(step, totalSteps, "Applying seeds to remote...");
 
-    if (options.dryRun) {
-      spinner.info("Dry run - skipping seeds");
-    } else {
-      try {
-        await applySeedsStep(session.remoteDbUrl, spinner);
-      } catch (error) {
-        spinner.fail("Failed to apply seeds");
-        logger.error(error instanceof Error ? error.message : String(error));
-        await saveCommitState({
-          ...commitState,
-          remoteApplied: true,
-          infraApplied: true,
-          grantsApplied: true,
-          seedsApplied: false,
-        });
-        logger.blank();
-        logger.warn("Seeds failed. The migration and grants have already been applied.");
-        logger.info('Run "postkit db commit" again to retry.');
-        process.exit(1);
-      }
+    try {
+      await applySeedsStep(session.remoteDbUrl, spinner);
+    } catch (error) {
+      spinner.fail("Failed to apply seeds");
+      logger.error(error instanceof Error ? error.message : String(error));
+      await saveCommitState({
+        ...commitState,
+        remoteApplied: true,
+        infraApplied: true,
+        grantsApplied: true,
+        seedsApplied: false,
+      });
+      logger.blank();
+      logger.warn("Seeds failed. The migration and grants have already been applied.");
+      logger.info('Run "postkit db commit" again to retry.');
+      process.exit(1);
     }
   } else {
     logger.step(step, totalSteps, "Seeds already applied - skipping");
@@ -244,13 +223,11 @@ async function finishCommit(
   // Cleanup
   logger.step(step, totalSteps, "Cleaning up session...");
 
-  if (!options.dryRun) {
-    try {
-      await cleanupStep(spinner);
-    } catch (error) {
-      logger.warn("Cleanup failed (non-fatal): " + (error instanceof Error ? error.message : String(error)));
-      logger.info("The migration was committed successfully. You may need to manually clean up session files.");
-    }
+  try {
+    await cleanupStep(spinner);
+  } catch (error) {
+    logger.warn("Cleanup failed (non-fatal): " + (error instanceof Error ? error.message : String(error)));
+    logger.info("The migration was committed successfully. You may need to manually clean up session files.");
   }
 
   const description = commitState.description;
@@ -300,7 +277,7 @@ async function handleFreshCommit(
   logger.blank();
 
   // Confirm unless force flag
-  if (!options.force && !options.dryRun) {
+  if (!options.force) {
     const {confirm} = await inquirer.prompt([
       {
         type: "confirm",
@@ -334,74 +311,60 @@ async function handleFreshCommit(
   // Step 2: Apply infra to remote
   logger.step(2, 7, "Applying infra to remote...");
 
-  if (options.dryRun) {
-    spinner.info("Dry run - skipping infra");
-  } else {
-    try {
-      await applyInfraStep(session.remoteDbUrl, spinner);
-    } catch (error) {
-      spinner.fail("Failed to apply infra");
-      logger.error(error instanceof Error ? error.message : String(error));
-      logger.info("Fix the issue and retry with: postkit db commit");
-      process.exit(1);
-    }
+  try {
+    await applyInfraStep(session.remoteDbUrl, spinner);
+  } catch (error) {
+    spinner.fail("Failed to apply infra");
+    logger.error(error instanceof Error ? error.message : String(error));
+    logger.info("Fix the issue and retry with: postkit db commit");
+    process.exit(1);
   }
 
   // Step 3: Copy session migrations to root migrations folder
   logger.step(3, 7, "Copying migration files to migrations folder...");
+  spinner.start("Copying migration files...");
+  const copied = await copySessionMigrations(sessionMigrationsDir);
+  spinner.succeed(`Copied ${copied.length} migration file(s) to migrations folder`);
 
-  if (options.dryRun) {
-    spinner.info("Dry run - skipping copy");
-  } else {
-    spinner.start("Copying migration files...");
-    const copied = await copySessionMigrations(sessionMigrationsDir);
-    spinner.succeed(`Copied ${copied.length} migration file(s) to migrations folder`);
-
-    // Save commit state
-    await saveCommitState({
-      migrationFile: migrationFiles[migrationFiles.length - 1],
-      remoteApplied: false,
-      infraApplied: true,
-      grantsApplied: false,
-      seedsApplied: false,
-      description,
-    });
-  }
+  // Save commit state
+  await saveCommitState({
+    migrationFile: migrationFiles[migrationFiles.length - 1],
+    remoteApplied: false,
+    infraApplied: true,
+    grantsApplied: false,
+    seedsApplied: false,
+    description,
+  });
 
   // Step 4: Apply migration to remote via dbmate (uses root migrations dir)
   logger.step(4, 7, "Applying migration to remote database...");
+  spinner.start("Running dbmate migrate on remote...");
 
-  if (options.dryRun) {
-    spinner.info("Dry run - skipping remote apply");
-  } else {
-    spinner.start("Running dbmate migrate on remote...");
+  const migrateResult = await runDbmateMigrate(session.remoteDbUrl);
 
-    const migrateResult = await runDbmateMigrate(session.remoteDbUrl);
-
-    if (!migrateResult.success) {
-      spinner.fail("Failed to apply migration to remote");
-      logger.error("Migration failed on remote database:");
-      console.log(migrateResult.output);
-      logger.info('Run "postkit db commit" again to retry.');
-      process.exit(1);
-    }
-
-    spinner.succeed("Migration applied to remote database");
-
-    if (migrateResult.output) {
-      logger.debug(migrateResult.output, options.verbose);
-    }
-
-    // Mark remote as applied
-    await saveCommitState({
-      migrationFile: migrationFiles[migrationFiles.length - 1],
-      remoteApplied: true,
-      infraApplied: true,
-      grantsApplied: false,
-      seedsApplied: false,
-      description,
-    });
+  if (!migrateResult.success) {
+    spinner.fail("Failed to apply migration to remote");
+    logger.error("Migration failed on remote database:");
+    console.log(migrateResult.output);
+    logger.info('Run "postkit db commit" again to retry.');
+    process.exit(1);
   }
+
+  spinner.succeed("Migration applied to remote database");
+
+  if (migrateResult.output) {
+    logger.debug(migrateResult.output, options.verbose);
+  }
+
+  // Mark remote as applied
+  await saveCommitState({
+    migrationFile: migrationFiles[migrationFiles.length - 1],
+    remoteApplied: true,
+    infraApplied: true,
+    grantsApplied: false,
+    seedsApplied: false,
+    description,
+  });
 
   // Steps 5-7: grants, seeds, cleanup
   const commitState: CommitState = {
@@ -413,5 +376,5 @@ async function handleFreshCommit(
     description,
   };
 
-  await finishCommit(session, commitState, options, spinner, 5, 7);
+  await finishCommit(session, commitState, spinner, 5, 7);
 }

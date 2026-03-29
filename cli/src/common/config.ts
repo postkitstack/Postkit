@@ -36,6 +36,7 @@ export interface PostkitConfig {
     schema: string;
     pgSchemaBin: string;
     dbmateBin: string;
+    environments?: Record<string, string>;
   };
   auth: {
     source: {

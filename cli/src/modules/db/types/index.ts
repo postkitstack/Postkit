@@ -37,6 +37,7 @@ export interface Config {
   dbmateBin: string;
   cliRoot: string;
   projectRoot: string;
+  environments: Record<string, string>;
 }
 
 export interface DatabaseConnectionInfo {

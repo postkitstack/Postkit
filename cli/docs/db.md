@@ -17,28 +17,36 @@ A session-based database migration workflow for safe schema changes. Clone your 
 │   │    to local DB   │            │    schema.sql    │                       │
 │   │ 2. Start session │            │ 4. Run pgschema  │                       │
 │   │    (track state) │            │    plan (diff)   │                       │
-│   └────────┬─────────┘            └────────┬─────────┘                       │
-│            │                               │                                 │
-│            ▼                               ▼                                 │
+│   └────────┬─────────┘            │ 5. Save schema   │                       │
+│            │                      │    fingerprint   │                       │
+│            ▼                      └────────┬─────────┘                       │
+│   ┌──────────────────┐                     │                                 │
+│   │ User modifies    │                     ▼                                 │
+│   │ schema files     │            ┌──────────────────┐                       │
+│   │ (db/schema/*)    │            │ Shows changes    │                       │
+│   └──────────────────┘            │ to apply         │                       │
+│                                   └──────────────────┘                       │
+│   $ postkit db apply                       │                                 │
+│   ┌──────────────────┐                     ▼                                 │
+│   │ 6. Validate      │            ┌──────────────────┐                       │
+│   │    fingerprint   │            │ 7. Apply infra   │                       │
+│   │ 7. Apply infra   │            │ 8. Create dbmate │                       │
+│   │ 8. Create dbmate │            │    migration     │                       │
+│   │    migration     │            │ 9. Run dbmate    │                       │
+│   │ 9. Run dbmate    │            │    on local DB   │                       │
+│   │    on local DB   │            │ 10. Apply grants │                       │
+│   │ 10. Apply grants │            │ 11. Apply seeds  │                       │
+│   │ 11. Apply seeds  │            └────────┬─────────┘                       │
+│   └────────┬─────────┘                     │                                 │
+│            │                               ▼                                 │
+│   $ postkit db commit                                                        │
 │   ┌──────────────────┐            ┌──────────────────┐                       │
-│   │ User modifies    │            │ Shows changes    │                       │
-│   │ schema files     │            │ to apply         │                       │
-│   │ (db/schema/*)    │            │                  │                       │
-│   └──────────────────┘            └──────────────────┘                       │
-│                                            │                                 │
-│   $ postkit db apply                       ▼                                 │
-│   ┌──────────────────┐            ┌──────────────────┐                       │
-│   │ 5. Apply changes │            │ 6. Validate on   │                       │
-│   │    to local DB   │◄───────────│    cloned DB     │                       │
-│   │    (pgschema)    │            │                  │                       │
-│   └────────┬─────────┘            └──────────────────┘                       │
-│            │                                                                 │
-│            ▼                                                                 │
-│   $ postkit db commit "description"                                          │
-│   ┌──────────────────┐            ┌──────────────────┐                       │
-│   │ 7. Create dbmate │            │ 8. Apply to      │                       │
-│   │    migration     │───────────►│    remote DB     │                       │
-│   │    file          │            │    (dbmate)      │                       │
+│   │ 12. Apply infra  │            │ 13. Copy staging │                       │
+│   │     to remote    │───────────►│     migrations   │                       │
+│   │                  │            │ 14. Run dbmate   │                       │
+│   │                  │            │     on remote DB  │                       │
+│   │                  │            │ 15. Apply grants │                       │
+│   │                  │            │ 16. Apply seeds  │                       │
 │   └──────────────────┘            └──────────────────┘                       │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -80,6 +88,10 @@ The tool expects schema files organized in `db/schema/`:
 
 ```
 db/schema/
+├── infra/                    # Pre-migration infrastructure (roles, schemas, extensions)
+│   ├── 001_roles.sql
+│   ├── 002_schemas.sql
+│   └── 003_extensions.sql
 ├── extensions/
 │   └── uuid.sql
 ├── types/
@@ -98,11 +110,15 @@ db/schema/
 │   └── updated_at.sql
 ├── indexes/
 │   └── performance.sql
-└── grants/
-    └── app_user.sql
+├── grants/                   # Post-migration grant statements
+│   └── app_user.sql
+└── seeds/                    # Post-migration seed data
+    └── default_roles.sql
 ```
 
-**Schema ordering:** extensions → types → enums → domains → sequences → tables → views → functions → triggers → indexes → constraints → policies → grants
+**Execution ordering:** infra (pre-migration) → pgschema-managed schema (extensions → types → enums → domains → sequences → tables → views → functions → triggers → indexes → constraints → policies) → grants (post-migration) → seeds (post-migration)
+
+**Note:** `infra/`, `grants/`, and `seeds/` directories are excluded from pgschema processing and handled as separate steps.
 
 ---
 
@@ -133,36 +149,98 @@ postkit db plan
 ```
 
 **What it does:**
-1. Combines all schema files from `db/schema/` into a single SQL file
+1. Combines all schema files from `db/schema/` into a single SQL file (excluding `infra/`, `grants/`, `seeds/`)
 2. Runs `pgschema plan` to compare against local database
-3. Displays the migration plan and saves to `.plan.sql`
+3. Saves a schema fingerprint (SHA-256 hash of source files) for validation during apply
+4. Displays the migration plan and saves to `.plan.sql`
 
 ---
 
 ### `postkit db apply`
 
-Apply the planned schema changes to the local cloned database.
+Apply the planned schema changes to the local cloned database. Creates a dbmate migration file and runs it locally.
 
 ```bash
 postkit db apply
 postkit db apply -f          # Skip confirmation
 ```
 
+**What it does:**
+1. Validates schema fingerprint (ensures schema files haven't changed since plan)
+2. Displays the planned changes and asks for a migration description
+3. Tests local database connection
+4. Applies infrastructure SQL from `db/schema/infra/`
+5. Wraps the plan SQL and creates a dbmate migration file (staged in `.postkit/migrations/`)
+6. Runs `dbmate migrate` on the local database
+7. Applies grant statements from `db/schema/grants/`
+8. Applies seed data from `db/schema/seeds/`
+
+**Resume support:** If grants or seeds fail, re-running `postkit db apply` resumes from where it left off (the migration is not re-applied).
+
 ---
 
-### `postkit db commit <description>`
+### `postkit db commit`
 
-Create a migration file and apply changes to the remote database.
+Apply the staged migration to the remote database.
 
 ```bash
-postkit db commit "add_user_email_verification"
-postkit db commit "add_user_email_verification" -f   # Skip confirmation
+postkit db commit
+postkit db commit -f         # Skip confirmation
 ```
 
 **What it does:**
-1. Creates a dbmate migration file in `db/migrations/`
-2. Applies the migration to the remote database
-3. Cleans up session files
+1. Tests remote database connection
+2. Applies infrastructure SQL from `db/schema/infra/` to remote
+3. Copies staged migration files from `.postkit/migrations/` to `db/migrations/`
+4. Runs `dbmate migrate` on the remote database
+5. Applies grant statements to remote
+6. Applies seed data to remote
+7. Cleans up session files
+
+**Resume support:** If the commit fails partway through, re-running `postkit db commit` resumes from where it left off. The commit state tracks which steps have completed.
+
+---
+
+### `postkit db deploy`
+
+Deploy committed migrations to a target environment (staging, production). Performs a full dry-run verification on a local clone before touching the target.
+
+```bash
+postkit db deploy --target=staging           # Use URL from config environments
+postkit db deploy --target=production        # Use URL from config environments
+postkit db deploy --url=postgres://...       # Direct URL override
+postkit db deploy --target=staging -f        # Skip confirmations
+```
+
+**What it does:**
+1. Resolves the target database URL (from `--target` config lookup or `--url` flag)
+2. If an active session exists, removes it (with confirmation unless `-f`)
+3. Tests the target database connection
+4. Clones the target database to local (using `LOCAL_DATABASE_URL`)
+5. Runs a full dry-run on the local clone: infra, dbmate migrate, grants, seeds
+6. Reports dry-run results and confirms deployment (unless `-f`)
+7. Applies to target: infra, dbmate migrate, grants, seeds
+8. Drops the local clone database
+9. Reports success
+
+**Configuration:**
+
+Add environments to `postkit.config.json`:
+
+```json
+{
+  "db": {
+    "remoteDbUrl": "postgres://user:pass@dev-host:5432/myapp",
+    "localDbUrl": "postgres://user:pass@localhost:5432/myapp_local",
+    "environments": {
+      "staging": "postgres://user:pass@staging-host:5432/myapp",
+      "production": "postgres://user:pass@prod-host:5432/myapp"
+    }
+  }
+}
+```
+
+If the dry run fails, deployment is aborted and no changes are made to the target database.
 
 ---
 
@@ -187,14 +265,38 @@ postkit db abort -f          # Skip confirmation
 
 ---
 
+### `postkit db infra`
+
+Manage infrastructure SQL (roles, schemas, extensions) from `db/schema/infra/`.
+
+```bash
+postkit db infra                          # Show infra statements
+postkit db infra --apply                  # Apply to local
+postkit db infra --apply --target=remote  # Apply to remote
+```
+
+---
+
 ### `postkit db grants`
 
-Regenerate and display grant statements from schema files.
+Regenerate and display grant statements from `db/schema/grants/`.
 
 ```bash
 postkit db grants                         # Show grants
 postkit db grants --apply                 # Apply to local
 postkit db grants --apply --target=remote # Apply to remote
+```
+
+---
+
+### `postkit db seed`
+
+Manage seed data from `db/schema/seeds/`.
+
+```bash
+postkit db seed                           # Show seed statements
+postkit db seed --apply                   # Apply to local
+postkit db seed --apply --target=remote   # Apply to remote
 ```
 
 ---
@@ -211,11 +313,13 @@ postkit db start
 # 3. Preview changes
 postkit db plan
 
-# 4. Test on local clone
+# 4. Test on local clone (asks for migration description, creates migration file)
 postkit db apply
 
-# 5. Commit to remote when ready
-postkit db commit "add_email_verification_column"
+# 5. (Optional) Make more changes and repeat plan → apply
+
+# 6. Commit to remote when ready
+postkit db commit
 
 # If something goes wrong:
 postkit db abort
@@ -225,7 +329,7 @@ postkit db abort
 
 ## 🔧 Session State
 
-Session state is stored in `.session.json`:
+Session state is stored in `.postkit/session.json`:
 
 ```json
 {
@@ -237,10 +341,18 @@ Session state is stored in `.session.json`:
   "pendingChanges": {
     "planned": false,
     "applied": false,
-    "planFile": null
+    "planFile": null,
+    "migrationFiles": [],
+    "description": null,
+    "schemaFingerprint": null,
+    "migrationApplied": false,
+    "grantsApplied": false,
+    "seedsApplied": false
   }
 }
 ```
+
+Migration files are staged in `.postkit/migrations/` during the session and copied to `db/migrations/` on commit.
 
 ---
 
@@ -253,3 +365,6 @@ Session state is stored in `.session.json`:
 | `Failed to connect to remote database` | Check `REMOTE_DATABASE_URL` in `.env` |
 | `No active migration session` | Run `postkit db start` first |
 | `Plan file is empty` | Schema files match current DB — make changes first |
+| `Schema files have changed since the plan was generated` | Schema files were modified after running `plan`. Run `postkit db plan` again |
+| `Grants/seeds failed during apply` | Re-run `postkit db apply` — it resumes from where it left off |
+| `Commit failed partway through` | Re-run `postkit db commit` — it resumes from where it left off |

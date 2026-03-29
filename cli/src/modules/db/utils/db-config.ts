@@ -38,6 +38,7 @@ export function getConfig(): Config {
     dbmateBin: config.db.dbmateBin || "dbmate",
     cliRoot,
     projectRoot,
+    environments: config.db.environments || {},
   };
 }
 

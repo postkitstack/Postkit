@@ -71,10 +71,14 @@ postkit <module> <command> [options]
 postkit db start                          # Start a migration session
 postkit db plan                           # Generate schema diff
 postkit db apply                          # Apply to local clone
-postkit db commit "add_users_table"       # Commit to remote
+postkit db commit                         # Commit to remote
+postkit db deploy --target=staging        # Deploy to staging environment
+postkit db deploy --url=postgres://...    # Deploy to direct URL
 postkit db status                         # Show session state
 postkit db abort                          # Cancel session
+postkit db infra                          # Manage infrastructure (roles, schemas)
 postkit db grants                         # Manage grant statements
+postkit db seed                           # Manage seed data
 
 # Keycloak auth
 postkit auth export                       # Export realm config

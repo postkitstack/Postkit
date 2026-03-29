@@ -8,6 +8,7 @@ import {abortCommand} from "./commands/abort";
 import {infraCommand} from "./commands/infra";
 import {grantsCommand} from "./commands/grants";
 import {seedCommand} from "./commands/seed";
+import {deployCommand} from "./commands/deploy";
 
 export function registerDbModule(program: Command): void {
   const db = program
@@ -93,5 +94,16 @@ export function registerDbModule(program: Command): void {
     .action(async (cmdOptions) => {
       const options = {...program.opts(), ...cmdOptions};
       await seedCommand(options);
+    });
+
+  // Deploy command
+  db.command("deploy")
+    .description("Deploy migrations to a target environment (staging, production)")
+    .option("--target <target>", "Target environment name (from config environments)")
+    .option("--url <url>", "Direct database URL to deploy to")
+    .option("-f, --force", "Skip confirmation prompts")
+    .action(async (cmdOptions) => {
+      const options = {...program.opts(), ...cmdOptions};
+      await deployCommand(options);
     });
 }
