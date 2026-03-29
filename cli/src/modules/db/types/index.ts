@@ -20,6 +20,9 @@ export interface SessionState {
     migrationFiles: { name: string; path: string }[];
     description: string | null;
     schemaFingerprint: string | null;
+    migrationApplied: boolean;
+    grantsApplied: boolean;
+    seedsApplied: boolean;
   };
   commitState?: CommitState;
 }
