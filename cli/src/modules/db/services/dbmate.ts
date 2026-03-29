@@ -7,6 +7,13 @@ import {existsSync} from "fs";
 
 export async function checkDbmateInstalled(): Promise<boolean> {
   const config = getConfig();
+
+  // If resolved to an absolute path (npm-installed binary), check file existence
+  if (path.isAbsolute(config.dbmateBin)) {
+    return existsSync(config.dbmateBin);
+  }
+
+  // Otherwise check system PATH
   return commandExists(config.dbmateBin);
 }
 

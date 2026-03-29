@@ -28,8 +28,8 @@ const SCAFFOLD_CONFIG: PostkitConfig = {
     schemaPath: "schema",
     migrationsPath: "migrations",
     schema: "public",
-    pgSchemaBin: "pgschema",
-    dbmateBin: "dbmate",
+    pgSchemaBin: "",
+    dbmateBin: "",
   },
   auth: {
     source: {

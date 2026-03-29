@@ -26,6 +26,10 @@ export function getPostkitDir(): string {
   return path.join(projectRoot, POSTKIT_DIR);
 }
 
+export function getVendorDir(): string {
+  return path.join(cliRoot, "vendor");
+}
+
 // PostkitConfig interface matching the JSON structure
 export interface PostkitConfig {
   db: {

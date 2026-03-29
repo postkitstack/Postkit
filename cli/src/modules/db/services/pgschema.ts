@@ -1,3 +1,4 @@
+import path from "path";
 import type {PlanResult} from "../types/index";
 import {runCommand, commandExists} from "../../../common/shell";
 import {getConfig, getPlanFilePath} from "../utils/db-config";
@@ -7,6 +8,13 @@ import {existsSync} from "fs";
 
 export async function checkPgschemaInstalled(): Promise<boolean> {
   const config = getConfig();
+
+  // If resolved to an absolute path (bundled binary), check file existence
+  if (path.isAbsolute(config.pgSchemaBin)) {
+    return existsSync(config.pgSchemaBin);
+  }
+
+  // Otherwise check system PATH
   return commandExists(config.pgSchemaBin);
 }
 

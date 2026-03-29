@@ -29,6 +29,10 @@ fi
 echo "📦 Installing dependencies..."
 npm install
 
+# Ensure vendor binaries are executable
+echo "🔧 Setting vendor binary permissions..."
+chmod +x vendor/pgschema/* 2>/dev/null || true
+
 # Build the project
 echo "🔨 Building PostKit..."
 npm run build
