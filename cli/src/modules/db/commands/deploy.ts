@@ -40,13 +40,21 @@ function resolveTargetUrl(options: DeployOptions, config: Config): {url: string;
   const envUrl = config.environments[options.target];
 
   if (!envUrl) {
-    const available = Object.keys(config.environments);
+    const available = Object.keys(config.environments).filter(
+      (key) => !!config.environments[key],
+    );
     const availableStr = available.length > 0
       ? `Available environments: ${available.join(", ")}`
       : "No environments configured in postkit.config.json";
+
+    const exists = options.target in config.environments;
+    const message = exists
+      ? `Environment "${options.target}" has no URL configured.`
+      : `Unknown environment: "${options.target}"`;
+
     throw new Error(
-      `Unknown environment: "${options.target}"\n${availableStr}\n\n` +
-      "Add environments to your postkit.config.json:\n" +
+      `${message}\n${availableStr}\n\n` +
+      "Add environment URLs to your postkit.config.json:\n" +
       '  "db": { "environments": { "staging": "postgres://..." } }',
     );
   }

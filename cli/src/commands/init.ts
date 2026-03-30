@@ -30,6 +30,10 @@ const SCAFFOLD_CONFIG: PostkitConfig = {
     schema: "public",
     pgSchemaBin: "",
     dbmateBin: "",
+    environments: {
+      staging: "",
+      production: "",
+    },
   },
   auth: {
     source: {
