@@ -109,7 +109,7 @@ export function registerDbModule(program: Command): void {
 
   // Deploy command
   db.command("deploy")
-    .description("Deploy migrations to a target environment (staging, production)")
+    .description("Deploy committed migrations (defaults to remote DB)")
     .option("--target <target>", "Target environment name (from config environments)")
     .option("--url <url>", "Direct database URL to deploy to")
     .option("-f, --force", "Skip confirmation prompts")

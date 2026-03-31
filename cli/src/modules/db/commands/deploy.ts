@@ -29,38 +29,34 @@ function resolveTargetUrl(options: DeployOptions, config: Config): {url: string;
     return {url: options.url, label: "direct URL"};
   }
 
-  if (!options.target) {
-    throw new Error(
-      "Either --target or --url is required.\n" +
-      "Usage:\n" +
-      '  postkit db deploy --target=staging\n' +
-      '  postkit db deploy --url=postgres://...',
-    );
+  if (options.target) {
+    const envUrl = config.environments[options.target];
+
+    if (!envUrl) {
+      const available = Object.keys(config.environments).filter(
+        (key) => !!config.environments[key],
+      );
+      const availableStr = available.length > 0
+        ? `Available environments: ${available.join(", ")}`
+        : "No environments configured in postkit.config.json";
+
+      const exists = options.target in config.environments;
+      const message = exists
+        ? `Environment "${options.target}" has no URL configured.`
+        : `Unknown environment: "${options.target}"`;
+
+      throw new Error(
+        `${message}\n${availableStr}\n\n` +
+        "Add environment URLs to your postkit.config.json:\n" +
+        '  "db": { "environments": { "staging": "postgres://..." } }',
+      );
+    }
+
+    return {url: envUrl, label: options.target};
   }
 
-  const envUrl = config.environments[options.target];
-
-  if (!envUrl) {
-    const available = Object.keys(config.environments).filter(
-      (key) => !!config.environments[key],
-    );
-    const availableStr = available.length > 0
-      ? `Available environments: ${available.join(", ")}`
-      : "No environments configured in postkit.config.json";
-
-    const exists = options.target in config.environments;
-    const message = exists
-      ? `Environment "${options.target}" has no URL configured.`
-      : `Unknown environment: "${options.target}"`;
-
-    throw new Error(
-      `${message}\n${availableStr}\n\n` +
-      "Add environment URLs to your postkit.config.json:\n" +
-      '  "db": { "environments": { "staging": "postgres://..." } }',
-    );
-  }
-
-  return {url: envUrl, label: options.target};
+  // Default to remoteDbUrl when neither --target nor --url is specified
+  return {url: config.remoteDbUrl, label: "remote (default)"};
 }
 
 async function cleanupExistingSession(

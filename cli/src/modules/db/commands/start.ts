@@ -1,4 +1,5 @@
 import ora from "ora";
+import inquirer from "inquirer";
 import path from "path";
 import {existsSync} from "fs";
 import fs from "fs/promises";
@@ -11,7 +12,8 @@ import {
   getTableCount,
 } from "../services/database";
 import {checkPgschemaInstalled} from "../services/pgschema";
-import {checkDbmateInstalled} from "../services/dbmate";
+import {checkDbmateInstalled, runDbmateStatus} from "../services/dbmate";
+import {getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
 
 export async function startCommand(options: CommandOptions): Promise<void> {
@@ -88,7 +90,76 @@ export async function startCommand(options: CommandOptions): Promise<void> {
     const remoteTableCount = await getTableCount(config.remoteDbUrl);
     logger.info(`Remote database has ${remoteTableCount} tables`);
 
-    // Step 4: Clone database
+    // Step 4: Verify database state
+    logger.step(4, 6, "Verifying database state...");
+
+    // Check 1: Pending committed migrations
+    const pendingCommitted = await getPendingCommittedMigrations();
+
+    if (pendingCommitted.length > 0) {
+      logger.blank();
+      logger.error("Database state verification failed!");
+      logger.blank();
+      logger.warn(`You have ${pendingCommitted.length} committed migration(s) pending deployment:`);
+      for (const cm of pendingCommitted) {
+        logger.warn(`  - ${cm.migrationFile.name} (${cm.description})`);
+      }
+      logger.blank();
+      logger.error("Cannot start a new session while committed migrations are pending deployment.");
+      logger.info("The remote database is not in sync with your committed migrations.");
+      logger.blank();
+      logger.info("To fix this:");
+      logger.info('  1. Run "postkit db deploy --target=<env>" to deploy committed migrations');
+      logger.info("  2. Then run \"postkit db start\" again");
+      logger.blank();
+      logger.info("If you want to discard committed migrations, manually delete .postkit/committed.json");
+      process.exit(1);
+    }
+
+    spinner.succeed("No pending committed migrations");
+
+    // Check 2: Run dbmate status to detect any pending migrations
+    spinner.start("Checking migration status...");
+    const statusOutput = await runDbmateStatus(config.remoteDbUrl);
+
+    // Check if status output contains "Pending" migrations
+    const hasPending = statusOutput.includes("Pending");
+
+    if (hasPending) {
+      spinner.warn("Found pending migrations in migrations directory");
+      logger.blank();
+      logger.warn("dbmate status output:");
+      console.log(statusOutput);
+      logger.blank();
+      logger.warn("There are migration files in your migrations/ directory that haven't been applied to the remote database.");
+      logger.info("This may cause unexpected behavior. Consider:");
+      logger.info('  1. Applying these migrations to the remote database first');
+      logger.info('  2. Or removing/moving these migration files if they\'re not needed');
+      logger.blank();
+
+      // Ask user if they want to continue
+      if (!options.force) {
+        const {confirm} = await inquirer.prompt([
+          {
+            type: "confirm",
+            name: "confirm",
+            message: "Continue starting session despite pending migrations?",
+            default: false,
+          },
+        ]);
+
+        if (!confirm) {
+          logger.info("Session start cancelled.");
+          process.exit(0);
+        }
+      } else {
+        logger.info("Continuing due to --force flag...");
+      }
+    } else {
+      spinner.succeed("All migrations applied - database is in sync");
+    }
+
+    // Step 5: Clone database
     logger.step(4, 5, "Cloning remote database to local...");
     spinner.start("Cloning database (this may take a moment)...");
 
@@ -102,8 +173,8 @@ export async function startCommand(options: CommandOptions): Promise<void> {
       logger.info(`Local clone has ${localTableCount} tables`);
     }
 
-    // Step 5: Create session
-    logger.step(5, 5, "Creating session...");
+    // Step 6: Create session
+    logger.step(6, 6, "Creating session...");
 
     if (!options.dryRun) {
       const session = await createSession(
