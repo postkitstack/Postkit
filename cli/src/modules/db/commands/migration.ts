@@ -13,9 +13,9 @@ interface MigrateOptions extends CommandOptions {
 }
 
 // Template will be dynamically generated with the schema name
+// Note: createMigrationFile() will add the -- migrate:up/down markers
 function getMigrationTemplate(schema: string): string {
-  return `-- migrate:up
--- Search path: ${schema}
+  return `-- Search path: ${schema}
 SET search_path TO "${schema}";
 
 -- Add your SQL migration here
@@ -33,10 +33,6 @@ SET search_path TO "${schema}";
 
 -- Create an index
 -- CREATE INDEX idx_users_email ON users(email);
-
--- migrate:down
--- Add rollback SQL here
--- DROP TABLE example_table;
 `;
 }
 
@@ -108,7 +104,7 @@ export async function migrationCommand(options: MigrateOptions, name?: string): 
     const migrationFile = await createMigrationFile(
       migrationName,
       template,
-      `-- Search path: ${config.schema}\n-- Add rollback SQL here\n`,
+      undefined, // createMigrationFile will add default rollback message
       sessionMigrationsDir,
     );
 

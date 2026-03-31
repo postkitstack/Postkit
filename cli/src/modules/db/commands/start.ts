@@ -122,10 +122,11 @@ export async function startCommand(options: CommandOptions): Promise<void> {
     spinner.start("Checking migration status...");
     const statusOutput = await runDbmateStatus(config.remoteDbUrl);
 
-    // Check if status output contains "Pending" migrations
-    const hasPending = statusOutput.includes("Pending");
+    // Check if there are actually pending migrations (look for [ ] unchecked items or Pending > 0)
+    // dbmate status shows "[ ] filename.sql" for pending and "[X] filename.sql" for applied
+    const hasPendingItems = statusOutput.includes("[ ") && !statusOutput.match(/Pending:\s*0\b/);
 
-    if (hasPending) {
+    if (hasPendingItems) {
       spinner.warn("Found pending migrations in migrations directory");
       logger.blank();
       logger.warn("dbmate status output:");
