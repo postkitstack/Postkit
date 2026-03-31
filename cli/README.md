@@ -67,18 +67,32 @@ postkit <module> <command> [options]
 ### **Example Commands**
 
 ```bash
+# Initialize project
+postkit init
+
 # Database migrations
-postkit db start                          # Start a migration session
+postkit db remote add dev "postgres://user:pass@host:5432/db" --default
+postkit db remote add staging "postgres://user:pass@host:5432/db"
+postkit db start                          # Start a migration session (uses default remote)
+postkit db start --remote staging         # Start with specific remote
 postkit db plan                           # Generate schema diff
 postkit db apply                          # Apply to local clone
-postkit db commit                         # Commit to remote
-postkit db deploy --target=staging        # Deploy to staging environment
-postkit db deploy --url=postgres://...    # Deploy to direct URL
+postkit db commit                         # Commit migrations
+postkit db deploy                         # Deploy to default remote
+postkit db deploy --remote staging        # Deploy to specific remote
 postkit db status                         # Show session state
 postkit db abort                          # Cancel session
-postkit db infra                          # Manage infrastructure (roles, schemas)
-postkit db grants                         # Manage grant statements
-postkit db seed                           # Manage seed data
+
+# Remote management
+postkit db remote list                    # List all remotes
+postkit db remote add <name> <url>        # Add a new remote
+postkit db remote remove <name>           # Remove a remote
+postkit db remote use <name>              # Set default remote
+
+# Infrastructure & data
+postkit db infra --apply                  # Apply infrastructure (roles, schemas)
+postkit db grants --apply                 # Apply grant statements
+postkit db seed --apply                   # Apply seed data
 
 # Keycloak auth
 postkit auth export                       # Export realm config
@@ -94,7 +108,7 @@ postkit auth sync                         # Export + Import
 src/
 ├── index.ts                  # Main CLI entry point
 ├── common/                   # Shared utilities (all modules)
-│   ├── config.ts             # .env loader & path resolution
+│   ├── config.ts             # Config loader & path resolution
 │   ├── logger.ts             # Chalk-based logger
 │   ├── shell.ts              # Shell command runner
 │   └── types.ts              # Shared TypeScript types
@@ -110,6 +124,34 @@ src/
         ├── commands/         # export, import, sync
         ├── services/         # Keycloak API, Docker importer
         └── utils/            # Auth-specific config
+```
+
+### **User Project Structure**
+
+```
+my-project/
+├── db/                       # User's database code (git tracked)
+│   └── schema/               # Schema definitions
+│       ├── infra/            # Roles, schemas, extensions
+│       ├── extensions/
+│       ├── types/
+│       ├── enums/
+│       ├── tables/
+│       ├── views/
+│       ├── functions/
+│       ├── triggers/
+│       ├── indexes/
+│       ├── grants/           # Grant statements
+│       └── seeds/            # Seed data
+├── .postkit/                 # PostKit runtime (gitignored)
+│   └── db/                   # All DB runtime files
+│       ├── session.json      # Session state
+│       ├── committed.json    # Committed migrations tracking
+│       ├── plan.sql          # Generated plan
+│       ├── schema.sql        # Generated schema
+│       ├── session/          # Session migrations (temporary)
+│       └── migrations/       # Committed migrations (for deploy)
+└── postkit.config.json       # Project configuration
 ```
 
 ### **Adding a New Module**

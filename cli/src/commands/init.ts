@@ -15,9 +15,7 @@ import type {PostkitConfig} from "../common/config";
 
 const GITIGNORE_ENTRIES = [
   "# Postkit",
-  ".postkit/session.json",
-  ".postkit/plan.sql",
-  ".postkit/schema.sql",
+  ".postkit/",
   "postkit.config.json",
 ];
 
@@ -25,7 +23,6 @@ const SCAFFOLD_CONFIG: PostkitConfig = {
   db: {
     localDbUrl: "",
     schemaPath: "schema",
-    migrationsPath: "migrations",
     schema: "public",
     pgSchemaBin: "",
     dbmateBin: "",
@@ -83,21 +80,29 @@ export async function initCommand(options: CommandOptions): Promise<void> {
 
   const totalSteps = 4;
 
-  // Step 1: Create .postkit/ directory
-  logger.step(1, totalSteps, "Creating .postkit/ directory");
+  // Step 1: Create .postkit/db/ directory
+  logger.step(1, totalSteps, "Creating .postkit/db/ directory");
   if (options.dryRun) {
-    logger.info(`Dry run: would create ${POSTKIT_DIR}/`);
+    logger.info(`Dry run: would create ${POSTKIT_DIR}/db/`);
   } else {
-    const spinner = ora("Creating .postkit/ directory...").start();
-    fs.mkdirSync(postkitDir, {recursive: true});
+    const spinner = ora("Creating .postkit/db/ directory...").start();
+    const postkitDbDir = path.join(postkitDir, "db");
+    fs.mkdirSync(postkitDbDir, {recursive: true});
     // Create empty runtime files
-    for (const file of ["session.json", "plan.sql", "schema.sql"]) {
-      const filePath = path.join(postkitDir, file);
+    for (const file of ["session.json", "plan.sql", "schema.sql", "committed.json"]) {
+      const filePath = path.join(postkitDbDir, file);
       if (!fs.existsSync(filePath)) {
         fs.writeFileSync(filePath, "");
       }
     }
-    spinner.succeed(".postkit/ directory created");
+    // Create subdirectories
+    for (const subdir of ["session", "migrations"]) {
+      const subPath = path.join(postkitDbDir, subdir);
+      if (!fs.existsSync(subPath)) {
+        fs.mkdirSync(subPath, {recursive: true});
+      }
+    }
+    spinner.succeed(".postkit/db/ directory created");
   }
 
   // Step 2: Generate postkit.config.json

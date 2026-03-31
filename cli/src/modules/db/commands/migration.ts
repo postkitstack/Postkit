@@ -111,13 +111,12 @@ export async function migrationCommand(options: MigrateOptions, name?: string): 
     spinner.succeed(`Migration file created: ${migrationFile.name}`);
     logger.info(`Path: ${migrationFile.path}`);
 
-    // Update session state
+    // Update session state (mark as planned, but DON'T track the file yet)
+    // Files are only tracked after being successfully applied
     logger.step(3, 3, "Updating session state...");
     spinner.start("Updating session...");
 
-    const existingFiles = session.pendingChanges.migrationFiles || [];
     await updatePendingChanges({
-      migrationFiles: [...existingFiles, {name: migrationFile.name, path: migrationFile.path}],
       planned: true, // Mark as planned since we have a migration file
     });
 

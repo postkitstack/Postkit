@@ -1,11 +1,16 @@
 import ora from "ora";
 import inquirer from "inquirer";
+import {existsSync} from "fs";
 import {logger} from "../../../common/logger";
 import {getSession, updatePendingChanges} from "../utils/session";
 import {getSessionMigrationsPath} from "../utils/db-config";
 import {wrapPlanSQL, getPlanFileContent} from "../services/pgschema";
 import {testConnection} from "../services/database";
-import {createMigrationFile, runDbmateMigrate, deleteMigrationFile} from "../services/dbmate";
+import {
+  createMigrationFile,
+  runSessionMigrate,
+  deleteMigrationFile,
+} from "../services/dbmate";
 import {generateSchemaFingerprint} from "../services/schema-generator";
 import {applyInfra, generateInfra} from "../services/infra-generator";
 import {applyGrants, generateGrants} from "../services/grant-generator";
@@ -26,21 +31,49 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
       process.exit(1);
     }
 
-    // Check if plan exists
-    if (!session.pendingChanges.planned || !session.pendingChanges.planFile) {
-      logger.error("No migration plan found.");
-      logger.info('Run "postkit db plan" first to generate a plan.');
-      process.exit(1);
+    // Check for migration files in session directory FIRST
+    const sessionMigrationsDir = getSessionMigrationsPath();
+    const fs = await import("fs/promises");
+    let migrationFiles: string[] = [];
+
+    if (existsSync(sessionMigrationsDir)) {
+      const files = await fs.readdir(sessionMigrationsDir);
+      migrationFiles = files.filter((f) => f.endsWith(".sql"));
     }
 
-    // Check if fully applied already
-    if (session.pendingChanges.applied) {
-      logger.warn("Changes have already been applied to the local database.");
-      logger.info(
-        'Run "postkit db commit" to commit session migrations.',
-      );
-      logger.info('Or run "postkit db plan" again if you made more changes.');
+    // Determine current state
+    const hasPlan =
+      session.pendingChanges.planned && session.pendingChanges.planFile;
+    const hasMigrations = migrationFiles.length > 0;
+    const isAlreadyApplied = session.pendingChanges.applied;
+
+    // Nothing to do?
+    if (!hasMigrations && !hasPlan) {
+      if (isAlreadyApplied) {
+        logger.warn("Changes have already been applied to the local database.");
+        logger.info('Run "postkit db commit" to commit session migrations.');
+      } else {
+        logger.error("No migration plan found.");
+        logger.info('Run "postkit db plan" first to generate a plan.');
+        logger.info(
+          'Or run "postkit db migration <name>" to create a manual migration.',
+        );
+      }
       return;
+    }
+
+    // Check if already applied (but allow re-applying if files exist)
+    if (isAlreadyApplied) {
+      if (migrationFiles.length === 0) {
+        logger.warn("Changes have already been applied to the local database.");
+        logger.info('Run "postkit db commit" to commit session migrations.');
+        logger.info('Or run "postkit db plan" again if you made more changes.');
+        return;
+      }
+
+      // Files exist, allow re-applying
+      await updatePendingChanges({applied: false});
+      logger.info(`Found ${migrationFiles.length} migration file(s) to apply.`);
     }
 
     // Resume from partial apply?
@@ -67,7 +100,9 @@ async function handleResume(
   const description = pc.description || "migration";
 
   logger.heading("Resuming Apply");
-  logger.info("Migration was already applied. Resuming from where it left off...");
+  logger.info(
+    "Migration was already applied. Resuming from where it left off...",
+  );
   logger.blank();
 
   let step = 1;
@@ -91,7 +126,9 @@ async function handleResume(
       spinner.fail("Failed to apply grants");
       logger.error(error instanceof Error ? error.message : String(error));
       logger.blank();
-      logger.warn("Grants failed. Migration is already applied to local database.");
+      logger.warn(
+        "Grants failed. Migration is already applied to local database.",
+      );
       logger.info('Run "postkit db apply" again to retry from grants.');
       process.exit(1);
     }
@@ -138,9 +175,10 @@ async function handleResume(
   await updatePendingChanges({applied: true});
 
   const migrationFiles = pc.migrationFiles || [];
-  const latestMigration = migrationFiles.length > 0
-    ? migrationFiles[migrationFiles.length - 1].name
-    : "unknown";
+  const latestMigration =
+    migrationFiles.length > 0
+      ? migrationFiles[migrationFiles.length - 1].name
+      : "unknown";
 
   logger.blank();
   logger.success("Migration applied to local database!");
@@ -157,6 +195,17 @@ async function handleFreshApply(
   options: CommandOptions,
   spinner: ReturnType<typeof ora>,
 ): Promise<void> {
+  // Check if this is a manual migration (no plan file)
+  const hasPlan =
+    session.pendingChanges.planned && session.pendingChanges.planFile;
+
+  if (!hasPlan) {
+    // Manual migration flow - skip plan steps, apply existing files
+    await handleManualMigrationApply(session, options, spinner);
+    return;
+  }
+
+  // Plan-based migration flow (original logic)
   // Validate schema fingerprint
   if (session.pendingChanges.schemaFingerprint) {
     const currentFingerprint = await generateSchemaFingerprint();
@@ -257,7 +306,12 @@ async function handleFreshApply(
     return;
   }
 
-  const migrationFile = await createMigrationFile(description, wrappedSQL, undefined, sessionMigrationsDir);
+  const migrationFile = await createMigrationFile(
+    description,
+    wrappedSQL,
+    undefined,
+    sessionMigrationsDir,
+  );
   spinner.succeed(`Migration file created: ${migrationFile.name}`);
   logger.info(`Path: ${migrationFile.path}`);
 
@@ -265,7 +319,7 @@ async function handleFreshApply(
   logger.step(5, 8, "Applying migration to local database...");
   spinner.start("Running dbmate migrate...");
 
-  const migrateResult = await runDbmateMigrate(session.localDbUrl, sessionMigrationsDir);
+  const migrateResult = await runSessionMigrate(session.localDbUrl);
 
   if (!migrateResult.success) {
     spinner.fail("Failed to apply migration");
@@ -288,7 +342,10 @@ async function handleFreshApply(
   const existingFiles = session.pendingChanges.migrationFiles || [];
   await updatePendingChanges({
     migrationApplied: true,
-    migrationFiles: [...existingFiles, {name: migrationFile.name, path: migrationFile.path}],
+    migrationFiles: [
+      ...existingFiles,
+      {name: migrationFile.name, path: migrationFile.path},
+    ],
     description,
   });
 
@@ -309,7 +366,9 @@ async function handleFreshApply(
     spinner.fail("Failed to apply grants");
     logger.error(error instanceof Error ? error.message : String(error));
     logger.blank();
-    logger.warn("Grants failed. Migration is already applied to local database.");
+    logger.warn(
+      "Grants failed. Migration is already applied to local database.",
+    );
     logger.info('Run "postkit db apply" again to retry from grants.');
     process.exit(1);
   }
@@ -352,13 +411,193 @@ async function handleFreshApply(
   logger.blank();
   logger.info("Next steps:");
   logger.info("  - Verify the changes work correctly");
-  logger.info(
-    '  - Run "postkit db commit" to commit session migrations',
-  );
-  logger.info(
-    '  - Or run "postkit db plan" again if you need more changes',
-  );
-  logger.info(
-    '  - Or run "postkit db abort" to cancel if something is wrong',
-  );
+  logger.info('  - Run "postkit db commit" to commit session migrations');
+  logger.info('  - Or run "postkit db plan" again if you need more changes');
+  logger.info('  - Or run "postkit db abort" to cancel if something is wrong');
+}
+
+/**
+ * Handle manual migration apply (no plan file).
+ * User has created migration files manually with `postkit db migration`.
+ */
+async function handleManualMigrationApply(
+  session: SessionState,
+  options: CommandOptions,
+  spinner: ReturnType<typeof ora>,
+): Promise<void> {
+  logger.heading("Applying Manual Migration");
+
+  // Get migration files from session directory
+  const sessionMigrationsDir = getSessionMigrationsPath();
+  const fs = await import("fs/promises");
+
+  if (!existsSync(sessionMigrationsDir)) {
+    logger.error("No migration files found in session directory.");
+    logger.info(
+      'Run "postkit db migration <name>" to create a manual migration.',
+    );
+    process.exit(1);
+  }
+
+  const files = await fs.readdir(sessionMigrationsDir);
+  const migrationFiles = files.filter((f) => f.endsWith(".sql"));
+
+  if (migrationFiles.length === 0) {
+    logger.error("No migration files found in session directory.");
+    logger.info(
+      'Run "postkit db migration <name>" to create a manual migration.',
+    );
+    process.exit(1);
+  }
+
+  logger.info(`Found ${migrationFiles.length} migration file(s):`);
+  for (const file of migrationFiles) {
+    logger.info(`  - ${file}`);
+  }
+  logger.blank();
+
+  // Get description from user or use filename
+  let description = migrationFiles[0]
+    .replace(/^\d+_/, "")
+    .replace(/\.sql$/, "");
+  if (migrationFiles.length > 1) {
+    description = `manual_migrations_${migrationFiles.length}`;
+  }
+
+  if (!options.force) {
+    const {confirm} = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "confirm",
+        message: `Apply ${migrationFiles.length} migration file(s) to the local database?`,
+        default: true,
+      },
+    ]);
+
+    if (!confirm) {
+      logger.info("Apply cancelled.");
+      return;
+    }
+  }
+
+  // Step 1: Test local connection
+  logger.step(1, 5, "Testing local database connection...");
+  spinner.start("Connecting to local database...");
+
+  const localConnected = await testConnection(session.localDbUrl);
+
+  if (!localConnected) {
+    spinner.fail("Failed to connect to local database");
+    logger.error("Could not connect to the local database.");
+    logger.info(
+      'The local clone may have been removed. Run "postkit db start" again.',
+    );
+    process.exit(1);
+  }
+
+  spinner.succeed("Connected to local database");
+
+  // Step 2: Apply infra
+  logger.step(2, 5, "Applying infrastructure...");
+  const infra = await generateInfra();
+
+  if (infra.length === 0) {
+    spinner.info("No infra files found - skipping");
+  } else {
+    spinner.start("Applying infra...");
+    await applyInfra(session.localDbUrl);
+    spinner.succeed(`Infra applied (${infra.length} file(s))`);
+  }
+
+  // Step 3: Apply migrations via dbmate
+  logger.step(3, 5, "Applying migration(s) to local database...");
+  spinner.start("Running dbmate migrate...");
+
+  const migrateResult = await runSessionMigrate(session.localDbUrl);
+
+  if (!migrateResult.success) {
+    spinner.fail("Failed to apply migration(s)");
+    logger.error("Migration apply failed:");
+    console.log(migrateResult.output);
+    process.exit(1);
+  }
+
+  spinner.succeed("Migration(s) applied to local database");
+
+  if (migrateResult.output) {
+    logger.debug(migrateResult.output, options.verbose);
+  }
+
+  // Track applied migrations
+  const appliedMigrations = migrationFiles.map((name) => ({
+    name,
+    path: `${sessionMigrationsDir}/${name}`,
+  }));
+
+  await updatePendingChanges({
+    migrationApplied: true,
+    migrationFiles: appliedMigrations,
+    description,
+  });
+
+  // Step 4: Apply grants
+  logger.step(4, 5, "Applying grants...");
+
+  try {
+    const grants = await generateGrants();
+
+    if (grants.length === 0) {
+      spinner.info("No grant files found - skipping");
+    } else {
+      spinner.start("Applying grants...");
+      await applyGrants(session.localDbUrl);
+      spinner.succeed(`Grants applied (${grants.length} file(s))`);
+    }
+  } catch (error) {
+    spinner.fail("Failed to apply grants");
+    logger.error(error instanceof Error ? error.message : String(error));
+    logger.blank();
+    logger.warn(
+      "Grants failed. Migration(s) are already applied to local database.",
+    );
+    logger.info('Run "postkit db apply" again to retry from grants.');
+    process.exit(1);
+  }
+
+  await updatePendingChanges({grantsApplied: true});
+
+  // Step 5: Apply seeds
+  logger.step(5, 5, "Applying seeds...");
+
+  try {
+    const seeds = await generateSeeds();
+
+    if (seeds.length === 0) {
+      spinner.info("No seed files found - skipping");
+    } else {
+      spinner.start("Applying seed data...");
+      await applySeeds(session.localDbUrl);
+      spinner.succeed(`Seeds applied (${seeds.length} file(s))`);
+    }
+  } catch (error) {
+    spinner.fail("Failed to apply seeds");
+    logger.error(error instanceof Error ? error.message : String(error));
+    logger.blank();
+    logger.warn("Seeds failed. Migration(s) and grants are already applied.");
+    logger.info('Run "postkit db apply" again to retry from seeds.');
+    process.exit(1);
+  }
+
+  await updatePendingChanges({seedsApplied: true, applied: true});
+
+  logger.blank();
+  logger.success("Migration(s) applied to local database!");
+  logger.blank();
+  logger.info(`Files: ${migrationFiles.join(", ")}`);
+  logger.info(`Description: ${description}`);
+  logger.blank();
+  logger.info("Next steps:");
+  logger.info("  - Verify the changes work correctly");
+  logger.info('  - Run "postkit db commit" to commit session migrations');
+  logger.info('  - Or run "postkit db abort" to cancel if something is wrong');
 }

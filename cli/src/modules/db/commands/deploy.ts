@@ -11,7 +11,7 @@ import {
   dropDatabase,
   getTableCount,
 } from "../services/database";
-import {runDbmateMigrate} from "../services/dbmate";
+import {runCommittedMigrate} from "../services/dbmate";
 import {generateInfra, applyInfra} from "../services/infra-generator";
 import {generateGrants, applyGrants} from "../services/grant-generator";
 import {generateSeeds, applySeeds} from "../services/seed-generator";
@@ -94,7 +94,7 @@ async function runSteps(
   // Dbmate migrate
   logger.step(step, totalSteps, `Running migrations on ${label}...`);
   spinner.start(`Running dbmate migrate on ${label}...`);
-  const migrateResult = await runDbmateMigrate(dbUrl, undefined, migrationFilter);
+  const migrateResult = await runCommittedMigrate(dbUrl, migrationFilter);
 
   if (!migrateResult.success) {
     spinner.fail(`Failed to run migrations on ${label}`);

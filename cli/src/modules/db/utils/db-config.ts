@@ -84,14 +84,9 @@ export function getConfig(): Config {
     ? path.resolve(projectRoot, config.db.schemaPath)
     : path.resolve(projectRoot, "schema");
 
-  const migrationsPath = config.db.migrationsPath
-    ? path.resolve(projectRoot, config.db.migrationsPath)
-    : path.resolve(projectRoot, "migrations");
-
   return {
     localDbUrl,
     schemaPath,
-    migrationsPath,
     schema: config.db.schema || "public",
     pgSchemaBin: resolvePgSchemaBin(config.db.pgSchemaBin),
     dbmateBin: resolveDbmateBin(config.db.dbmateBin),
@@ -100,22 +95,30 @@ export function getConfig(): Config {
   };
 }
 
+export function getPostkitDbDir(): string {
+  return path.join(getPostkitDir(), "db");
+}
+
 export function getSessionFilePath(): string {
-  return path.join(getPostkitDir(), "session.json");
+  return path.join(getPostkitDbDir(), "session.json");
 }
 
 export function getPlanFilePath(): string {
-  return path.join(getPostkitDir(), "plan.sql");
+  return path.join(getPostkitDbDir(), "plan.sql");
 }
 
 export function getGeneratedSchemaPath(): string {
-  return path.join(getPostkitDir(), "schema.sql");
+  return path.join(getPostkitDbDir(), "schema.sql");
 }
 
 export function getSessionMigrationsPath(): string {
-  return path.join(getPostkitDir(), "migrations");
+  return path.join(getPostkitDbDir(), "session");
+}
+
+export function getCommittedMigrationsPath(): string {
+  return path.join(getPostkitDbDir(), "migrations");
 }
 
 export function getCommittedFilePath(): string {
-  return path.join(getPostkitDir(), "committed.json");
+  return path.join(getPostkitDbDir(), "committed.json");
 }

@@ -1,6 +1,7 @@
 import type {MigrationFile, ApplyResult} from "../types/index";
 import {runCommand, commandExists} from "../../../common/shell";
 import {getConfig} from "../utils/db-config";
+import {getCommittedMigrationsPath, getSessionMigrationsPath} from "../utils/db-config";
 import {getPostkitDir} from "../../../common/config";
 import fs from "fs/promises";
 import path from "path";
@@ -24,8 +25,7 @@ export async function createMigrationFile(
   downSql?: string,
   migrationsDir?: string,
 ): Promise<MigrationFile> {
-  const config = getConfig();
-  const targetDir = migrationsDir || config.migrationsPath;
+  const targetDir = migrationsDir || getSessionMigrationsPath();
   const timestamp = generateTimestamp();
   const safeName = description.replace(/[^a-z0-9]/gi, "_").toLowerCase();
   const fileName = `${timestamp}_${safeName}.sql`;
@@ -54,13 +54,41 @@ export async function createMigrationFile(
   };
 }
 
-export async function runDbmateMigrate(
+/**
+ * Run dbmate migrate on session migrations directory.
+ * Used during development to test migrations on local clone.
+ */
+export async function runSessionMigrate(
   databaseUrl: string,
-  migrationsDir?: string,
+): Promise<ApplyResult> {
+  const config = getConfig();
+  const sessionDir = getSessionMigrationsPath();
+  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${sessionDir}" up`;
+  const result = await runCommand(command);
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      output: result.stderr || result.stdout,
+    };
+  }
+
+  return {
+    success: true,
+    output: result.stdout,
+  };
+}
+
+/**
+ * Run dbmate migrate on committed migrations directory.
+ * Used during deployment to apply committed migrations to target database.
+ */
+export async function runCommittedMigrate(
+  databaseUrl: string,
   migrationFilter?: string[],
 ): Promise<ApplyResult> {
   const config = getConfig();
-  let targetDir = migrationsDir || config.migrationsPath;
+  let targetDir = getCommittedMigrationsPath();
 
   // If migration filter is provided, use filtered migrations
   if (migrationFilter && migrationFilter.length > 0) {
@@ -91,15 +119,13 @@ export async function runDbmateMigrate(
 export async function copySessionMigrations(
   sessionMigrationsDir: string,
 ): Promise<{name: string; path: string}[]> {
-  const config = getConfig();
-
   if (!existsSync(sessionMigrationsDir)) {
     return [];
   }
 
   // Ensure root migrations directory exists
-  if (!existsSync(config.migrationsPath)) {
-    await fs.mkdir(config.migrationsPath, {recursive: true});
+  if (!existsSync(getCommittedMigrationsPath())) {
+    await fs.mkdir(getCommittedMigrationsPath(), {recursive: true});
   }
 
   const files = await fs.readdir(sessionMigrationsDir);
@@ -108,7 +134,7 @@ export async function copySessionMigrations(
   for (const file of files) {
     if (file.endsWith(".sql")) {
       const src = path.join(sessionMigrationsDir, file);
-      const dest = path.join(config.migrationsPath, file);
+      const dest = path.join(getCommittedMigrationsPath(), file);
       await fs.copyFile(src, dest);
       copied.push({name: file, path: dest});
     }
@@ -127,8 +153,7 @@ export async function deleteSessionMigrations(
 
 export async function runDbmateStatus(databaseUrl: string): Promise<string> {
   const config = getConfig();
-
-  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${config.migrationsPath}" status`;
+  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${getCommittedMigrationsPath()}" status`;
   const result = await runCommand(command);
 
   return result.stdout || result.stderr;
@@ -139,7 +164,7 @@ export async function runDbmateRollback(
 ): Promise<ApplyResult> {
   const config = getConfig();
 
-  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${config.migrationsPath}" down`;
+  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${getCommittedMigrationsPath()}" down`;
   const result = await runCommand(command);
 
   if (result.exitCode !== 0) {
@@ -156,13 +181,11 @@ export async function runDbmateRollback(
 }
 
 export async function listMigrations(): Promise<MigrationFile[]> {
-  const config = getConfig();
-
-  if (!existsSync(config.migrationsPath)) {
+  if (!existsSync(getCommittedMigrationsPath())) {
     return [];
   }
 
-  const files = await fs.readdir(config.migrationsPath);
+  const files = await fs.readdir(getCommittedMigrationsPath());
   const migrations: MigrationFile[] = [];
 
   for (const file of files) {
@@ -171,7 +194,7 @@ export async function listMigrations(): Promise<MigrationFile[]> {
       if (match) {
         migrations.push({
           name: file,
-          path: path.join(config.migrationsPath, file),
+          path: path.join(getCommittedMigrationsPath(), file),
           timestamp: match[1],
         });
       }
@@ -239,8 +262,6 @@ export async function mergeSessionMigrations(
   sessionMigrationsDir: string,
   description: string,
 ): Promise<MigrationFile> {
-  const config = getConfig();
-
   // Check if session migrations directory exists
   if (!existsSync(sessionMigrationsDir)) {
     throw new Error(`Session migrations directory not found: ${sessionMigrationsDir}`);
@@ -302,7 +323,7 @@ export async function mergeSessionMigrations(
   mergedContent.push("-- Add rollback SQL here if needed");
 
   // Write to the main migrations directory (not session directory)
-  const targetDir = config.migrationsPath;
+  const targetDir = getCommittedMigrationsPath();
 
   // Ensure migrations directory exists
   if (!existsSync(targetDir)) {
@@ -323,10 +344,9 @@ export async function mergeSessionMigrations(
  * Filters migrations to only include specified files
  * Creates a temporary directory with filtered migrations for dbmate to process
  */
-export async function filterMigrations(
+async function filterMigrations(
   migrationNames: string[],
 ): Promise<string> {
-  const config = getConfig();
   const tempDir = path.join(getPostkitDir(), "temp-migrations");
 
   // Clean up temp directory if it exists
@@ -339,7 +359,7 @@ export async function filterMigrations(
 
   // Copy only specified migrations to temp directory
   for (const name of migrationNames) {
-    const srcPath = path.join(config.migrationsPath, name);
+    const srcPath = path.join(getCommittedMigrationsPath(), name);
     if (existsSync(srcPath)) {
       const destPath = path.join(tempDir, name);
       await fs.copyFile(srcPath, destPath);
@@ -352,7 +372,7 @@ export async function filterMigrations(
 /**
  * Cleans up the temporary migrations directory
  */
-export async function cleanupFilteredMigrations(): Promise<void> {
+async function cleanupFilteredMigrations(): Promise<void> {
   const tempDir = path.join(getPostkitDir(), "temp-migrations");
 
   if (existsSync(tempDir)) {

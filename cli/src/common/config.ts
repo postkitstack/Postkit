@@ -42,7 +42,6 @@ export interface PostkitConfig {
   db: {
     localDbUrl: string;
     schemaPath: string;
-    migrationsPath: string;
     schema: string;
     pgSchemaBin: string;
     dbmateBin: string;
