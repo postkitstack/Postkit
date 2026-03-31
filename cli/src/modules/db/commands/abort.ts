@@ -32,12 +32,9 @@ export async function abortCommand(options: CommandOptions): Promise<void> {
     logger.info(
       `  Applied to local: ${session.pendingChanges.applied ? "Yes" : "No"}`,
     );
-
-    if (session.commitState) {
-      logger.info(
-        `  Commit in progress: Yes (remote applied: ${session.commitState.remoteApplied ? "Yes" : "No"})`,
-      );
-    }
+    logger.info(
+      `  Session migrations: ${session.pendingChanges.migrationFiles.length}`,
+    );
 
     logger.blank();
 
@@ -69,36 +66,19 @@ export async function abortCommand(options: CommandOptions): Promise<void> {
       spinner.succeed("Plan file removed");
     }
 
-    // Step 2: Clean up orphaned migration file
-    logger.step(2, 5, "Checking for orphaned migration files...");
+    // Step 2: Clean up orphaned migration file (session migrations only)
+    logger.step(2, 5, "Checking for session migration files...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping migration file cleanup");
-    } else if (session.commitState?.migrationFile) {
-      if (session.commitState.remoteApplied) {
-        spinner.warn(
-          `Migration "${session.commitState.migrationFile.name}" was already applied to remote - keeping file`,
-        );
-        logger.warn(
-          "This migration has been applied to the remote database and cannot be undone by aborting.",
-        );
-        logger.info(
-          "You may need to create a new migration to revert these changes.",
-        );
-      } else {
-        const deleted = await deleteMigrationFile(
-          session.commitState.migrationFile.path,
-        );
-        if (deleted) {
-          spinner.succeed(
-            `Orphaned migration file removed: ${session.commitState.migrationFile.name}`,
-          );
-        } else {
-          spinner.info("Migration file already removed");
-        }
-      }
     } else {
-      spinner.info("No orphaned migration files found");
+      // Note: We don't delete committed migrations - they persist for deployment
+      const sessionMigrations = session.pendingChanges.migrationFiles || [];
+      if (sessionMigrations.length > 0) {
+        spinner.info(`Found ${sessionMigrations.length} session migration file(s) - will be cleaned up`);
+      } else {
+        spinner.info("No session migration files found");
+      }
     }
 
     // Step 3: Delete generated schema
@@ -145,16 +125,9 @@ export async function abortCommand(options: CommandOptions): Promise<void> {
     logger.success("Migration session aborted.");
     logger.blank();
     logger.info("All local changes have been discarded.");
-    if (session.commitState?.remoteApplied) {
-      logger.warn(
-        "Note: The migration was already applied to the remote database.",
-      );
-      logger.info(
-        "Create a new session to revert remote changes if needed.",
-      );
-    } else {
-      logger.info('Run "postkit db start" to begin a new session.');
-    }
+    logger.info("Note: Committed migrations are preserved for deployment.");
+    logger.info('Run "postkit db deploy --target=<env>" to deploy committed migrations.');
+    logger.info('Run "postkit db start" to begin a new session.');
   } catch (error) {
     spinner.fail("Failed to abort session");
     logger.error(error instanceof Error ? error.message : String(error));

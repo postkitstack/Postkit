@@ -53,30 +53,8 @@ export async function runPgschemaplan(
       rawPlan.trim().length > 0 && !rawPlan.includes("-- No changes");
 
     if (hasChanges) {
-      // Wrap the raw plan with section markers
-      planOutput = [
-        "-- ============================================",
-        "-- PRE-MIGRATION",
-        "-- Add any custom SQL to run before the schema changes",
-        "-- ============================================",
-        "",
-        "",
-        "-- ============================================",
-        "-- GENERATED PLAN (not recommended to change)",
-        "-- ============================================",
-        "",
-        rawPlan.trim(),
-        "",
-        "",
-        "-- ============================================",
-        "-- POST-MIGRATION",
-        "-- Add any custom SQL to run after the schema changes",
-        "-- ============================================",
-        "",
-      ].join("\n");
-
-      // Write back the wrapped content
-      await fs.writeFile(planFile, planOutput, "utf-8");
+      // Use raw plan output directly without wrappers
+      planOutput = rawPlan.trim();
     } else {
       planOutput = rawPlan;
     }

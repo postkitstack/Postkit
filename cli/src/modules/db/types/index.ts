@@ -1,12 +1,3 @@
-export interface CommitState {
-  migrationFile: { name: string; path: string } | null;
-  remoteApplied: boolean;
-  infraApplied: boolean;
-  grantsApplied: boolean;
-  seedsApplied: boolean;
-  description: string;
-}
-
 export interface SessionState {
   active: boolean;
   startedAt: string;
@@ -24,7 +15,6 @@ export interface SessionState {
     grantsApplied: boolean;
     seedsApplied: boolean;
   };
-  commitState?: CommitState;
 }
 
 export interface Config {
@@ -78,4 +68,17 @@ export interface SeedStatement {
 export interface InfraStatement {
   name: string;
   content: string;
+}
+
+export interface CommittedMigration {
+  migrationFile: { name: string; path: string; timestamp: string };
+  description: string;
+  sessionMigrations: { name: string; path: string }[];
+  committedAt: string;
+  deployed: boolean;
+  deployedAt?: string;
+}
+
+export interface CommittedState {
+  migrations: CommittedMigration[];
 }

@@ -37,7 +37,7 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     if (session.pendingChanges.applied) {
       logger.warn("Changes have already been applied to the local database.");
       logger.info(
-        'Run "postkit db commit" to apply migration to remote.',
+        'Run "postkit db commit" to commit session migrations.',
       );
       logger.info('Or run "postkit db plan" again if you made more changes.');
       return;
@@ -149,7 +149,7 @@ async function handleResume(
   logger.info(`Description: ${description}`);
   logger.blank();
   logger.info("Next steps:");
-  logger.info('  - Run "postkit db commit" to apply migration to remote');
+  logger.info('  - Run "postkit db commit" to commit session migrations');
 }
 
 async function handleFreshApply(
@@ -353,7 +353,7 @@ async function handleFreshApply(
   logger.info("Next steps:");
   logger.info("  - Verify the changes work correctly");
   logger.info(
-    '  - Run "postkit db commit" to apply migration to remote',
+    '  - Run "postkit db commit" to commit session migrations',
   );
   logger.info(
     '  - Or run "postkit db plan" again if you need more changes',

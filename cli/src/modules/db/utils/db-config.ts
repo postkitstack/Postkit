@@ -124,3 +124,7 @@ export function getGeneratedSchemaPath(): string {
 export function getSessionMigrationsPath(): string {
   return path.join(getPostkitDir(), "migrations");
 }
+
+export function getCommittedFilePath(): string {
+  return path.join(getPostkitDir(), "committed.json");
+}

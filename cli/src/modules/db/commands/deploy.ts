@@ -15,6 +15,7 @@ import {runDbmateMigrate} from "../services/dbmate";
 import {generateInfra, applyInfra} from "../services/infra-generator";
 import {generateGrants, applyGrants} from "../services/grant-generator";
 import {generateSeeds, applySeeds} from "../services/seed-generator";
+import {getPendingCommittedMigrations, markMigrationDeployed} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
 import type {Config} from "../types/index";
 
@@ -95,6 +96,7 @@ async function runSteps(
   spinner: ReturnType<typeof ora>,
   stepOffset: number,
   totalSteps: number,
+  migrationFilter?: string[],
 ): Promise<void> {
   let step = stepOffset;
 
@@ -115,7 +117,7 @@ async function runSteps(
   // Dbmate migrate
   logger.step(step, totalSteps, `Running migrations on ${label}...`);
   spinner.start(`Running dbmate migrate on ${label}...`);
-  const migrateResult = await runDbmateMigrate(dbUrl);
+  const migrateResult = await runDbmateMigrate(dbUrl, undefined, migrationFilter);
 
   if (!migrateResult.success) {
     spinner.fail(`Failed to run migrations on ${label}`);
@@ -165,7 +167,28 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     logger.info(`Target: ${targetLabel}`);
     logger.blank();
 
-    // Step 2: Check for active session
+    // Step 2: Check for pending committed migrations
+    const pendingMigrations = await getPendingCommittedMigrations();
+
+    if (pendingMigrations.length === 0) {
+      logger.info("No committed migrations pending deployment.");
+      logger.blank();
+      logger.info("To commit migrations:");
+      logger.info('  1. Run "postkit db start" to begin a session');
+      logger.info('  2. Make schema changes or run "postkit db plan"');
+      logger.info('  3. Run "postkit db apply" to test locally');
+      logger.info('  4. Run "postkit db commit" to commit migrations');
+      logger.blank();
+      return;
+    }
+
+    logger.info(`Found ${pendingMigrations.length} committed migration(s) to deploy:`);
+    for (const cm of pendingMigrations) {
+      logger.info(`  - ${cm.migrationFile.name} (${cm.description})`);
+    }
+    logger.blank();
+
+    // Step 3: Check for active session
     const sessionActive = await hasActiveSession();
 
     if (sessionActive) {
@@ -174,6 +197,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     }
 
     const totalSteps = 11;
+    const migrationNames = pendingMigrations.map(m => m.migrationFile.name);
 
     // Step 1: Test target DB connection
     logger.step(1, totalSteps, "Testing target database connection...");
@@ -203,7 +227,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     logger.heading("Dry Run (local verification)");
 
     try {
-      await runSteps(localDbUrl, "local clone", spinner, 3, totalSteps);
+      await runSteps(localDbUrl, "local clone", spinner, 3, totalSteps, migrationNames);
     } catch (error) {
       spinner.fail("Dry run failed on local clone");
       logger.error(error instanceof Error ? error.message : String(error));
@@ -231,7 +255,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
         {
           type: "confirm",
           name: "confirm",
-          message: `Deploy to ${targetLabel}? This will apply migrations to the target database.`,
+          message: `Deploy to ${targetLabel}? This will apply ${pendingMigrations.length} migration(s) to the target database.`,
           default: false,
         },
       ]);
@@ -253,7 +277,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     logger.heading("Deploying to Target");
 
     try {
-      await runSteps(targetUrl, targetLabel, spinner, 7, totalSteps);
+      await runSteps(targetUrl, targetLabel, spinner, 7, totalSteps, migrationNames);
     } catch (error) {
       logger.error(error instanceof Error ? error.message : String(error));
       logger.blank();
@@ -270,8 +294,19 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       process.exit(1);
     }
 
-    // Step 11: Drop local clone
-    logger.step(11, totalSteps, "Cleaning up local clone...");
+    // Step 11: Mark migrations as deployed
+    logger.step(11, totalSteps, "Marking migrations as deployed...");
+    spinner.start("Updating committed state...");
+
+    for (const migration of pendingMigrations) {
+      await markMigrationDeployed(migration.migrationFile.name);
+    }
+
+    spinner.succeed(`${pendingMigrations.length} migration(s) marked as deployed`);
+
+    // Drop local clone
+    logger.blank();
+    logger.step(12, 12, "Cleaning up local clone...");
     spinner.start("Dropping local clone database...");
 
     try {
@@ -281,9 +316,14 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       spinner.warn("Failed to drop local clone (non-fatal): " + (error instanceof Error ? error.message : String(error)));
     }
 
-    // Step 9: Report success
+    // Report success
     logger.blank();
     logger.success(`Deployment to ${targetLabel} completed successfully!`);
+    logger.blank();
+    logger.info(`Deployed ${pendingMigrations.length} migration(s):`);
+    for (const cm of pendingMigrations) {
+      logger.info(`  ✓ ${cm.migrationFile.name} - ${cm.description}`);
+    }
     logger.blank();
   } catch (error) {
     spinner.fail("Deployment failed");

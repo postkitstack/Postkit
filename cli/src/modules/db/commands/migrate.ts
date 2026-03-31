@@ -1,0 +1,168 @@
+import ora from "ora";
+import inquirer from "inquirer";
+import {logger} from "../../../common/logger";
+import {getSession, updatePendingChanges} from "../utils/session";
+import {getSessionMigrationsPath} from "../utils/db-config";
+import {createMigrationFile} from "../services/dbmate";
+import {testConnection} from "../services/database";
+import type {CommandOptions} from "../../../common/types";
+
+interface MigrateOptions extends CommandOptions {
+  name?: string;
+  description?: string;
+}
+
+const MIGRATION_TEMPLATE = `-- migrate:up
+-- Add your SQL migration here
+-- Examples:
+
+-- Create a table
+-- CREATE TABLE example_table (
+--   id SERIAL PRIMARY KEY,
+--   name TEXT NOT NULL,
+--   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- );
+
+-- Add a column
+-- ALTER TABLE users ADD COLUMN email TEXT UNIQUE;
+
+-- Create an index
+-- CREATE INDEX idx_users_email ON users(email);
+
+-- migrate:down
+-- Add rollback SQL here
+-- DROP TABLE example_table;
+`;
+
+export async function migrateCommand(options: MigrateOptions, name?: string): Promise<void> {
+  const spinner = ora();
+
+  try {
+    // Check for active session
+    const session = await getSession();
+
+    if (!session || !session.active) {
+      logger.error("No active migration session.");
+      logger.info('Run "postkit db start" to begin a new session.');
+      process.exit(1);
+    }
+
+    // Get migration name
+    let migrationName = name || options.name;
+
+    if (!migrationName) {
+      const {inputName} = await inquirer.prompt([
+        {
+          type: "input",
+          name: "inputName",
+          message: "Migration name (e.g. add_users_table):",
+          validate: (input: string) =>
+            input.trim().length > 0 || "Migration name is required",
+        },
+      ]);
+      migrationName = inputName.trim();
+    }
+
+    // Get optional description
+    let description = options.description;
+    if (!description) {
+      const {inputDesc} = await inquirer.prompt([
+        {
+          type: "input",
+          name: "inputDesc",
+          message: "Description (optional, press Enter to skip):",
+        },
+      ]);
+      description = inputDesc.trim() || undefined;
+    }
+
+    logger.heading("Create Manual Migration");
+    logger.blank();
+    logger.info(`Migration name: ${migrationName}`);
+    if (description) {
+      logger.info(`Description: ${description}`);
+    }
+    logger.blank();
+
+    // Test local connection
+    logger.step(1, 3, "Testing local database connection...");
+    spinner.start("Connecting to local database...");
+
+    const localConnected = await testConnection(session.localDbUrl);
+
+    if (!localConnected) {
+      spinner.fail("Failed to connect to local database");
+      logger.error("Could not connect to the local database.");
+      logger.info(
+        'The local clone may have been removed. Run "postkit db start" again.',
+      );
+      process.exit(1);
+    }
+
+    spinner.succeed("Connected to local database");
+
+    // Create migration file
+    logger.step(2, 3, "Creating migration file...");
+    spinner.start("Creating migration file with template...");
+
+    const sessionMigrationsDir = getSessionMigrationsPath();
+    const migrationFile = await createMigrationFile(
+      migrationName,
+      MIGRATION_TEMPLATE,
+      "-- Add rollback SQL here\n",
+      sessionMigrationsDir,
+    );
+
+    spinner.succeed(`Migration file created: ${migrationFile.name}`);
+    logger.info(`Path: ${migrationFile.path}`);
+
+    // Update session state
+    logger.step(3, 3, "Updating session state...");
+    spinner.start("Updating session...");
+
+    const existingFiles = session.pendingChanges.migrationFiles || [];
+    await updatePendingChanges({
+      migrationFiles: [...existingFiles, {name: migrationFile.name, path: migrationFile.path}],
+      planned: true, // Mark as planned since we have a migration file
+    });
+
+    spinner.succeed("Session updated");
+
+    logger.blank();
+    logger.success("Manual migration created!");
+    logger.blank();
+    logger.info(`Migration: ${migrationFile.name}`);
+    logger.info(`Path: ${migrationFile.path}`);
+    logger.blank();
+
+    // Open in editor if EDITOR is set
+    const editor = process.env.EDITOR || process.env.VISUAL;
+    if (editor) {
+      logger.info(`Opening ${migrationFile.name} in ${editor}...`);
+
+      try {
+        const {runCommand} = await import("../../../common/shell");
+        // Open editor in foreground (don't use runInBackground)
+        await runCommand(`${editor} "${migrationFile.path}"`, {
+          stdio: "inherit",
+        });
+      } catch (error) {
+        logger.warn("Failed to open editor. You can edit the file manually.");
+      }
+    } else {
+      logger.info("Edit the migration file manually to add your SQL.");
+      logger.info("Set the EDITOR environment variable to auto-open in your editor.");
+    }
+
+    logger.blank();
+    logger.info("Next steps:");
+    logger.info("  - Edit the migration file to add your SQL");
+    logger.info('  - Run "postkit db apply" to apply the migration to the local database');
+    logger.info('  - Run "postkit db commit" to commit the migration');
+    logger.info('  - Run "postkit db migrate <name>" to create more migrations in this session');
+  } catch (error) {
+    spinner.fail("Failed to create migration");
+    logger.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+}

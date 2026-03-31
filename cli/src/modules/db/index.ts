@@ -5,6 +5,7 @@ import {applyCommand} from "./commands/apply";
 import {commitCommand} from "./commands/commit";
 import {statusCommand} from "./commands/status";
 import {abortCommand} from "./commands/abort";
+import {migrateCommand} from "./commands/migrate";
 import {infraCommand} from "./commands/infra";
 import {grantsCommand} from "./commands/grants";
 import {seedCommand} from "./commands/seed";
@@ -42,7 +43,7 @@ export function registerDbModule(program: Command): void {
 
   // Commit command
   db.command("commit")
-    .description("Apply migration to remote database")
+    .description("Merge session migrations into a single committed migration")
     .option("-f, --force", "Skip confirmation prompt")
     .action(async (cmdOptions) => {
       const options = {...program.opts(), ...cmdOptions};
@@ -64,6 +65,16 @@ export function registerDbModule(program: Command): void {
     .action(async (cmdOptions) => {
       const options = {...program.opts(), ...cmdOptions};
       await abortCommand(options);
+    });
+
+  // Migrate command
+  db.command("migrate")
+    .description("Create a manual SQL migration")
+    .argument("[name]", "Migration name (e.g. add_users_table)")
+    .option("-d, --description <desc>", "Migration description")
+    .action(async (name, cmdOptions) => {
+      const options = {...program.opts(), ...cmdOptions};
+      await migrateCommand(options, name);
     });
 
   // Infra command
