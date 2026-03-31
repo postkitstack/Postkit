@@ -71,15 +71,53 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
         return;
       }
 
-      // Files exist, allow re-applying
-      await updatePendingChanges({applied: false});
-      logger.info(`Found ${migrationFiles.length} migration file(s) to apply.`);
+      // Files exist, check for new ones
+      const trackedFiles = session.pendingChanges.migrationFiles || [];
+      const trackedFileNames = new Set(trackedFiles.map((f) => f.name));
+      const newFiles = migrationFiles.filter((f) => !trackedFileNames.has(f));
+
+      if (newFiles.length > 0) {
+        await updatePendingChanges({applied: false});
+        logger.info(`Found ${newFiles.length} new migration file(s):`);
+        for (const file of newFiles) {
+          logger.info(`  - ${file}`);
+        }
+        logger.blank();
+      } else {
+        // No new files, already fully applied
+        logger.warn("Changes have already been applied to the local database.");
+        logger.info('Run "postkit db commit" to commit session migrations.');
+        logger.info('Or run "postkit db plan" again if you made more changes.');
+        return;
+      }
+    } else if (hasMigrations && !hasPlan) {
+      // First time applying manual migrations - show file list
+      logger.info(`Found ${migrationFiles.length} migration file(s):`);
+      for (const file of migrationFiles) {
+        logger.info(`  - ${file}`);
+      }
+      logger.blank();
     }
 
+    // Check for NEW migration files (compare disk vs tracked)
+    const trackedFiles = session.pendingChanges.migrationFiles || [];
+    const trackedFileNames = new Set(trackedFiles.map((f) => f.name));
+    const newFiles = migrationFiles.filter((f) => !trackedFileNames.has(f));
+
     // Resume from partial apply?
-    if (session.pendingChanges.migrationApplied) {
+    // Only resume if NO new migration files exist
+    if (session.pendingChanges.migrationApplied && newFiles.length === 0) {
       await handleResume(session, options, spinner);
       return;
+    }
+
+    // If we have new files, reset migrationApplied to allow applying them
+    if (newFiles.length > 0 && session.pendingChanges.migrationApplied) {
+      await updatePendingChanges({
+        migrationApplied: false,
+        grantsApplied: false,
+        seedsApplied: false,
+      });
     }
 
     // Fresh apply flow
@@ -195,6 +233,28 @@ async function handleFreshApply(
   options: CommandOptions,
   spinner: ReturnType<typeof ora>,
 ): Promise<void> {
+  // Get session migrations path (used in multiple places)
+  const sessionMigrationsDir = getSessionMigrationsPath();
+  const fs = await import("fs/promises");
+  const {existsSync} = await import("fs");
+
+  // Check for NEW manual migration files first (before plan check)
+
+  if (existsSync(sessionMigrationsDir)) {
+    const trackedFiles = session.pendingChanges.migrationFiles || [];
+    const trackedFileNames = new Set(trackedFiles.map((f) => f.name));
+    const files = await fs.readdir(sessionMigrationsDir);
+    const newManualFiles = files.filter(
+      (f) => f.endsWith(".sql") && !trackedFileNames.has(f)
+    );
+
+    // If new manual files exist, use manual flow even if plan exists
+    if (newManualFiles.length > 0) {
+      await handleManualMigrationApply(session, options, spinner);
+      return;
+    }
+  }
+
   // Check if this is a manual migration (no plan file)
   const hasPlan =
     session.pendingChanges.planned && session.pendingChanges.planFile;
@@ -291,8 +351,6 @@ async function handleFreshApply(
 
   // Step 4: Create migration file in session migrations dir
   logger.step(4, 8, "Creating migration file...");
-
-  const sessionMigrationsDir = getSessionMigrationsPath();
 
   spinner.start("Wrapping plan and creating migration file...");
 
@@ -399,9 +457,25 @@ async function handleFreshApply(
 
   await updatePendingChanges({seedsApplied: true});
 
-  // Step 8: Mark fully applied
+  // Step 8: Mark fully applied and clean up plan file
   logger.step(8, 8, "Updating session state...");
-  await updatePendingChanges({applied: true});
+
+  // Clean up plan file since migration is now committed to session files
+  if (session.pendingChanges.planFile) {
+    const fs = await import("fs/promises");
+    const {existsSync} = await import("fs");
+
+    if (existsSync(session.pendingChanges.planFile)) {
+      await fs.unlink(session.pendingChanges.planFile);
+    }
+  }
+
+  await updatePendingChanges({
+    applied: true,
+    planned: false,
+    planFile: null,
+    schemaFingerprint: null,
+  });
 
   logger.blank();
   logger.success("Migration applied to local database!");
@@ -449,12 +523,6 @@ async function handleManualMigrationApply(
     );
     process.exit(1);
   }
-
-  logger.info(`Found ${migrationFiles.length} migration file(s):`);
-  for (const file of migrationFiles) {
-    logger.info(`  - ${file}`);
-  }
-  logger.blank();
 
   // Get description from user or use filename
   let description = migrationFiles[0]
