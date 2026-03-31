@@ -250,7 +250,7 @@ async function handleFreshApply(
 
     // If new manual files exist, use manual flow even if plan exists
     if (newManualFiles.length > 0) {
-      await handleManualMigrationApply(session, options, spinner);
+      await handleManualMigrationApply(session, options, spinner, newManualFiles.length);
       return;
     }
   }
@@ -301,23 +301,6 @@ async function handleFreshApply(
     },
   ]);
   const description = desc.trim();
-
-  // Confirm unless force flag
-  if (!options.force) {
-    const {confirm} = await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "confirm",
-        message: "Apply these changes to the local database?",
-        default: true,
-      },
-    ]);
-
-    if (!confirm) {
-      logger.info("Apply cancelled.");
-      return;
-    }
-  }
 
   // Step 2: Test local connection
   logger.step(2, 8, "Testing local database connection...");
@@ -498,6 +481,7 @@ async function handleManualMigrationApply(
   session: SessionState,
   options: CommandOptions,
   spinner: ReturnType<typeof ora>,
+  newFilesCount?: number,
 ): Promise<void> {
   logger.heading("Applying Manual Migration");
 
@@ -530,22 +514,6 @@ async function handleManualMigrationApply(
     .replace(/\.sql$/, "");
   if (migrationFiles.length > 1) {
     description = `manual_migrations_${migrationFiles.length}`;
-  }
-
-  if (!options.force) {
-    const {confirm} = await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "confirm",
-        message: `Apply ${migrationFiles.length} migration file(s) to the local database?`,
-        default: true,
-      },
-    ]);
-
-    if (!confirm) {
-      logger.info("Apply cancelled.");
-      return;
-    }
   }
 
   // Step 1: Test local connection

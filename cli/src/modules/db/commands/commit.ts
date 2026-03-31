@@ -38,7 +38,6 @@ export async function commitCommand(options: CommandOptions): Promise<void> {
       process.exit(1);
     }
 
-    const description = session.pendingChanges.description || "migration";
     const sessionMigrationsDir = getSessionMigrationsPath();
 
     logger.heading("Commit Migration");
@@ -59,25 +58,20 @@ export async function commitCommand(options: CommandOptions): Promise<void> {
       logger.blank();
     }
 
-    // Confirm unless force flag
-    if (!options.force) {
-      const {confirm} = await inquirer.prompt([
-        {
-          type: "confirm",
-          name: "confirm",
-          message: "Merge session migrations into a single committed migration?",
-          default: false,
-        },
-      ]);
+    // Prompt for commit message (required)
+    const {desc} = await inquirer.prompt([
+      {
+        type: "input",
+        name: "desc",
+        message: "Commit message (e.g. add_users_table):",
+        validate: (input: string) =>
+          input.trim().length > 0 || "Commit message is required",
+      },
+    ]);
+    const description = desc.trim();
 
-      if (!confirm) {
-        logger.info("Commit cancelled.");
-        return;
-      }
-    }
-
-    // Step 2: Merge session migrations
-    logger.step(1, 4, "Merging session migrations...");
+    // Step 1: Merge session migrations
+    logger.step(1, 3, "Merging session migrations...");
     spinner.start("Creating merged migration file...");
 
     const mergedMigration = await mergeSessionMigrations(
@@ -88,8 +82,8 @@ export async function commitCommand(options: CommandOptions): Promise<void> {
     spinner.succeed(`Merged migration created: ${mergedMigration.name}`);
     logger.info(`Path: ${mergedMigration.path}`);
 
-    // Step 3: Track in committed state
-    logger.step(2, 4, "Tracking in committed state...");
+    // Step 2: Track in committed state
+    logger.step(2, 3, "Tracking in committed state...");
     spinner.start("Saving committed migration record...");
 
     await addCommittedMigration({
@@ -106,8 +100,8 @@ export async function commitCommand(options: CommandOptions): Promise<void> {
 
     spinner.succeed("Committed migration tracked");
 
-    // Step 4: Cleanup session files
-    logger.step(3, 4, "Cleaning up session files...");
+    // Step 3: Cleanup session files
+    logger.step(3, 3, "Cleaning up session files...");
     spinner.start("Removing session files...");
 
     await deleteSessionMigrations(sessionMigrationsDir);
@@ -118,7 +112,8 @@ export async function commitCommand(options: CommandOptions): Promise<void> {
     spinner.succeed("Session files cleaned up");
 
     // Final summary
-    logger.step(4, 4, "Complete!");
+    logger.blank();
+    logger.success("Migration committed successfully!");
     logger.blank();
     logger.success("Migration committed successfully!");
     logger.blank();

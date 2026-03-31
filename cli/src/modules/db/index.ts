@@ -42,18 +42,16 @@ export function registerDbModule(program: Command): void {
   // Apply command
   db.command("apply")
     .description("Apply schema changes to local cloned database")
-    .option("-f, --force", "Skip confirmation prompt")
-    .action(async (cmdOptions) => {
-      const options = {...program.opts(), ...cmdOptions};
+    .action(async () => {
+      const options = program.opts();
       await applyCommand(options);
     });
 
   // Commit command
   db.command("commit")
     .description("Merge session migrations into a single committed migration")
-    .option("-f, --force", "Skip confirmation prompt")
-    .action(async (cmdOptions) => {
-      const options = {...program.opts(), ...cmdOptions};
+    .action(async () => {
+      const options = program.opts();
       await commitCommand(options);
     });
 
