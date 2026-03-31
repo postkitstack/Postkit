@@ -6,6 +6,7 @@ import fs from "fs/promises";
 import {logger} from "../../../common/logger";
 import {getConfig} from "../utils/db-config";
 import {createSession, hasActiveSession, getSession} from "../utils/session";
+import {resolveRemote, maskRemoteUrl} from "../utils/remotes";
 import {
   testConnection,
   cloneDatabase,
@@ -16,7 +17,11 @@ import {checkDbmateInstalled, runDbmateStatus} from "../services/dbmate";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
 
-export async function startCommand(options: CommandOptions): Promise<void> {
+interface StartOptions extends CommandOptions {
+  remote?: string;
+}
+
+export async function startCommand(options: StartOptions): Promise<void> {
   const spinner = ora();
 
   try {
@@ -59,8 +64,33 @@ export async function startCommand(options: CommandOptions): Promise<void> {
     logger.step(2, 5, "Loading configuration...");
 
     const config = getConfig();
+
+    // Resolve remote
+    let targetRemoteName: string;
+    let targetRemoteUrl: string;
+
+    try {
+      const resolved = resolveRemote(options.remote);
+      targetRemoteName = resolved.name;
+      targetRemoteUrl = resolved.url;
+
+      if (options.remote) {
+        logger.info(`Using remote: ${targetRemoteName}`);
+      } else {
+        logger.debug(`Using default remote: ${targetRemoteName}`, options.verbose);
+      }
+    } catch (error) {
+      logger.error(error instanceof Error ? error.message : String(error));
+      logger.blank();
+      logger.info("Manage remotes with:");
+      logger.info('  postkit db remote list     - List all remotes');
+      logger.info('  postkit db remote add      - Add a new remote');
+      logger.info('  postkit db remote use      - Set default remote');
+      process.exit(1);
+    }
+
     logger.debug(
-      `Remote DB: ${maskConnectionUrl(config.remoteDbUrl)}`,
+      `Remote DB (${targetRemoteName}): ${maskRemoteUrl(targetRemoteUrl)}`,
       options.verbose,
     );
     logger.debug(
@@ -75,7 +105,7 @@ export async function startCommand(options: CommandOptions): Promise<void> {
     logger.step(3, 5, "Testing remote database connection...");
     spinner.start("Connecting to remote database...");
 
-    const remoteConnected = await testConnection(config.remoteDbUrl);
+    const remoteConnected = await testConnection(targetRemoteUrl);
 
     if (!remoteConnected) {
       spinner.fail("Failed to connect to remote database");
@@ -87,7 +117,7 @@ export async function startCommand(options: CommandOptions): Promise<void> {
 
     spinner.succeed("Connected to remote database");
 
-    const remoteTableCount = await getTableCount(config.remoteDbUrl);
+    const remoteTableCount = await getTableCount(targetRemoteUrl);
     logger.info(`Remote database has ${remoteTableCount} tables`);
 
     // Step 4: Verify database state
@@ -109,7 +139,7 @@ export async function startCommand(options: CommandOptions): Promise<void> {
       logger.info("The remote database is not in sync with your committed migrations.");
       logger.blank();
       logger.info("To fix this:");
-      logger.info('  1. Run "postkit db deploy --target=<env>" to deploy committed migrations');
+      logger.info('  1. Run "postkit db deploy" to deploy committed migrations');
       logger.info("  2. Then run \"postkit db start\" again");
       logger.blank();
       logger.info("If you want to discard committed migrations, manually delete .postkit/committed.json");
@@ -120,7 +150,7 @@ export async function startCommand(options: CommandOptions): Promise<void> {
 
     // Check 2: Run dbmate status to detect any pending migrations
     spinner.start("Checking migration status...");
-    const statusOutput = await runDbmateStatus(config.remoteDbUrl);
+    const statusOutput = await runDbmateStatus(targetRemoteUrl);
 
     // Check if there are actually pending migrations (look for [ ] unchecked items or Pending > 0)
     // dbmate status shows "[ ] filename.sql" for pending and "[X] filename.sql" for applied
@@ -167,7 +197,7 @@ export async function startCommand(options: CommandOptions): Promise<void> {
     if (options.dryRun) {
       spinner.info("Dry run - skipping database clone");
     } else {
-      await cloneDatabase(config.remoteDbUrl, config.localDbUrl);
+      await cloneDatabase(targetRemoteUrl, config.localDbUrl);
       spinner.succeed("Database cloned successfully");
 
       const localTableCount = await getTableCount(config.localDbUrl);
@@ -179,8 +209,9 @@ export async function startCommand(options: CommandOptions): Promise<void> {
 
     if (!options.dryRun) {
       const session = await createSession(
-        config.remoteDbUrl,
+        targetRemoteUrl,
         config.localDbUrl,
+        targetRemoteName,
       );
       logger.success(`Session created (snapshot: ${session.remoteSnapshot})`);
     } else {

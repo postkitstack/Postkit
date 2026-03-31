@@ -61,6 +61,10 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
       ["Snapshot", session.remoteSnapshot],
     ];
 
+    if (session.remoteName) {
+      rows.push(["Remote", session.remoteName]);
+    }
+
     logger.table(["Property", "Value"], rows);
 
     logger.blank();
@@ -170,7 +174,7 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
 
     const pendingMigrations = await getPendingCommittedMigrations();
     if (pendingMigrations.length > 0) {
-      logger.info('  - Run "postkit db deploy --target=<env>" to deploy committed migrations');
+      logger.info('  - Run "postkit db deploy" to deploy committed migrations');
     }
   } catch (error) {
     logger.error(error instanceof Error ? error.message : String(error));
@@ -180,14 +184,14 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
 
 async function showDbmateStatus(): Promise<void> {
   try {
-    const {getConfig} = await import("../utils/db-config");
-    const config = getConfig();
+    const {resolveRemote} = await import("../utils/remotes");
 
     logger.blank();
     logger.info("Dbmate Status (Remote):");
     logger.blank();
 
-    const status = await runDbmateStatus(config.remoteDbUrl);
+    const {url} = resolveRemote();
+    const status = await runDbmateStatus(url);
     console.log(status);
   } catch {
     // Ignore errors for dbmate status

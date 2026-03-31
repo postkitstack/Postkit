@@ -23,17 +23,13 @@ const GITIGNORE_ENTRIES = [
 
 const SCAFFOLD_CONFIG: PostkitConfig = {
   db: {
-    remoteDbUrl: "",
     localDbUrl: "",
     schemaPath: "schema",
     migrationsPath: "migrations",
     schema: "public",
     pgSchemaBin: "",
     dbmateBin: "",
-    environments: {
-      staging: "",
-      production: "",
-    },
+    remotes: {},
   },
   auth: {
     source: {
@@ -148,6 +144,8 @@ export async function initCommand(options: CommandOptions): Promise<void> {
   logger.success("Postkit project initialized!");
   logger.blank();
   logger.info("Next steps:");
-  logger.info(`  1. Edit ${POSTKIT_CONFIG_FILE} with your database and auth settings`);
-  logger.info("  2. Run postkit db start to begin a migration session");
+  logger.info(`  1. Edit ${POSTKIT_CONFIG_FILE} with your database settings`);
+  logger.info("  2. Add remote databases:");
+  logger.info("     postkit db remote add staging \"postgres://...\"");
+  logger.info("  3. Run postkit db start to begin a migration session");
 }

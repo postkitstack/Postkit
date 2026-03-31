@@ -126,7 +126,7 @@ export async function abortCommand(options: CommandOptions): Promise<void> {
     logger.blank();
     logger.info("All local changes have been discarded.");
     logger.info("Note: Committed migrations are preserved for deployment.");
-    logger.info('Run "postkit db deploy --target=<env>" to deploy committed migrations.');
+    logger.info('Run "postkit db deploy" to deploy committed migrations.');
     logger.info('Run "postkit db start" to begin a new session.');
   } catch (error) {
     spinner.fail("Failed to abort session");

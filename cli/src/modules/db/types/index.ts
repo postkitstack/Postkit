@@ -2,6 +2,7 @@ export interface SessionState {
   active: boolean;
   startedAt: string;
   remoteSnapshot: string;
+  remoteName?: string;
   localDbUrl: string;
   remoteDbUrl: string;
   pendingChanges: {
@@ -18,7 +19,6 @@ export interface SessionState {
 }
 
 export interface Config {
-  remoteDbUrl: string;
   localDbUrl: string;
   schemaPath: string;
   migrationsPath: string;
@@ -27,7 +27,6 @@ export interface Config {
   dbmateBin: string;
   cliRoot: string;
   projectRoot: string;
-  environments: Record<string, string>;
 }
 
 export interface DatabaseConnectionInfo {

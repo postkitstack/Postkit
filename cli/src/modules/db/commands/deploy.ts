@@ -16,47 +16,28 @@ import {generateInfra, applyInfra} from "../services/infra-generator";
 import {generateGrants, applyGrants} from "../services/grant-generator";
 import {generateSeeds, applySeeds} from "../services/seed-generator";
 import {getPendingCommittedMigrations, markMigrationDeployed} from "../utils/committed";
+import {resolveRemote, maskRemoteUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
 import type {Config} from "../types/index";
 
 interface DeployOptions extends CommandOptions {
-  target?: string;
+  remote?: string;
   url?: string;
 }
 
-function resolveTargetUrl(options: DeployOptions, config: Config): {url: string; label: string} {
+function resolveTargetUrl(options: DeployOptions): {url: string; label: string} {
   if (options.url) {
     return {url: options.url, label: "direct URL"};
   }
 
-  if (options.target) {
-    const envUrl = config.environments[options.target];
-
-    if (!envUrl) {
-      const available = Object.keys(config.environments).filter(
-        (key) => !!config.environments[key],
-      );
-      const availableStr = available.length > 0
-        ? `Available environments: ${available.join(", ")}`
-        : "No environments configured in postkit.config.json";
-
-      const exists = options.target in config.environments;
-      const message = exists
-        ? `Environment "${options.target}" has no URL configured.`
-        : `Unknown environment: "${options.target}"`;
-
-      throw new Error(
-        `${message}\n${availableStr}\n\n` +
-        "Add environment URLs to your postkit.config.json:\n" +
-        '  "db": { "environments": { "staging": "postgres://..." } }',
-      );
-    }
-
-    return {url: envUrl, label: options.target};
+  if (options.remote) {
+    const resolved = resolveRemote(options.remote);
+    return {url: resolved.url, label: resolved.name};
   }
 
-  // Default to remoteDbUrl when neither --target nor --url is specified
-  return {url: config.remoteDbUrl, label: "remote (default)"};
+  // Use default remote
+  const resolved = resolveRemote();
+  return {url: resolved.url, label: `${resolved.name} (default)`};
 }
 
 async function cleanupExistingSession(
@@ -157,7 +138,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     const config = getConfig();
 
     // Step 1: Resolve target URL
-    const {url: targetUrl, label: targetLabel} = resolveTargetUrl(options, config);
+    const {url: targetUrl, label: targetLabel} = resolveTargetUrl(options);
 
     logger.heading("Deploy Migrations");
     logger.info(`Target: ${targetLabel}`);

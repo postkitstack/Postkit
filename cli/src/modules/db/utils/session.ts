@@ -21,12 +21,14 @@ export async function getSession(): Promise<SessionState | null> {
 export async function createSession(
   remoteDbUrl: string,
   localDbUrl: string,
+  remoteName?: string,
 ): Promise<SessionState> {
   const now = new Date();
   const session: SessionState = {
     active: true,
     startedAt: now.toISOString(),
     remoteSnapshot: formatTimestamp(now),
+    remoteName,
     localDbUrl,
     remoteDbUrl,
     pendingChanges: {

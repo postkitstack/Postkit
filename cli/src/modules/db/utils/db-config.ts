@@ -72,14 +72,7 @@ function resolveDbmateBin(configValue: string | undefined): string {
 export function getConfig(): Config {
   const config = loadPostkitConfig();
 
-  const remoteDbUrl = config.db.remoteDbUrl;
   const localDbUrl = config.db.localDbUrl;
-
-  if (!remoteDbUrl) {
-    throw new Error(
-      "db.remoteDbUrl is not set in postkit.config.json",
-    );
-  }
 
   if (!localDbUrl) {
     throw new Error(
@@ -96,7 +89,6 @@ export function getConfig(): Config {
     : path.resolve(projectRoot, "migrations");
 
   return {
-    remoteDbUrl,
     localDbUrl,
     schemaPath,
     migrationsPath,
@@ -105,7 +97,6 @@ export function getConfig(): Config {
     dbmateBin: resolveDbmateBin(config.db.dbmateBin),
     cliRoot,
     projectRoot,
-    environments: config.db.environments || {},
   };
 }
 

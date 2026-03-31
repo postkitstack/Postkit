@@ -60,9 +60,9 @@ export async function seedCommand(options: SeedOptions): Promise<void> {
         if (session) {
           targetUrl = session.remoteDbUrl;
         } else {
-          const {getConfig} = await import("../utils/db-config");
-          const config = getConfig();
-          targetUrl = config.remoteDbUrl;
+          const {resolveRemote} = await import("../utils/remotes");
+          const {url} = resolveRemote();
+          targetUrl = url;
         }
         targetName = "remote";
       } else {

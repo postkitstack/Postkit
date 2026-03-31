@@ -30,17 +30,23 @@ export function getVendorDir(): string {
   return path.join(cliRoot, "vendor");
 }
 
+// Remote configuration
+export interface RemoteConfig {
+  url: string;
+  default?: boolean;
+  addedAt?: string;
+}
+
 // PostkitConfig interface matching the JSON structure
 export interface PostkitConfig {
   db: {
-    remoteDbUrl: string;
     localDbUrl: string;
     schemaPath: string;
     migrationsPath: string;
     schema: string;
     pgSchemaBin: string;
     dbmateBin: string;
-    environments?: Record<string, string>;
+    remotes?: Record<string, RemoteConfig>;
   };
   auth: {
     source: {
@@ -77,6 +83,41 @@ export function loadPostkitConfig(): PostkitConfig {
   }
 
   const raw = fs.readFileSync(configPath, "utf-8");
-  cachedConfig = JSON.parse(raw) as PostkitConfig;
+  const parsed = JSON.parse(raw);
+
+  // Auto-migrate from old config format (remoteDbUrl/environments to remotes)
+  if (parsed.db && (parsed.db.remoteDbUrl || parsed.db.environments)) {
+    if (!parsed.db.remotes || Object.keys(parsed.db.remotes).length === 0) {
+      // Migrate remoteDbUrl to default remote
+      if (parsed.db.remoteDbUrl) {
+        parsed.db.remotes = parsed.db.remotes || {};
+        parsed.db.remotes.default = {
+          url: parsed.db.remoteDbUrl,
+          default: true,
+          addedAt: new Date().toISOString(),
+        };
+        delete parsed.db.remoteDbUrl;
+      }
+
+      // Migrate environments to named remotes
+      if (parsed.db.environments) {
+        parsed.db.remotes = parsed.db.remotes || {};
+        for (const [name, url] of Object.entries(parsed.db.environments)) {
+          if (name !== "default" && typeof url === "string") {
+            parsed.db.remotes[name] = {
+              url,
+              addedAt: new Date().toISOString(),
+            };
+          }
+        }
+        delete parsed.db.environments;
+      }
+
+      // Save migrated config
+      fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), "utf-8");
+    }
+  }
+
+  cachedConfig = parsed as PostkitConfig;
   return cachedConfig;
 }

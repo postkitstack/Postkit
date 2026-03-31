@@ -10,6 +10,12 @@ import {infraCommand} from "./commands/infra";
 import {grantsCommand} from "./commands/grants";
 import {seedCommand} from "./commands/seed";
 import {deployCommand} from "./commands/deploy";
+import {
+  remoteListCommand,
+  remoteAddCommand,
+  remoteRemoveCommand,
+  remoteUseCommand,
+} from "./commands/remote";
 
 export function registerDbModule(program: Command): void {
   const db = program
@@ -19,8 +25,9 @@ export function registerDbModule(program: Command): void {
   // Start command
   db.command("start")
     .description("Clone remote database to local and start a migration session")
-    .action(async () => {
-      const options = program.opts();
+    .option("--remote <name>", "Use named remote database")
+    .action(async (cmdOptions) => {
+      const options = {...program.opts(), ...cmdOptions};
       await startCommand(options);
     });
 
@@ -109,11 +116,49 @@ export function registerDbModule(program: Command): void {
   // Deploy command
   db.command("deploy")
     .description("Deploy committed migrations (defaults to remote DB)")
-    .option("--target <target>", "Target environment name (from config environments)")
+    .option("--remote <name>", "Target remote name")
     .option("--url <url>", "Direct database URL to deploy to")
     .option("-f, --force", "Skip confirmation prompts")
     .action(async (cmdOptions) => {
       const options = {...program.opts(), ...cmdOptions};
       await deployCommand(options);
+    });
+
+  // Remote command group
+  const remoteCmd = db.command("remote")
+    .description("Manage named remote databases");
+
+  remoteCmd.command("list")
+    .description("List all configured remotes")
+    .action(async () => {
+      const options = program.opts();
+      await remoteListCommand();
+    });
+
+  remoteCmd.command("add")
+    .description("Add a new remote database")
+    .argument("<name>", "Remote name")
+    .argument("<url>", "Database connection URL")
+    .option("--default", "Set as default remote")
+    .action(async (name, url, cmdOptions) => {
+      const options = {...program.opts(), ...cmdOptions};
+      await remoteAddCommand(options, name, url);
+    });
+
+  remoteCmd.command("remove")
+    .description("Remove a remote database")
+    .argument("<name>", "Remote name")
+    .option("-f, --force", "Skip confirmation")
+    .action(async (name, cmdOptions) => {
+      const options = {...program.opts(), ...cmdOptions};
+      await remoteRemoveCommand(options, name);
+    });
+
+  remoteCmd.command("use")
+    .description("Set default remote")
+    .argument("<name>", "Remote name")
+    .action(async (name, cmdOptions) => {
+      const options = {...program.opts(), ...cmdOptions};
+      await remoteUseCommand(options, name);
     });
 }
