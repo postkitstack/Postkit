@@ -79,6 +79,31 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
       return;
     }
 
+    // Check for NEW migration files (compare disk vs tracked)
+    const trackedFiles = session.pendingChanges.migrationFiles || [];
+    const trackedFileNames = new Set(trackedFiles.map((f) => f.name));
+    const newFiles = migrationFiles.filter((f) => !trackedFileNames.has(f));
+
+    // Show migration files with status
+    if (hasMigrations && !hasPlan) {
+      if (newFiles.length > 0) {
+        logger.info(`Found ${migrationFiles.length} migration file(s) (${newFiles.length} new):`);
+        for (const file of migrationFiles) {
+          const isNew = !trackedFileNames.has(file);
+          const status = isNew ? "new" : "applied";
+          logger.info(`  - ${file} (${status})`);
+        }
+        logger.blank();
+      } else if (!isAlreadyApplied) {
+        // First time applying, all files are new
+        logger.info(`Found ${migrationFiles.length} migration file(s):`);
+        for (const file of migrationFiles) {
+          logger.info(`  - ${file} (new)`);
+        }
+        logger.blank();
+      }
+    }
+
     // Check if already applied (but allow re-applying if files exist)
     if (isAlreadyApplied) {
       if (migrationFiles.length === 0) {
@@ -89,37 +114,17 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
       }
 
       // Files exist, check for new ones
-      const trackedFiles = session.pendingChanges.migrationFiles || [];
-      const trackedFileNames = new Set(trackedFiles.map((f) => f.name));
-      const newFiles = migrationFiles.filter((f) => !trackedFileNames.has(f));
-
-      if (newFiles.length > 0) {
-        await updatePendingChanges({applied: false});
-        logger.info(`Found ${newFiles.length} new migration file(s):`);
-        for (const file of newFiles) {
-          logger.info(`  - ${file}`);
-        }
-        logger.blank();
-      } else {
+      if (newFiles.length === 0) {
         // No new files, already fully applied
         logger.warn("Changes have already been applied to the local database.");
         logger.info('Run "postkit db commit" to commit session migrations.');
         logger.info('Or run "postkit db plan" again if you made more changes.');
         return;
       }
-    } else if (hasMigrations && !hasPlan) {
-      // First time applying manual migrations - show file list
-      logger.info(`Found ${migrationFiles.length} migration file(s):`);
-      for (const file of migrationFiles) {
-        logger.info(`  - ${file}`);
-      }
-      logger.blank();
-    }
 
-    // Check for NEW migration files (compare disk vs tracked)
-    const trackedFiles = session.pendingChanges.migrationFiles || [];
-    const trackedFileNames = new Set(trackedFiles.map((f) => f.name));
-    const newFiles = migrationFiles.filter((f) => !trackedFileNames.has(f));
+      // New files exist - reset applied flag to allow applying them
+      await updatePendingChanges({applied: false});
+    }
 
     // Resume from partial apply?
     // Only resume if NO new migration files exist
@@ -527,17 +532,10 @@ async function handleManualMigrationApply(
     process.exit(1);
   }
 
-  // Prompt for description (required)
-  const {desc} = await inquirer.prompt([
-    {
-      type: "input",
-      name: "desc",
-      message: "Migration description (e.g. add_users_table):",
-      validate: (input: string) =>
-        input.trim().length > 0 || "Description is required",
-    },
-  ]);
-  const description = desc.trim();
+  // Use migration filename as description (user already named it when creating)
+  const description = migrationFiles[0]
+    .replace(/^\d+_/, "")
+    .replace(/\.sql$/, "");
 
   // Step 1: Test local connection
   logger.step(1, 5, "Testing local database connection...");
