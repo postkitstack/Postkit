@@ -5,14 +5,19 @@ import {getSession, updatePendingChanges} from "../utils/session";
 import {getSessionMigrationsPath} from "../utils/db-config";
 import {createMigrationFile} from "../services/dbmate";
 import {testConnection} from "../services/database";
+import {getConfig} from "../utils/db-config";
 import type {CommandOptions} from "../../../common/types";
 
 interface MigrateOptions extends CommandOptions {
   name?: string;
-  description?: string;
 }
 
-const MIGRATION_TEMPLATE = `-- migrate:up
+// Template will be dynamically generated with the schema name
+function getMigrationTemplate(schema: string): string {
+  return `-- migrate:up
+-- Search path: ${schema}
+SET search_path TO "${schema}";
+
 -- Add your SQL migration here
 -- Examples:
 
@@ -33,8 +38,9 @@ const MIGRATION_TEMPLATE = `-- migrate:up
 -- Add rollback SQL here
 -- DROP TABLE example_table;
 `;
+}
 
-export async function migrateCommand(options: MigrateOptions, name?: string): Promise<void> {
+export async function migrationCommand(options: MigrateOptions, name?: string): Promise<void> {
   const spinner = ora();
 
   try {
@@ -63,25 +69,15 @@ export async function migrateCommand(options: MigrateOptions, name?: string): Pr
       migrationName = inputName.trim();
     }
 
-    // Get optional description
-    let description = options.description;
-    if (!description) {
-      const {inputDesc} = await inquirer.prompt([
-        {
-          type: "input",
-          name: "inputDesc",
-          message: "Description (optional, press Enter to skip):",
-        },
-      ]);
-      description = inputDesc.trim() || undefined;
+    // Ensure migrationName is defined (TypeScript safety)
+    if (!migrationName) {
+      logger.error("Migration name is required.");
+      process.exit(1);
     }
 
     logger.heading("Create Manual Migration");
     logger.blank();
     logger.info(`Migration name: ${migrationName}`);
-    if (description) {
-      logger.info(`Description: ${description}`);
-    }
     logger.blank();
 
     // Test local connection
@@ -105,11 +101,14 @@ export async function migrateCommand(options: MigrateOptions, name?: string): Pr
     logger.step(2, 3, "Creating migration file...");
     spinner.start("Creating migration file with template...");
 
+    const config = getConfig();
     const sessionMigrationsDir = getSessionMigrationsPath();
+    const template = getMigrationTemplate(config.schema);
+
     const migrationFile = await createMigrationFile(
       migrationName,
-      MIGRATION_TEMPLATE,
-      "-- Add rollback SQL here\n",
+      template,
+      `-- Search path: ${config.schema}\n-- Add rollback SQL here\n`,
       sessionMigrationsDir,
     );
 
@@ -141,9 +140,9 @@ export async function migrateCommand(options: MigrateOptions, name?: string): Pr
       logger.info(`Opening ${migrationFile.name} in ${editor}...`);
 
       try {
-        const {runCommand} = await import("../../../common/shell");
-        // Open editor in foreground (don't use runInBackground)
-        await runCommand(`${editor} "${migrationFile.path}"`, {
+        const {spawn} = await import("child_process");
+        // Use spawn to open editor (inherits stdio)
+        spawn(editor, [migrationFile.path], {
           stdio: "inherit",
         });
       } catch (error) {
@@ -159,7 +158,7 @@ export async function migrateCommand(options: MigrateOptions, name?: string): Pr
     logger.info("  - Edit the migration file to add your SQL");
     logger.info('  - Run "postkit db apply" to apply the migration to the local database');
     logger.info('  - Run "postkit db commit" to commit the migration');
-    logger.info('  - Run "postkit db migrate <name>" to create more migrations in this session');
+    logger.info('  - Run "postkit db migration <name>" to create more migrations in this session');
   } catch (error) {
     spinner.fail("Failed to create migration");
     logger.error(error instanceof Error ? error.message : String(error));

@@ -5,7 +5,7 @@ import {applyCommand} from "./commands/apply";
 import {commitCommand} from "./commands/commit";
 import {statusCommand} from "./commands/status";
 import {abortCommand} from "./commands/abort";
-import {migrateCommand} from "./commands/migrate";
+import {migrationCommand} from "./commands/migration";
 import {infraCommand} from "./commands/infra";
 import {grantsCommand} from "./commands/grants";
 import {seedCommand} from "./commands/seed";
@@ -67,14 +67,13 @@ export function registerDbModule(program: Command): void {
       await abortCommand(options);
     });
 
-  // Migrate command
-  db.command("migrate")
-    .description("Create a manual SQL migration")
+  // Migration command
+  db.command("migration")
+    .description("Create a manual SQL migration file")
     .argument("[name]", "Migration name (e.g. add_users_table)")
-    .option("-d, --description <desc>", "Migration description")
     .action(async (name, cmdOptions) => {
       const options = {...program.opts(), ...cmdOptions};
-      await migrateCommand(options, name);
+      await migrationCommand(options, name);
     });
 
   // Infra command
