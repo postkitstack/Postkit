@@ -68,6 +68,21 @@ export interface PostkitConfig {
 
 let cachedConfig: PostkitConfig | null = null;
 
+/**
+ * Check if postkit project is initialized
+ * Throws error if not initialized
+ */
+export function checkInitialized(): void {
+  const configPath = getConfigFilePath();
+
+  if (!fs.existsSync(configPath)) {
+    throw new Error(
+      "Postkit project is not initialized.\n" +
+      `Run \"postkit init\" to initialize your project first.`
+    );
+  }
+}
+
 export function loadPostkitConfig(): PostkitConfig {
   if (cachedConfig) {
     return cachedConfig;

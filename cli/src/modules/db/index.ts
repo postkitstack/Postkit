@@ -1,4 +1,6 @@
 import {Command} from "commander";
+import {checkInitialized} from "../../common/config";
+import {logger} from "../../common/logger";
 import {startCommand} from "./commands/start";
 import {planCommand} from "./commands/plan";
 import {applyCommand} from "./commands/apply";
@@ -17,6 +19,23 @@ import {
   remoteUseCommand,
 } from "./commands/remote";
 
+/**
+ * Wrapper to check initialization before running db commands
+ */
+async function withInitCheck(fn: () => Promise<void>): Promise<void> {
+  try {
+    checkInitialized();
+    await fn();
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error(error.message);
+    } else {
+      logger.error(String(error));
+    }
+    process.exit(1);
+  }
+}
+
 export function registerDbModule(program: Command): void {
   const db = program
     .command("db")
@@ -27,40 +46,50 @@ export function registerDbModule(program: Command): void {
     .description("Clone remote database to local and start a migration session")
     .option("--remote <name>", "Use named remote database")
     .action(async (cmdOptions) => {
-      const options = {...program.opts(), ...cmdOptions};
-      await startCommand(options);
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await startCommand(options);
+      });
     });
 
   // Plan command
   db.command("plan")
     .description("Generate schema diff (shows what will change)")
     .action(async () => {
-      const options = program.opts();
-      await planCommand(options);
+      await withInitCheck(async () => {
+        const options = program.opts();
+        await planCommand(options);
+      });
     });
 
   // Apply command
   db.command("apply")
     .description("Apply schema changes to local cloned database")
     .action(async () => {
-      const options = program.opts();
-      await applyCommand(options);
+      await withInitCheck(async () => {
+        const options = program.opts();
+        await applyCommand(options);
+      });
     });
 
   // Commit command
   db.command("commit")
     .description("Merge session migrations into a single committed migration")
     .action(async () => {
-      const options = program.opts();
-      await commitCommand(options);
+      await withInitCheck(async () => {
+        const options = program.opts();
+        await commitCommand(options);
+      });
     });
 
   // Status command
   db.command("status")
     .description("Show current session state and pending changes")
     .action(async () => {
-      const options = program.opts();
-      await statusCommand(options);
+      await withInitCheck(async () => {
+        const options = program.opts();
+        await statusCommand(options);
+      });
     });
 
   // Abort command
@@ -68,8 +97,10 @@ export function registerDbModule(program: Command): void {
     .description("Cancel session and cleanup local clone")
     .option("-f, --force", "Skip confirmation prompt")
     .action(async (cmdOptions) => {
-      const options = {...program.opts(), ...cmdOptions};
-      await abortCommand(options);
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await abortCommand(options);
+      });
     });
 
   // Migration command
@@ -77,8 +108,10 @@ export function registerDbModule(program: Command): void {
     .description("Create a manual SQL migration file")
     .argument("[name]", "Migration name (e.g. add_users_table)")
     .action(async (name, cmdOptions) => {
-      const options = {...program.opts(), ...cmdOptions};
-      await migrationCommand(options, name);
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await migrationCommand(options, name);
+      });
     });
 
   // Infra command
@@ -87,8 +120,10 @@ export function registerDbModule(program: Command): void {
     .option("--apply", "Apply infra to database")
     .option("--target <target>", "Target database: local or remote", "local")
     .action(async (cmdOptions) => {
-      const options = {...program.opts(), ...cmdOptions};
-      await infraCommand(options);
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await infraCommand(options);
+      });
     });
 
   // Grants command
@@ -97,8 +132,10 @@ export function registerDbModule(program: Command): void {
     .option("--apply", "Apply grants to database")
     .option("--target <target>", "Target database: local or remote", "local")
     .action(async (cmdOptions) => {
-      const options = {...program.opts(), ...cmdOptions};
-      await grantsCommand(options);
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await grantsCommand(options);
+      });
     });
 
   // Seed command
@@ -107,8 +144,10 @@ export function registerDbModule(program: Command): void {
     .option("--apply", "Apply seeds to database")
     .option("--target <target>", "Target database: local or remote", "local")
     .action(async (cmdOptions) => {
-      const options = {...program.opts(), ...cmdOptions};
-      await seedCommand(options);
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await seedCommand(options);
+      });
     });
 
   // Deploy command
@@ -118,8 +157,10 @@ export function registerDbModule(program: Command): void {
     .option("--url <url>", "Direct database URL to deploy to")
     .option("-f, --force", "Skip confirmation prompts")
     .action(async (cmdOptions) => {
-      const options = {...program.opts(), ...cmdOptions};
-      await deployCommand(options);
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await deployCommand(options);
+      });
     });
 
   // Remote command group
@@ -129,8 +170,10 @@ export function registerDbModule(program: Command): void {
   remoteCmd.command("list")
     .description("List all configured remotes")
     .action(async () => {
-      const options = program.opts();
-      await remoteListCommand();
+      await withInitCheck(async () => {
+        const options = program.opts();
+        await remoteListCommand();
+      });
     });
 
   remoteCmd.command("add")
@@ -139,8 +182,10 @@ export function registerDbModule(program: Command): void {
     .argument("<url>", "Database connection URL")
     .option("--default", "Set as default remote")
     .action(async (name, url, cmdOptions) => {
-      const options = {...program.opts(), ...cmdOptions};
-      await remoteAddCommand(options, name, url);
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await remoteAddCommand(options, name, url);
+      });
     });
 
   remoteCmd.command("remove")
@@ -148,15 +193,19 @@ export function registerDbModule(program: Command): void {
     .argument("<name>", "Remote name")
     .option("-f, --force", "Skip confirmation")
     .action(async (name, cmdOptions) => {
-      const options = {...program.opts(), ...cmdOptions};
-      await remoteRemoveCommand(options, name);
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await remoteRemoveCommand(options, name);
+      });
     });
 
   remoteCmd.command("use")
     .description("Set default remote")
     .argument("<name>", "Remote name")
     .action(async (name, cmdOptions) => {
-      const options = {...program.opts(), ...cmdOptions};
-      await remoteUseCommand(options, name);
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await remoteUseCommand(options, name);
+      });
     });
 }
