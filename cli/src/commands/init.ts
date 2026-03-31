@@ -24,8 +24,6 @@ const SCAFFOLD_CONFIG: PostkitConfig = {
     localDbUrl: "",
     schemaPath: "schema",
     schema: "public",
-    pgSchemaBin: "",
-    dbmateBin: "",
     remotes: {},
   },
   auth: {

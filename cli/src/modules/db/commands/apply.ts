@@ -31,6 +31,23 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
       process.exit(1);
     }
 
+    // Confirm apply operation (unless force flag)
+    if (!options.force) {
+      const {confirm} = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "confirm",
+          message: "Apply migration changes to the local database?",
+          default: true,
+        },
+      ]);
+
+      if (!confirm) {
+        logger.info("Apply cancelled.");
+        return;
+      }
+    }
+
     // Check for migration files in session directory FIRST
     const sessionMigrationsDir = getSessionMigrationsPath();
     const fs = await import("fs/promises");
@@ -135,7 +152,9 @@ async function handleResume(
   spinner: ReturnType<typeof ora>,
 ): Promise<void> {
   const pc = session.pendingChanges;
-  const description = pc.description || "migration";
+
+  // Description should always be set when applying migrations
+  const description = pc.description;
 
   logger.heading("Resuming Apply");
   logger.info(
@@ -508,13 +527,17 @@ async function handleManualMigrationApply(
     process.exit(1);
   }
 
-  // Get description from user or use filename
-  let description = migrationFiles[0]
-    .replace(/^\d+_/, "")
-    .replace(/\.sql$/, "");
-  if (migrationFiles.length > 1) {
-    description = `manual_migrations_${migrationFiles.length}`;
-  }
+  // Prompt for description (required)
+  const {desc} = await inquirer.prompt([
+    {
+      type: "input",
+      name: "desc",
+      message: "Migration description (e.g. add_users_table):",
+      validate: (input: string) =>
+        input.trim().length > 0 || "Description is required",
+    },
+  ]);
+  const description = desc.trim();
 
   // Step 1: Test local connection
   logger.step(1, 5, "Testing local database connection...");

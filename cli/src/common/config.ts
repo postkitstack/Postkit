@@ -43,8 +43,6 @@ export interface PostkitConfig {
     localDbUrl: string;
     schemaPath: string;
     schema: string;
-    pgSchemaBin: string;
-    dbmateBin: string;
     remotes?: Record<string, RemoteConfig>;
   };
   auth: {

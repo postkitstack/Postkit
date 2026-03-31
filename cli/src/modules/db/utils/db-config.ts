@@ -17,18 +17,11 @@ const ARCH_MAP: Record<string, string> = {
 };
 
 /**
- * Resolves the pgschema binary path with the following priority:
- * 1. User-specified custom path (anything other than "pgschema" or empty)
- * 2. Bundled binary in vendor/pgschema/pgschema-{platform}-{arch}[.exe]
- * 3. System PATH fallback ("pgschema")
+ * Resolves the pgschema binary path from bundled vendor directory.
+ * Falls back to system PATH if bundled binary not found.
  */
-function resolvePgSchemaBin(configValue: string | undefined): string {
-  // If user explicitly set a custom path, use it
-  if (configValue && configValue !== "pgschema") {
-    return configValue;
-  }
-
-  // Try bundled vendor binary
+function resolvePgSchemaBin(): string {
+  // Try bundled vendor binary first
   const platform = PLATFORM_MAP[process.platform];
   const arch = ARCH_MAP[process.arch];
 
@@ -47,18 +40,11 @@ function resolvePgSchemaBin(configValue: string | undefined): string {
 }
 
 /**
- * Resolves the dbmate binary path with the following priority:
- * 1. User-specified custom path (anything other than "dbmate" or empty)
- * 2. npm-installed dbmate binary (via dbmate npm package)
- * 3. System PATH fallback ("dbmate")
+ * Resolves the dbmate binary path from npm package.
+ * Falls back to system PATH if npm binary not found.
  */
-function resolveDbmateBin(configValue: string | undefined): string {
-  // If user explicitly set a custom path, use it
-  if (configValue && configValue !== "dbmate") {
-    return configValue;
-  }
-
-  // Try npm-installed dbmate binary
+function resolveDbmateBin(): string {
+  // Try npm-installed dbmate binary first
   try {
     return resolveDbmateBinary();
   } catch {
@@ -88,8 +74,8 @@ export function getConfig(): Config {
     localDbUrl,
     schemaPath,
     schema: config.db.schema || "public",
-    pgSchemaBin: resolvePgSchemaBin(config.db.pgSchemaBin),
-    dbmateBin: resolveDbmateBin(config.db.dbmateBin),
+    pgSchemaBin: resolvePgSchemaBin(),
+    dbmateBin: resolveDbmateBin(),
     cliRoot,
     projectRoot,
   };

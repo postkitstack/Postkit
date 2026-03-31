@@ -65,9 +65,10 @@ export function registerDbModule(program: Command): void {
   // Apply command
   db.command("apply")
     .description("Apply schema changes to local cloned database")
-    .action(async () => {
+    .option("-f, --force", "Skip confirmation prompts")
+    .action(async (cmdOptions) => {
       await withInitCheck(async () => {
-        const options = program.opts();
+        const options = {...program.opts(), ...cmdOptions};
         await applyCommand(options);
       });
     });
