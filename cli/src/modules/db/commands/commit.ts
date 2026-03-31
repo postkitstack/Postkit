@@ -115,8 +115,6 @@ export async function commitCommand(options: CommandOptions): Promise<void> {
     logger.blank();
     logger.success("Migration committed successfully!");
     logger.blank();
-    logger.success("Migration committed successfully!");
-    logger.blank();
     logger.info(`Committed migration: ${mergedMigration.name}`);
     logger.info(`Description: ${description}`);
     logger.info(`Merged from: ${migrationFiles.length} session migration(s)`);
@@ -129,14 +127,12 @@ export async function commitCommand(options: CommandOptions): Promise<void> {
         logger.info(`  - ${cm.migrationFile.name}`);
       }
       logger.blank();
-      logger.info("Next steps:");
-      logger.info('  - Run "postkit db deploy --target=<env>" to deploy committed migrations');
-      logger.info('  - Run "postkit db start" to begin a new session for more changes');
-    } else {
-      logger.info("Next steps:");
-      logger.info('  - Run "postkit db deploy --target=<env>" to deploy to target environment');
-      logger.info('  - Run "postkit db start" to begin a new session for more changes');
     }
+
+    logger.info("Next steps:");
+    logger.info('  - Run "postkit db deploy" to deploy committed migrations');
+    logger.info('  - Run "postkit db deploy --remote <name>" to deploy to specific remote');
+    logger.info('  - Run "postkit db start" to begin a new session for more changes');
   } catch (error) {
     spinner.fail("Failed to commit migration");
     logger.error(error instanceof Error ? error.message : String(error));

@@ -11,7 +11,7 @@ import {
   dropDatabase,
   getTableCount,
 } from "../services/database";
-import {runCommittedMigrate} from "../services/dbmate";
+import {runCommittedMigrate, runDbmateStatus} from "../services/dbmate";
 import {generateInfra, applyInfra} from "../services/infra-generator";
 import {generateGrants, applyGrants} from "../services/grant-generator";
 import {generateSeeds, applySeeds} from "../services/seed-generator";
@@ -173,7 +173,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       logger.blank();
     }
 
-    const totalSteps = 11;
+    const totalSteps = 13;
     const migrationNames = pendingMigrations.map(m => m.migrationFile.name);
 
     // Step 1: Test target DB connection
@@ -190,21 +190,43 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     const targetTableCount = await getTableCount(targetUrl);
     spinner.succeed(`Connected to target database (${targetTableCount} tables)`);
 
-    // Step 2: Clone target DB to local
+    // Step 2: Check target migration status
+    logger.step(2, totalSteps, "Checking target migration status...");
+    spinner.start("Checking migration status...");
+
+    const statusOutput = await runDbmateStatus(targetUrl);
+
+    // Check for pending migrations on target
+    const hasPendingItems = statusOutput.includes("[ ") &&
+                          !statusOutput.match(/Pending:\s*0\b/);
+
+    if (hasPendingItems) {
+      spinner.succeed(`Found ${pendingMigrations.length} pending migration(s) to deploy`);
+      logger.blank();
+      logger.info("These migrations will be applied to the target database:");
+      for (const cm of pendingMigrations) {
+        logger.info(`  - ${cm.migrationFile.name} (${cm.description})`);
+      }
+      logger.blank();
+    } else {
+      spinner.succeed("Target database up to date");
+    }
+
+    // Step 3: Clone target DB to local
     const localDbUrl = config.localDbUrl;
 
-    logger.step(2, totalSteps, "Cloning target database to local...");
+    logger.step(3, totalSteps, "Cloning target database to local...");
     spinner.start("Cloning target database to local for dry-run verification...");
     await cloneDatabase(targetUrl, localDbUrl);
     const localTableCount = await getTableCount(localDbUrl);
     spinner.succeed(`Target cloned to local (${localTableCount} tables)`);
 
-    // Steps 3-6: Dry run on local clone
+    // Steps 4-7: Dry run on local clone
     logger.blank();
     logger.heading("Dry Run (local verification)");
 
     try {
-      await runSteps(localDbUrl, "local clone", spinner, 3, totalSteps, migrationNames);
+      await runSteps(localDbUrl, "local clone", spinner, 4, totalSteps, migrationNames);
     } catch (error) {
       spinner.fail("Dry run failed on local clone");
       logger.error(error instanceof Error ? error.message : String(error));
@@ -249,12 +271,12 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       }
     }
 
-    // Steps 7-10: Apply to target
+    // Steps 8-11: Apply to target
     logger.blank();
     logger.heading("Deploying to Target");
 
     try {
-      await runSteps(targetUrl, targetLabel, spinner, 7, totalSteps, migrationNames);
+      await runSteps(targetUrl, targetLabel, spinner, 8, totalSteps, migrationNames);
     } catch (error) {
       logger.error(error instanceof Error ? error.message : String(error));
       logger.blank();
@@ -271,8 +293,8 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       process.exit(1);
     }
 
-    // Step 11: Mark migrations as deployed
-    logger.step(11, totalSteps, "Marking migrations as deployed...");
+    // Step 12: Mark migrations as deployed
+    logger.step(12, totalSteps, "Marking migrations as deployed...");
     spinner.start("Updating committed state...");
 
     for (const migration of pendingMigrations) {
@@ -283,7 +305,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
 
     // Drop local clone
     logger.blank();
-    logger.step(12, 12, "Cleaning up local clone...");
+    logger.step(13, totalSteps, "Cleaning up local clone...");
     spinner.start("Dropping local clone database...");
 
     try {
