@@ -16,7 +16,7 @@ export function parseConnectionUrl(url: string): DatabaseConnectionInfo {
   };
 }
 
-export function buildConnectionUrl(info: DatabaseConnectionInfo): string {
+function buildConnectionUrl(info: DatabaseConnectionInfo): string {
   const encodedPassword = encodeURIComponent(info.password);
   return `postgres://${info.user}:${encodedPassword}@${info.host}:${info.port}/${info.database}`;
 }
@@ -32,14 +32,6 @@ export async function testConnection(url: string): Promise<boolean> {
     return false;
   } finally {
     await client.end();
-  }
-}
-
-export async function databaseExists(url: string): Promise<boolean> {
-  try {
-    return await testConnection(url);
-  } catch {
-    return false;
   }
 }
 

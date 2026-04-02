@@ -137,7 +137,7 @@ async function loadSectionFiles(sectionPath: string): Promise<string> {
   return "";
 }
 
-export async function getSchemaFiles(): Promise<string[]> {
+async function getSchemaFiles(): Promise<string[]> {
   const config = getConfig();
   const schemaPath = config.schemaPath;
 

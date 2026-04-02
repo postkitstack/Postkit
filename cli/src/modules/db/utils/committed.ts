@@ -67,17 +67,3 @@ export async function getPendingCommittedMigrations(): Promise<CommittedMigratio
   return state.migrations.filter(m => !m.deployed);
 }
 
-/**
- * Gets all deployed committed migrations
- */
-export async function getDeployedMigrations(): Promise<CommittedMigration[]> {
-  const state = await getCommittedState();
-  return state.migrations.filter(m => m.deployed);
-}
-
-/**
- * Clears all committed migrations (useful for testing/reset)
- */
-export async function clearCommittedMigrations(): Promise<void> {
-  await saveCommittedState({migrations: []});
-}

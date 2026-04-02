@@ -116,33 +116,6 @@ export async function runCommittedMigrate(
   return {success: true, output: result.stdout};
 }
 
-export async function copySessionMigrations(
-  sessionMigrationsDir: string,
-): Promise<{name: string; path: string}[]> {
-  if (!existsSync(sessionMigrationsDir)) {
-    return [];
-  }
-
-  // Ensure root migrations directory exists
-  if (!existsSync(getCommittedMigrationsPath())) {
-    await fs.mkdir(getCommittedMigrationsPath(), {recursive: true});
-  }
-
-  const files = await fs.readdir(sessionMigrationsDir);
-  const copied: {name: string; path: string}[] = [];
-
-  for (const file of files) {
-    if (file.endsWith(".sql")) {
-      const src = path.join(sessionMigrationsDir, file);
-      const dest = path.join(getCommittedMigrationsPath(), file);
-      await fs.copyFile(src, dest);
-      copied.push({name: file, path: dest});
-    }
-  }
-
-  return copied;
-}
-
 export async function deleteSessionMigrations(
   sessionMigrationsDir: string,
 ): Promise<void> {
@@ -163,26 +136,6 @@ export async function runDbmateStatus(databaseUrl: string): Promise<string> {
   ]);
 
   return result.stdout || result.stderr;
-}
-
-export async function runDbmateRollback(
-  databaseUrl: string,
-): Promise<ApplyResult> {
-  const config = getConfig();
-
-  const result = await runSpawnCommand([
-    config.dbmateBin,
-    "--env-file", "/dev/null",
-    "--url", databaseUrl,
-    "--migrations-dir", getCommittedMigrationsPath(),
-    "down",
-  ]);
-
-  if (result.exitCode !== 0) {
-    return {success: false, output: result.stderr || result.stdout};
-  }
-
-  return {success: true, output: result.stdout};
 }
 
 export async function listMigrations(): Promise<MigrationFile[]> {
@@ -207,11 +160,6 @@ export async function listMigrations(): Promise<MigrationFile[]> {
   }
 
   return migrations.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-}
-
-export async function getLatestMigration(): Promise<MigrationFile | null> {
-  const migrations = await listMigrations();
-  return migrations.length > 0 ? migrations[migrations.length - 1] : null;
 }
 
 export async function deleteMigrationFile(filePath: string): Promise<boolean> {
