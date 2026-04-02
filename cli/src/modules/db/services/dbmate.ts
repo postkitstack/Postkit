@@ -1,5 +1,5 @@
 import type {MigrationFile, ApplyResult} from "../types/index";
-import {runCommand, commandExists} from "../../../common/shell";
+import {runSpawnCommand, commandExists} from "../../../common/shell";
 import {getConfig} from "../utils/db-config";
 import {getCommittedMigrationsPath, getSessionMigrationsPath} from "../utils/db-config";
 import {getPostkitDir} from "../../../common/config";
@@ -63,20 +63,21 @@ export async function runSessionMigrate(
 ): Promise<ApplyResult> {
   const config = getConfig();
   const sessionDir = getSessionMigrationsPath();
-  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${sessionDir}" up`;
-  const result = await runCommand(command);
+
+  // Args passed directly — no shell interpolation, no injection risk.
+  const result = await runSpawnCommand([
+    config.dbmateBin,
+    "--env-file", "/dev/null",
+    "--url", databaseUrl,
+    "--migrations-dir", sessionDir,
+    "up",
+  ]);
 
   if (result.exitCode !== 0) {
-    return {
-      success: false,
-      output: result.stderr || result.stdout,
-    };
+    return {success: false, output: result.stderr || result.stdout};
   }
 
-  return {
-    success: true,
-    output: result.stdout,
-  };
+  return {success: true, output: result.stdout};
 }
 
 /**
@@ -90,30 +91,28 @@ export async function runCommittedMigrate(
   const config = getConfig();
   let targetDir = getCommittedMigrationsPath();
 
-  // If migration filter is provided, use filtered migrations
   if (migrationFilter && migrationFilter.length > 0) {
     targetDir = await filterMigrations(migrationFilter);
   }
 
-  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${targetDir}" up`;
-  const result = await runCommand(command);
+  // Args passed directly — no shell interpolation, no injection risk.
+  const result = await runSpawnCommand([
+    config.dbmateBin,
+    "--env-file", "/dev/null",
+    "--url", databaseUrl,
+    "--migrations-dir", targetDir,
+    "up",
+  ]);
 
-  // Clean up filtered migrations if they were used
   if (migrationFilter && migrationFilter.length > 0) {
     await cleanupFilteredMigrations();
   }
 
   if (result.exitCode !== 0) {
-    return {
-      success: false,
-      output: result.stderr || result.stdout,
-    };
+    return {success: false, output: result.stderr || result.stdout};
   }
 
-  return {
-    success: true,
-    output: result.stdout,
-  };
+  return {success: true, output: result.stdout};
 }
 
 export async function copySessionMigrations(
@@ -153,8 +152,14 @@ export async function deleteSessionMigrations(
 
 export async function runDbmateStatus(databaseUrl: string): Promise<string> {
   const config = getConfig();
-  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${getCommittedMigrationsPath()}" status`;
-  const result = await runCommand(command);
+
+  const result = await runSpawnCommand([
+    config.dbmateBin,
+    "--env-file", "/dev/null",
+    "--url", databaseUrl,
+    "--migrations-dir", getCommittedMigrationsPath(),
+    "status",
+  ]);
 
   return result.stdout || result.stderr;
 }
@@ -164,20 +169,19 @@ export async function runDbmateRollback(
 ): Promise<ApplyResult> {
   const config = getConfig();
 
-  const command = `${config.dbmateBin} --env-file /dev/null --url "${databaseUrl}" --migrations-dir "${getCommittedMigrationsPath()}" down`;
-  const result = await runCommand(command);
+  const result = await runSpawnCommand([
+    config.dbmateBin,
+    "--env-file", "/dev/null",
+    "--url", databaseUrl,
+    "--migrations-dir", getCommittedMigrationsPath(),
+    "down",
+  ]);
 
   if (result.exitCode !== 0) {
-    return {
-      success: false,
-      output: result.stderr || result.stdout,
-    };
+    return {success: false, output: result.stderr || result.stdout};
   }
 
-  return {
-    success: true,
-    output: result.stdout,
-  };
+  return {success: true, output: result.stdout};
 }
 
 export async function listMigrations(): Promise<MigrationFile[]> {

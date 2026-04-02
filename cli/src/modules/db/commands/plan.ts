@@ -5,6 +5,7 @@ import {generateSchemaSQL, generateSchemaFingerprint} from "../services/schema-g
 import {runPgschemaplan} from "../services/pgschema";
 import {testConnection} from "../services/database";
 import type {CommandOptions} from "../../../common/types";
+import {PostkitError} from "../../../errors";
 
 export async function planCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();
@@ -14,9 +15,10 @@ export async function planCommand(options: CommandOptions): Promise<void> {
     const session = await getSession();
 
     if (!session || !session.active) {
-      logger.error("No active migration session.");
-      logger.info('Run "postkit db start" to begin a new session.');
-      process.exit(1);
+      throw new PostkitError(
+        "No active migration session.",
+        'Run "postkit db start" to begin a new session.',
+      );
     }
 
     logger.heading("Generating Migration Plan");
@@ -29,11 +31,10 @@ export async function planCommand(options: CommandOptions): Promise<void> {
 
     if (!localConnected) {
       spinner.fail("Failed to connect to local database");
-      logger.error("Could not connect to the local database.");
-      logger.info(
+      throw new PostkitError(
+        "Could not connect to the local database.",
         'The local clone may have been removed. Run "postkit db start" again.',
       );
-      process.exit(1);
     }
 
     spinner.succeed("Connected to local database");
@@ -96,8 +97,7 @@ export async function planCommand(options: CommandOptions): Promise<void> {
     logger.info('  - Run "postkit db commit" when ready');
   } catch (error) {
     spinner.fail("Failed to generate plan");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }
 

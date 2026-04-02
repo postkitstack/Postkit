@@ -83,9 +83,15 @@ export async function addRemote(name: string, url: string, setAsDefault: boolean
   const raw = await fs.readFile(configPath, "utf-8");
   const config = JSON.parse(raw);
 
-  // Validate name
+  // Validate name — only letters, numbers, hyphens, underscores
   if (!name || name.trim().length === 0) {
     throw new Error("Remote name cannot be empty");
+  }
+
+  if (!isValidRemoteName(name)) {
+    throw new Error(
+      `Invalid remote name "${name}". Use only letters, numbers, hyphens (-), and underscores (_).`,
+    );
   }
 
   // Check if remote already exists
@@ -266,6 +272,14 @@ export function resolveRemote(remoteName?: string): {name: string; url: string} 
   }
 
   return {name: defaultName, url: remotes[defaultName].url};
+}
+
+/**
+ * Validate remote name — only alphanumeric, hyphens, underscores.
+ * Prevents shell metacharacter injection and path traversal.
+ */
+function isValidRemoteName(name: string): boolean {
+  return /^[a-zA-Z0-9_-]+$/.test(name);
 }
 
 /**

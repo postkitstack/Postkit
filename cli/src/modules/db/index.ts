@@ -1,6 +1,7 @@
 import {Command} from "commander";
 import {checkInitialized} from "../../common/config";
 import {logger} from "../../common/logger";
+import {PostkitError} from "../../errors";
 import {startCommand} from "./commands/start";
 import {planCommand} from "./commands/plan";
 import {applyCommand} from "./commands/apply";
@@ -20,19 +21,23 @@ import {
 } from "./commands/remote";
 
 /**
- * Wrapper to check initialization before running db commands
+ * Wrapper to check initialization before running db commands.
+ *
+ * - PostkitError  → user-facing: log message + hint, exit with its exit code
+ * - Anything else → programming bug: re-throw so unhandledRejection shows it
  */
 async function withInitCheck(fn: () => Promise<void>): Promise<void> {
   try {
     checkInitialized();
     await fn();
   } catch (error) {
-    if (error instanceof Error) {
+    if (error instanceof PostkitError) {
       logger.error(error.message);
-    } else {
-      logger.error(String(error));
+      if (error.hint) logger.info(error.hint);
+      process.exit(error.exitCode);
     }
-    process.exit(1);
+    // Unexpected error — re-throw so the unhandledRejection handler shows it
+    throw error;
   }
 }
 

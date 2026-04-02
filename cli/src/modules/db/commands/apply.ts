@@ -17,6 +17,7 @@ import {applyGrants, generateGrants} from "../services/grant-generator";
 import {applySeeds, generateSeeds} from "../services/seed-generator";
 import type {CommandOptions} from "../../../common/types";
 import type {SessionState} from "../types/index";
+import {PostkitError} from "../../../errors";
 
 export async function applyCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();
@@ -26,9 +27,10 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     const session = await getSession();
 
     if (!session || !session.active) {
-      logger.error("No active migration session.");
-      logger.info('Run "postkit db start" to begin a new session.');
-      process.exit(1);
+      throw new PostkitError(
+        "No active migration session.",
+        'Run "postkit db start" to begin a new session.',
+      );
     }
 
     // Confirm apply operation (unless force flag)
@@ -146,8 +148,7 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     await handleFreshApply(session, options, spinner);
   } catch (error) {
     spinner.fail("Failed to apply migration");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -186,13 +187,10 @@ async function handleResume(
       }
     } catch (error) {
       spinner.fail("Failed to apply grants");
-      logger.error(error instanceof Error ? error.message : String(error));
-      logger.blank();
-      logger.warn(
-        "Grants failed. Migration is already applied to local database.",
+      throw new PostkitError(
+        `Grants failed: ${error instanceof Error ? error.message : String(error)}`,
+        'Run "postkit db apply" again to retry from grants.',
       );
-      logger.info('Run "postkit db apply" again to retry from grants.');
-      process.exit(1);
     }
 
     await updatePendingChanges({grantsApplied: true});
@@ -218,11 +216,10 @@ async function handleResume(
       }
     } catch (error) {
       spinner.fail("Failed to apply seeds");
-      logger.error(error instanceof Error ? error.message : String(error));
-      logger.blank();
-      logger.warn("Seeds failed. Migration and grants are already applied.");
-      logger.info('Run "postkit db apply" again to retry from seeds.');
-      process.exit(1);
+      throw new PostkitError(
+        `Seeds failed: ${error instanceof Error ? error.message : String(error)}`,
+        'Run "postkit db apply" again to retry from seeds.',
+      );
     }
 
     await updatePendingChanges({seedsApplied: true});
@@ -295,9 +292,10 @@ async function handleFreshApply(
     const currentFingerprint = await generateSchemaFingerprint();
 
     if (currentFingerprint !== session.pendingChanges.schemaFingerprint) {
-      logger.error("Schema files have changed since the plan was generated.");
-      logger.info('Run "postkit db plan" again to regenerate the plan.');
-      process.exit(1);
+      throw new PostkitError(
+        "Schema files have changed since the plan was generated.",
+        'Run "postkit db plan" again to regenerate the plan.',
+      );
     }
   }
 
@@ -334,11 +332,10 @@ async function handleFreshApply(
 
   if (!localConnected) {
     spinner.fail("Failed to connect to local database");
-    logger.error("Could not connect to the local database.");
-    logger.info(
+    throw new PostkitError(
+      "Could not connect to the local database.",
       'The local clone may have been removed. Run "postkit db start" again.',
     );
-    process.exit(1);
   }
 
   spinner.succeed("Connected to local database");
@@ -361,7 +358,14 @@ async function handleFreshApply(
 
   spinner.start("Wrapping plan and creating migration file...");
 
-  const wrappedSQL = await wrapPlanSQL(session.pendingChanges.planFile!);
+  if (!session.pendingChanges.planFile) {
+    throw new PostkitError(
+      "Plan file path is missing from session state.",
+      'Run "postkit db plan" again to regenerate the plan.',
+    );
+  }
+
+  const wrappedSQL = await wrapPlanSQL(session.pendingChanges.planFile);
 
   if (!wrappedSQL) {
     spinner.succeed("No changes to apply");
@@ -388,13 +392,11 @@ async function handleFreshApply(
 
   if (!migrateResult.success) {
     spinner.fail("Failed to apply migration");
-    logger.error("Migration apply failed:");
-    console.log(migrateResult.output);
-
-    // Clean up the failed migration file
     await deleteMigrationFile(migrationFile.path);
-    logger.info("Migration file has been cleaned up.");
-    process.exit(1);
+    throw new PostkitError(
+      `Migration apply failed:\n${migrateResult.output}`,
+      "Migration file has been cleaned up. Fix the SQL and run \"postkit db apply\" again.",
+    );
   }
 
   spinner.succeed("Migration applied to local database");
@@ -429,13 +431,10 @@ async function handleFreshApply(
     }
   } catch (error) {
     spinner.fail("Failed to apply grants");
-    logger.error(error instanceof Error ? error.message : String(error));
-    logger.blank();
-    logger.warn(
-      "Grants failed. Migration is already applied to local database.",
+    throw new PostkitError(
+      `Grants failed: ${error instanceof Error ? error.message : String(error)}`,
+      'Migration is already applied. Run "postkit db apply" again to retry from grants.',
     );
-    logger.info('Run "postkit db apply" again to retry from grants.');
-    process.exit(1);
   }
 
   await updatePendingChanges({grantsApplied: true});
@@ -455,11 +454,10 @@ async function handleFreshApply(
     }
   } catch (error) {
     spinner.fail("Failed to apply seeds");
-    logger.error(error instanceof Error ? error.message : String(error));
-    logger.blank();
-    logger.warn("Seeds failed. Migration and grants are already applied.");
-    logger.info('Run "postkit db apply" again to retry from seeds.');
-    process.exit(1);
+    throw new PostkitError(
+      `Seeds failed: ${error instanceof Error ? error.message : String(error)}`,
+      'Migration and grants are already applied. Run "postkit db apply" again to retry from seeds.',
+    );
   }
 
   await updatePendingChanges({seedsApplied: true});
@@ -514,22 +512,20 @@ async function handleManualMigrationApply(
   const fs = await import("fs/promises");
 
   if (!existsSync(sessionMigrationsDir)) {
-    logger.error("No migration files found in session directory.");
-    logger.info(
+    throw new PostkitError(
+      "No migration files found in session directory.",
       'Run "postkit db migration <name>" to create a manual migration.',
     );
-    process.exit(1);
   }
 
   const files = await fs.readdir(sessionMigrationsDir);
   const migrationFiles = files.filter((f) => f.endsWith(".sql"));
 
   if (migrationFiles.length === 0) {
-    logger.error("No migration files found in session directory.");
-    logger.info(
+    throw new PostkitError(
+      "No migration files found in session directory.",
       'Run "postkit db migration <name>" to create a manual migration.',
     );
-    process.exit(1);
   }
 
   // Use migration filename as description (user already named it when creating)
@@ -545,11 +541,10 @@ async function handleManualMigrationApply(
 
   if (!localConnected) {
     spinner.fail("Failed to connect to local database");
-    logger.error("Could not connect to the local database.");
-    logger.info(
+    throw new PostkitError(
+      "Could not connect to the local database.",
       'The local clone may have been removed. Run "postkit db start" again.',
     );
-    process.exit(1);
   }
 
   spinner.succeed("Connected to local database");
@@ -574,9 +569,10 @@ async function handleManualMigrationApply(
 
   if (!migrateResult.success) {
     spinner.fail("Failed to apply migration(s)");
-    logger.error("Migration apply failed:");
-    console.log(migrateResult.output);
-    process.exit(1);
+    throw new PostkitError(
+      `Migration apply failed:\n${migrateResult.output}`,
+      'Fix the SQL in your migration file, then run "postkit db apply" again.',
+    );
   }
 
   spinner.succeed("Migration(s) applied to local database");
@@ -612,13 +608,10 @@ async function handleManualMigrationApply(
     }
   } catch (error) {
     spinner.fail("Failed to apply grants");
-    logger.error(error instanceof Error ? error.message : String(error));
-    logger.blank();
-    logger.warn(
-      "Grants failed. Migration(s) are already applied to local database.",
+    throw new PostkitError(
+      `Grants failed: ${error instanceof Error ? error.message : String(error)}`,
+      'Migration(s) are already applied. Run "postkit db apply" again to retry from grants.',
     );
-    logger.info('Run "postkit db apply" again to retry from grants.');
-    process.exit(1);
   }
 
   await updatePendingChanges({grantsApplied: true});
@@ -638,11 +631,10 @@ async function handleManualMigrationApply(
     }
   } catch (error) {
     spinner.fail("Failed to apply seeds");
-    logger.error(error instanceof Error ? error.message : String(error));
-    logger.blank();
-    logger.warn("Seeds failed. Migration(s) and grants are already applied.");
-    logger.info('Run "postkit db apply" again to retry from seeds.');
-    process.exit(1);
+    throw new PostkitError(
+      `Seeds failed: ${error instanceof Error ? error.message : String(error)}`,
+      'Migration(s) and grants are already applied. Run "postkit db apply" again to retry from seeds.',
+    );
   }
 
   await updatePendingChanges({seedsApplied: true, applied: true});

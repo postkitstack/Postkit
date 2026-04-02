@@ -67,12 +67,19 @@ export async function applyInfra(databaseUrl: string): Promise<void> {
 
   for (const stmt of infra) {
     if (stmt.content.trim()) {
+      // Args passed directly to OS — no shell, no injection risk.
+      // PGPASSWORD supplied only via env, never interpolated into args.
       const result = await runCommandWithInput(
-        `psql -h ${dbInfo.host} -p ${dbInfo.port} -U ${dbInfo.user} -d ${dbInfo.database} -v ON_ERROR_STOP=1`,
+        [
+          "psql",
+          "-h", dbInfo.host,
+          "-p", String(dbInfo.port),
+          "-U", dbInfo.user,
+          "-d", dbInfo.database,
+          "-v", "ON_ERROR_STOP=1",
+        ],
         stmt.content,
-        {
-          env: {PGPASSWORD: dbInfo.password},
-        },
+        {env: {PGPASSWORD: dbInfo.password}},
       );
 
       if (result.exitCode !== 0) {

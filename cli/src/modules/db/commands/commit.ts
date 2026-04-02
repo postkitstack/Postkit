@@ -9,6 +9,7 @@ import {deleteGeneratedSchema} from "../services/schema-generator";
 import {addCommittedMigration, getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
 import type {SessionState} from "../types/index";
+import {PostkitError} from "../../../errors";
 
 export async function commitCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();
@@ -18,24 +19,25 @@ export async function commitCommand(options: CommandOptions): Promise<void> {
     const session = await getSession();
 
     if (!session || !session.active) {
-      logger.error("No active migration session.");
-      logger.info('Run "postkit db start" to begin a new session.');
-      process.exit(1);
+      throw new PostkitError(
+        "No active migration session.",
+        'Run "postkit db start" to begin a new session.',
+      );
     }
 
-    // Step 1: Validate session has applied changes
     if (!session.pendingChanges.applied) {
-      logger.error("Changes have not been applied to local database yet.");
-      logger.info('Run "postkit db apply" first to test changes locally.');
-      process.exit(1);
+      throw new PostkitError(
+        "Changes have not been applied to local database yet.",
+        'Run "postkit db apply" first to test changes locally.',
+      );
     }
 
-    // Check migration files exist in session
     const migrationFiles = session.pendingChanges.migrationFiles || [];
     if (migrationFiles.length === 0) {
-      logger.error("No migration files found in session.");
-      logger.info('Run "postkit db apply" to create a migration file.');
-      process.exit(1);
+      throw new PostkitError(
+        "No migration files found in session.",
+        'Run "postkit db apply" to create a migration file.',
+      );
     }
 
     const sessionMigrationsDir = getSessionMigrationsPath();
@@ -135,7 +137,6 @@ export async function commitCommand(options: CommandOptions): Promise<void> {
     logger.info('  - Run "postkit db start" to begin a new session for more changes');
   } catch (error) {
     spinner.fail("Failed to commit migration");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }

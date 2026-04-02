@@ -1,6 +1,6 @@
 import pg from "pg";
 import type {DatabaseConnectionInfo} from "../types/index";
-import {runCommand} from "../../../common/shell";
+import {runPipedCommands} from "../../../common/shell";
 
 const {Client} = pg;
 
@@ -101,20 +101,38 @@ export async function cloneDatabase(
   sourceUrl: string,
   targetUrl: string,
 ): Promise<void> {
-  const sourceInfo = parseConnectionUrl(sourceUrl);
-  const targetInfo = parseConnectionUrl(targetUrl);
+  const src = parseConnectionUrl(sourceUrl);
+  const dst = parseConnectionUrl(targetUrl);
 
-  // Drop target if exists
   await dropDatabase(targetUrl);
-
-  // Create target database
   await createDatabase(targetUrl);
 
-  // Use pg_dump and psql to clone (pipefail ensures pg_dump errors are caught)
-  const dumpCmd = `PGPASSWORD="${sourceInfo.password}" pg_dump -h ${sourceInfo.host} -p ${sourceInfo.port} -U ${sourceInfo.user} -d ${sourceInfo.database} --no-owner --no-acl`;
-  const restoreCmd = `PGPASSWORD="${targetInfo.password}" psql -h ${targetInfo.host} -p ${targetInfo.port} -U ${targetInfo.user} -d ${targetInfo.database}`;
-
-  const result = await runCommand(`bash -c 'set -o pipefail; ${dumpCmd} | ${restoreCmd}'`);
+  // Args are passed directly to the OS — no shell involved, no injection risk.
+  // Credentials are supplied only via the env field, never interpolated into args.
+  const result = await runPipedCommands(
+    {
+      args: [
+        "pg_dump",
+        "-h", src.host,
+        "-p", String(src.port),
+        "-U", src.user,
+        "-d", src.database,
+        "--no-owner",
+        "--no-acl",
+      ],
+      env: {PGPASSWORD: src.password},
+    },
+    {
+      args: [
+        "psql",
+        "-h", dst.host,
+        "-p", String(dst.port),
+        "-U", dst.user,
+        "-d", dst.database,
+      ],
+      env: {PGPASSWORD: dst.password},
+    },
+  );
 
   if (result.exitCode !== 0) {
     const errorDetail = result.stderr || result.stdout || "Unknown error (no output captured)";

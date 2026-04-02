@@ -16,6 +16,7 @@ import {checkPgschemaInstalled} from "../services/pgschema";
 import {checkDbmateInstalled, runDbmateStatus} from "../services/dbmate";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
+import {PostkitError} from "../../../errors";
 
 interface StartOptions extends CommandOptions {
   remote?: string;
@@ -25,15 +26,12 @@ export async function startCommand(options: StartOptions): Promise<void> {
   const spinner = ora();
 
   try {
-    // Check for existing session
     if (await hasActiveSession()) {
       const session = await getSession();
-      logger.warn("An active migration session already exists.");
-      logger.info(`Started at: ${session?.startedAt}`);
-      logger.info(
-        'Run "postkit db abort" to cancel it or "postkit db status" to see details.',
+      throw new PostkitError(
+        `An active migration session already exists (started at ${session?.startedAt}).`,
+        'Run "postkit db abort" to cancel it, or "postkit db status" to see details.',
       );
-      process.exit(1);
     }
 
     logger.heading("Starting Migration Session");
@@ -45,17 +43,17 @@ export async function startCommand(options: StartOptions): Promise<void> {
     const dbmateInstalled = await checkDbmateInstalled();
 
     if (!pgschemaInstalled) {
-      logger.error("pgschema is not installed. Please install it first.");
-      logger.info("Visit: https://github.com/pgschema/pgschema");
-      process.exit(1);
+      throw new PostkitError(
+        "pgschema binary not found.",
+        "Visit: https://github.com/pgschema/pgschema",
+      );
     }
 
     if (!dbmateInstalled) {
-      logger.error("dbmate is not installed. Please install it first.");
-      logger.info(
-        "Install with: brew install dbmate (macOS) or go install github.com/amacneil/dbmate@latest",
+      throw new PostkitError(
+        "dbmate binary not found.",
+        "Install with: brew install dbmate  or  go install github.com/amacneil/dbmate@latest",
       );
-      process.exit(1);
     }
 
     logger.debug("Prerequisites check passed", options.verbose);
@@ -80,13 +78,13 @@ export async function startCommand(options: StartOptions): Promise<void> {
         logger.debug(`Using default remote: ${targetRemoteName}`, options.verbose);
       }
     } catch (error) {
-      logger.error(error instanceof Error ? error.message : String(error));
-      logger.blank();
-      logger.info("Manage remotes with:");
-      logger.info('  postkit db remote list     - List all remotes');
-      logger.info('  postkit db remote add      - Add a new remote');
-      logger.info('  postkit db remote use      - Set default remote');
-      process.exit(1);
+      throw new PostkitError(
+        error instanceof Error ? error.message : String(error),
+        "Manage remotes with:\n" +
+        "  postkit db remote list   — list all remotes\n" +
+        "  postkit db remote add    — add a new remote\n" +
+        "  postkit db remote use    — set the default remote",
+      );
     }
 
     logger.debug(
@@ -109,10 +107,10 @@ export async function startCommand(options: StartOptions): Promise<void> {
 
     if (!remoteConnected) {
       spinner.fail("Failed to connect to remote database");
-      logger.error(
-        "Could not connect to the remote database. Check your REMOTE_DATABASE_URL.",
+      throw new PostkitError(
+        "Could not connect to the remote database.",
+        "Check the URL for this remote: postkit db remote list",
       );
-      process.exit(1);
     }
 
     spinner.succeed("Connected to remote database");
@@ -142,8 +140,11 @@ export async function startCommand(options: StartOptions): Promise<void> {
       logger.info('  1. Run "postkit db deploy" to deploy committed migrations');
       logger.info("  2. Then run \"postkit db start\" again");
       logger.blank();
-      logger.info("If you want to discard committed migrations, manually delete .postkit/committed.json");
-      process.exit(1);
+      throw new PostkitError(
+        `Cannot start a new session — ${pendingCommitted.length} committed migration(s) are pending deployment.`,
+        'Run "postkit db deploy" to deploy them, then try "postkit db start" again.\n' +
+        "  (To discard committed migrations, delete .postkit/committed.json manually.)",
+      );
     }
 
     spinner.succeed("No pending committed migrations");
@@ -180,8 +181,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
         ]);
 
         if (!confirm) {
-          logger.info("Session start cancelled.");
-          process.exit(0);
+          throw new PostkitError("Session start cancelled.", undefined, 0);
         }
       } else {
         logger.info("Continuing due to --force flag...");
@@ -228,8 +228,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
     logger.info('  4. Run "postkit db commit <description>" when ready');
   } catch (error) {
     spinner.fail("Failed to start migration session");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }
 

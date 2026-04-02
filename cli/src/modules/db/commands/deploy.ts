@@ -19,6 +19,7 @@ import {getPendingCommittedMigrations, markMigrationDeployed} from "../utils/com
 import {resolveRemote, maskRemoteUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
 import type {Config} from "../types/index";
+import {PostkitError} from "../../../errors";
 
 interface DeployOptions extends CommandOptions {
   remote?: string;
@@ -55,8 +56,7 @@ async function cleanupExistingSession(
     ]);
 
     if (!confirm) {
-      logger.info("Deploy cancelled.");
-      process.exit(0);
+      throw new PostkitError("Deploy cancelled.", undefined, 0);
     }
   }
 
@@ -183,8 +183,10 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
 
     if (!targetConnected) {
       spinner.fail("Failed to connect to target database");
-      logger.error("Could not connect to the target database. Check your connection URL.");
-      process.exit(1);
+      throw new PostkitError(
+        "Could not connect to the target database.",
+        "Check the remote URL: postkit db remote list",
+      );
     }
 
     const targetTableCount = await getTableCount(targetUrl);
@@ -240,8 +242,9 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
         // Best effort cleanup
       }
 
-      logger.error("Deployment aborted — dry run failed. No changes were made to the target database.");
-      process.exit(1);
+      throw new PostkitError(
+        "Deployment aborted — dry run failed. No changes were made to the target database.",
+      );
     }
 
     logger.blank();
@@ -280,17 +283,16 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     } catch (error) {
       logger.error(error instanceof Error ? error.message : String(error));
       logger.blank();
-      logger.error("Target deployment failed. The target database may be in a partial state.");
-      logger.info("Investigate and fix manually, then retry: postkit db deploy");
-
-      // Clean up local clone
       try {
         await dropDatabase(localDbUrl);
       } catch {
-        // Best effort
+        // Best effort cleanup
       }
 
-      process.exit(1);
+      throw new PostkitError(
+        "Target deployment failed. The target database may be in a partial state.",
+        "Investigate and fix manually, then retry: postkit db deploy",
+      );
     }
 
     // Step 12: Mark migrations as deployed
@@ -326,7 +328,6 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     logger.blank();
   } catch (error) {
     spinner.fail("Deployment failed");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }

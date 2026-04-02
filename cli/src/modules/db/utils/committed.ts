@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import {existsSync} from "fs";
 import type {CommittedState, CommittedMigration} from "../types/index";
 import {getCommittedFilePath} from "./db-config";
+import {logger} from "../../../common/logger";
 
 /**
  * Reads the committed state from .postkit/committed.json
@@ -18,7 +19,11 @@ export async function getCommittedState(): Promise<CommittedState> {
     const state = JSON.parse(content) as CommittedState;
     return state;
   } catch (error) {
-    // If file is corrupted, return empty state
+    logger.warn(
+      `committed.json is corrupted and could not be parsed — treating as empty. ` +
+      `(${error instanceof Error ? error.message : String(error)})\n` +
+      `  File: ${getCommittedFilePath()}`,
+    );
     return {migrations: []};
   }
 }

@@ -177,8 +177,7 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
       logger.info('  - Run "postkit db deploy" to deploy committed migrations');
     }
   } catch (error) {
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }
 

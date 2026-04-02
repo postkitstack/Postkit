@@ -2,6 +2,14 @@ import {Command} from "commander";
 import {initCommand} from "./commands/init";
 import {registerDbModule} from "./modules/db/index";
 import {registerAuthModule} from "./modules/auth/index";
+import {logger} from "./common/logger";
+
+// Catch any async error that escapes a command's try/catch.
+// Without this, Node prints a raw stack trace or silently fails.
+process.on("unhandledRejection", (reason) => {
+  logger.error(`Unexpected error: ${String(reason)}`);
+  process.exit(1);
+});
 
 const program = new Command();
 
