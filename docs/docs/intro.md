@@ -35,7 +35,7 @@ PostKit is built for the Appri stack:
 
 ```bash
 # Install CLI
-npm install -g @appri/postkit
+npm install -g @appritech/postkit
 
 # Initialize a new project
 postkit init

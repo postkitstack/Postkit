@@ -22,7 +22,7 @@ const config: Config = {
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'appri', // Usually your GitHub org/user name.
+  organizationName: 'appritechnologies', // Usually your GitHub org/user name.
   projectName: 'postkit', // Usually your repo name.
 
   onBrokenLinks: 'throw',
@@ -44,7 +44,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/appri/postkit/edit/main/docs/',
+            'https://github.com/appritechnologies/postkit/edit/main/docs/',
         },
         blog: {
           showReadingTime: true,
@@ -88,7 +88,7 @@ const config: Config = {
           label: 'Docs',
         },
         {
-          href: 'https://github.com/appri/postkit',
+          href: 'https://github.com/appritechnologies/postkit',
           label: 'GitHub',
           position: 'right',
         },
@@ -119,7 +119,7 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/appri/postkit',
+              href: 'https://github.com/appritechnologies/postkit',
             },
           ],
         },

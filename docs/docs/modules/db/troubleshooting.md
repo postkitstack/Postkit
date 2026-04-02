@@ -44,4 +44,4 @@ sidebar_position: 100
 
 ## Getting Help
 
-If you're still stuck, please open an issue on [GitHub](https://github.com/appri/postkit/issues).
+If you're still stuck, please open an issue on [GitHub](https://github.com/appritechnologies/postkit/issues).
