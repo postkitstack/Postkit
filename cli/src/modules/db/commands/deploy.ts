@@ -12,9 +12,9 @@ import {
   getTableCount,
 } from "../services/database";
 import {runCommittedMigrate, runDbmateStatus} from "../services/dbmate";
-import {generateInfra, applyInfra} from "../services/infra-generator";
-import {generateGrants, applyGrants} from "../services/grant-generator";
-import {generateSeeds, applySeeds} from "../services/seed-generator";
+import {loadInfra, applyInfra} from "../services/infra-generator";
+import {loadGrants, applyGrants} from "../services/grant-generator";
+import {loadSeeds, applySeeds} from "../services/seed-generator";
 import {getPendingCommittedMigrations, markMigrationDeployed} from "../utils/committed";
 import {resolveRemote, maskRemoteUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
@@ -40,7 +40,7 @@ function resolveTargetUrl(options: DeployOptions): {url: string; label: string} 
   return {url: resolved.url, label: `${resolved.name} (default)`};
 }
 
-async function cleanupExistingSession(
+async function confirmAndRemoveSession(
   spinner: ReturnType<typeof ora>,
   options: DeployOptions,
 ): Promise<void> {
@@ -78,7 +78,7 @@ async function runSteps(
 
   // Infra
   logger.step(step, totalSteps, `Applying infra to ${label}...`);
-  const infra = await generateInfra();
+  const infra = await loadInfra();
 
   if (infra.length === 0) {
     spinner.info("No infra files found - skipping");
@@ -105,7 +105,7 @@ async function runSteps(
 
   // Grants
   logger.step(step, totalSteps, `Applying grants to ${label}...`);
-  const grants = await generateGrants();
+  const grants = await loadGrants();
 
   if (grants.length === 0) {
     spinner.info("No grant files found - skipping");
@@ -119,7 +119,7 @@ async function runSteps(
 
   // Seeds
   logger.step(step, totalSteps, `Applying seeds to ${label}...`);
-  const seeds = await generateSeeds();
+  const seeds = await loadSeeds();
 
   if (seeds.length === 0) {
     spinner.info("No seed files found - skipping");
@@ -168,7 +168,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     const sessionActive = await hasActiveSession();
 
     if (sessionActive) {
-      await cleanupExistingSession(spinner, options);
+      await confirmAndRemoveSession(spinner, options);
       logger.blank();
     }
 

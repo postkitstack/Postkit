@@ -40,7 +40,7 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
         sessionActive: session?.active ?? false,
         startedAt: session?.startedAt ?? null,
         remoteName: session?.remoteName ?? null,
-        remoteSnapshot: session?.remoteSnapshot ?? null,
+        clonedAt: session?.clonedAt ?? null,
         pendingChanges: session?.pendingChanges ?? null,
         connections: session?.active ? {local: localConnected, remote: remoteConnected} : null,
         pendingCommittedMigrations: pendingCommitted.length,
@@ -74,7 +74,7 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
       ["Status", chalk.green("Active")],
       ["Started", session.startedAt],
       ["Duration", formatSessionDuration(session.startedAt)],
-      ["Snapshot", session.remoteSnapshot],
+      ["Cloned At", session.clonedAt],
     ];
 
     if (session.remoteName) {

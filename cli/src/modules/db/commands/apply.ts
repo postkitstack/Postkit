@@ -13,9 +13,9 @@ import {
   deleteMigrationFile,
 } from "../services/dbmate";
 import {generateSchemaFingerprint} from "../services/schema-generator";
-import {applyInfra, generateInfra} from "../services/infra-generator";
-import {applyGrants, generateGrants} from "../services/grant-generator";
-import {applySeeds, generateSeeds} from "../services/seed-generator";
+import {applyInfra, loadInfra} from "../services/infra-generator";
+import {applyGrants, loadGrants} from "../services/grant-generator";
+import {applySeeds, loadSeeds} from "../services/seed-generator";
 import type {CommandOptions} from "../../../common/types";
 import type {SessionState} from "../types/index";
 import {PostkitError} from "../../../errors";
@@ -24,7 +24,7 @@ async function applyInfraStep(
   spinner: ReturnType<typeof ora>,
   dbUrl: string,
 ): Promise<void> {
-  const infra = await generateInfra();
+  const infra = await loadInfra();
   if (infra.length === 0) {
     spinner.info("No infra files found - skipping");
     return;
@@ -39,7 +39,7 @@ async function applyGrantsStep(
   dbUrl: string,
   retryHint: string,
 ): Promise<void> {
-  const grants = await generateGrants();
+  const grants = await loadGrants();
   if (grants.length === 0) {
     spinner.info("No grant files found - skipping");
     return;
@@ -62,7 +62,7 @@ async function applySeedsStep(
   dbUrl: string,
   retryHint: string,
 ): Promise<void> {
-  const seeds = await generateSeeds();
+  const seeds = await loadSeeds();
   if (seeds.length === 0) {
     spinner.info("No seed files found - skipping");
     return;
@@ -207,7 +207,7 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     }
 
     // Fresh apply flow
-    await handleFreshApply(session, options, spinner);
+    await handlePlanApply(session, options, spinner);
   } catch (error) {
     spinner.fail("Failed to apply migration");
     throw error;
@@ -283,7 +283,7 @@ async function handleResume(
   logger.info('  - Run "postkit db commit" to commit session migrations');
 }
 
-async function handleFreshApply(
+async function handlePlanApply(
   session: SessionState,
   options: CommandOptions,
   spinner: ReturnType<typeof ora>,
@@ -303,7 +303,7 @@ async function handleFreshApply(
 
     // If new manual files exist, use manual flow even if plan exists
     if (newManualFiles.length > 0) {
-      await handleManualMigrationApply(
+      await handleManualApply(
         session,
         options,
         spinner,
@@ -319,7 +319,7 @@ async function handleFreshApply(
 
   if (!hasPlan) {
     // Manual migration flow - skip plan steps, apply existing files
-    await handleManualMigrationApply(session, options, spinner);
+    await handleManualApply(session, options, spinner);
     return;
   }
 
@@ -496,7 +496,7 @@ async function handleFreshApply(
  * Handle manual migration apply (no plan file).
  * User has created migration files manually with `postkit db migration`.
  */
-async function handleManualMigrationApply(
+async function handleManualApply(
   session: SessionState,
   options: CommandOptions,
   spinner: ReturnType<typeof ora>,

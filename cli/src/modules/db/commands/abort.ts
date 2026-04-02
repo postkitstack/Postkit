@@ -26,7 +26,7 @@ export async function abortCommand(options: CommandOptions): Promise<void> {
     logger.info("Current session:");
     logger.info(`  Started: ${session.startedAt}`);
     logger.info(`  Remote: ${session.remoteName || "unknown"}`);
-    logger.info(`  Snapshot: ${session.remoteSnapshot}`);
+    logger.info(`  Cloned at: ${session.clonedAt}`);
     logger.info(
       `  Plan generated: ${session.pendingChanges.planned ? "Yes" : "No"}`,
     );

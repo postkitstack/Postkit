@@ -213,7 +213,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
         config.localDbUrl,
         targetRemoteName,
       );
-      logger.success(`Session created (snapshot: ${session.remoteSnapshot})`);
+      logger.success(`Session created (cloned at: ${session.clonedAt})`);
     } else {
       logger.info("Dry run - session not created");
     }

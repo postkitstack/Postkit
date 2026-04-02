@@ -27,7 +27,7 @@ export async function createSession(
   const session: SessionState = {
     active: true,
     startedAt: now.toISOString(),
-    remoteSnapshot: formatTimestamp(now),
+    clonedAt: formatTimestamp(now),
     remoteName,
     localDbUrl,
     remoteDbUrl,

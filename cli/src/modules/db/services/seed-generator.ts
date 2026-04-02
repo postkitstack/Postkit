@@ -5,7 +5,7 @@ import {getConfig} from "../utils/db-config";
 import {loadSqlGroup} from "../utils/sql-loader";
 import type {SeedStatement} from "../types/index";
 
-export async function generateSeeds(): Promise<SeedStatement[]> {
+export async function loadSeeds(): Promise<SeedStatement[]> {
   const config = getConfig();
   const seedsPath = path.join(config.schemaPath, "seeds");
 
@@ -55,7 +55,7 @@ async function loadSeedsFromSubdir(
 }
 
 export async function getSeedsSQL(): Promise<string> {
-  const seeds = await generateSeeds();
+  const seeds = await loadSeeds();
 
   if (seeds.length === 0) {
     return "-- No seed files found";
@@ -79,7 +79,7 @@ export async function getSeedsSQL(): Promise<string> {
 
 export async function applySeeds(databaseUrl: string): Promise<void> {
   const {executeSQL} = await import("./database");
-  const seeds = await generateSeeds();
+  const seeds = await loadSeeds();
 
   for (const seed of seeds) {
     if (seed.content.trim()) {

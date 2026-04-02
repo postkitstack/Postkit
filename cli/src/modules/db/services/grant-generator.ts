@@ -5,7 +5,7 @@ import {getConfig} from "../utils/db-config";
 import {loadSqlGroup} from "../utils/sql-loader";
 import type {GrantStatement} from "../types/index";
 
-export async function generateGrants(): Promise<GrantStatement[]> {
+export async function loadGrants(): Promise<GrantStatement[]> {
   const config = getConfig();
   const grantsPath = path.join(config.schemaPath, "grants");
 
@@ -62,7 +62,7 @@ async function loadGrantsFromSubdir(
 }
 
 export async function getGrantsSQL(): Promise<string> {
-  const grants = await generateGrants();
+  const grants = await loadGrants();
 
   if (grants.length === 0) {
     return "-- No grant files found";
@@ -86,7 +86,7 @@ export async function getGrantsSQL(): Promise<string> {
 
 export async function applyGrants(databaseUrl: string): Promise<void> {
   const {executeSQL} = await import("./database");
-  const grants = await generateGrants();
+  const grants = await loadGrants();
 
   for (const grant of grants) {
     if (grant.content.trim()) {

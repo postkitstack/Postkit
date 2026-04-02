@@ -1,7 +1,7 @@
 export interface SessionState {
   active: boolean;
   startedAt: string;
-  remoteSnapshot: string;
+  clonedAt: string;
   remoteName?: string;
   localDbUrl: string;
   remoteDbUrl: string;

@@ -6,7 +6,7 @@ import {parseConnectionUrl} from "./database";
 import {runSpawnCommand} from "../../../common/shell";
 import type {InfraStatement} from "../types/index";
 
-export async function generateInfra(): Promise<InfraStatement[]> {
+export async function loadInfra(): Promise<InfraStatement[]> {
   const config = getConfig();
   const infraPath = path.join(config.schemaPath, "infra");
 
@@ -39,7 +39,7 @@ async function loadInfraFromDirectory(
 }
 
 export async function getInfraSQL(): Promise<string> {
-  const infra = await generateInfra();
+  const infra = await loadInfra();
 
   if (infra.length === 0) {
     return "-- No infra files found";
@@ -62,7 +62,7 @@ export async function getInfraSQL(): Promise<string> {
 }
 
 export async function applyInfra(databaseUrl: string): Promise<void> {
-  const infra = await generateInfra();
+  const infra = await loadInfra();
   const nonEmpty = infra.filter((stmt) => stmt.content.trim());
 
   if (nonEmpty.length === 0) {
