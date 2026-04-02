@@ -58,7 +58,7 @@ export function getRemote(name: string): RemoteConfig | null {
  */
 export function getDefaultRemote(): string | null {
   const remotes = getRemotes();
-  const defaultName = Object.keys(remotes).find(name => remotes[name].default === true);
+  const defaultName = Object.keys(remotes).find(name => remotes[name]?.default === true);
 
   if (!defaultName) {
     // If no default is explicitly set, use the first remote
@@ -245,7 +245,9 @@ export function resolveRemoteUrl(remoteName?: string): string {
     throw new Error("No default remote configured.");
   }
 
-  return remotes[defaultName].url;
+  const remote = remotes[defaultName];
+  if (!remote) throw new Error(`Remote "${defaultName}" not found.`);
+  return remote.url;
 }
 
 /**
@@ -274,7 +276,9 @@ export function resolveRemote(remoteName?: string): {name: string; url: string} 
     throw new Error("No default remote configured.");
   }
 
-  return {name: defaultName, url: remotes[defaultName].url};
+  const remote = remotes[defaultName];
+  if (!remote) throw new Error(`Remote "${defaultName}" not found.`);
+  return {name: defaultName, url: remote.url};
 }
 
 /**

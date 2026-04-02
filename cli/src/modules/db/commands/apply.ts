@@ -260,7 +260,7 @@ async function handleResume(
   const migrationFiles = pc.migrationFiles || [];
   const latestMigration =
     migrationFiles.length > 0
-      ? migrationFiles[migrationFiles.length - 1].name
+      ? (migrationFiles[migrationFiles.length - 1]?.name ?? "unknown")
       : "unknown";
 
   logger.blank();
@@ -508,7 +508,7 @@ async function handleManualMigrationApply(
   }
 
   // Use migration filename as description (user already named it when creating)
-  const description = migrationFiles[0]
+  const description = (migrationFiles[0] ?? "")
     .replace(/^\d+_/, "")
     .replace(/\.sql$/, "");
 

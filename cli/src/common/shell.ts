@@ -48,7 +48,11 @@ export async function runSpawnCommand(
     input?: string;
   } = {},
 ): Promise<ShellResult> {
-  const [cmd, ...rest] = args;
+  const cmd = args[0];
+  const rest = args.slice(1);
+  if (!cmd) {
+    return {stdout: "", stderr: "No command specified", exitCode: 1};
+  }
   return new Promise((resolve) => {
     const child = spawn(cmd, rest, {
       cwd: options.cwd,
@@ -111,8 +115,14 @@ export async function runPipedCommands(
   producer: SpawnConfig,
   consumer: SpawnConfig,
 ): Promise<ShellResult> {
-  const [producerCmd, ...producerArgs] = producer.args;
-  const [consumerCmd, ...consumerArgs] = consumer.args;
+  const producerCmd = producer.args[0];
+  const producerArgs = producer.args.slice(1);
+  const consumerCmd = consumer.args[0];
+  const consumerArgs = consumer.args.slice(1);
+
+  if (!producerCmd || !consumerCmd) {
+    return Promise.resolve({stdout: "", stderr: "No command specified", exitCode: 1});
+  }
 
   return new Promise((resolve) => {
     const src = spawn(producerCmd, producerArgs, {

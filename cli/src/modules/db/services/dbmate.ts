@@ -153,7 +153,7 @@ export async function listMigrations(): Promise<MigrationFile[]> {
         migrations.push({
           name: file,
           path: path.join(getCommittedMigrationsPath(), file),
-          timestamp: match[1],
+          timestamp: match[1] ?? "",
         });
       }
     }
