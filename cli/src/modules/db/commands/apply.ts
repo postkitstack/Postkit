@@ -149,7 +149,9 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     // Show migration files with status
     if (hasMigrations && !hasPlan) {
       if (newFiles.length > 0) {
-        logger.info(`Found ${migrationFiles.length} migration file(s) (${newFiles.length} new):`);
+        logger.info(
+          `Found ${migrationFiles.length} migration file(s) (${newFiles.length} new):`,
+        );
         for (const file of migrationFiles) {
           const isNew = !trackedFileNames.has(file);
           const status = isNew ? "new" : "applied";
@@ -234,7 +236,11 @@ async function handleResume(
   // Grants
   if (!pc.grantsApplied) {
     logger.step(step, totalSteps, "Applying grants...");
-    await applyGrantsStep(spinner, session.localDbUrl, 'Run "postkit db apply" again to retry from grants.');
+    await applyGrantsStep(
+      spinner,
+      session.localDbUrl,
+      'Run "postkit db apply" again to retry from grants.',
+    );
     await updatePendingChanges({grantsApplied: true});
   } else {
     logger.step(step, totalSteps, "Grants already applied - skipping");
@@ -245,7 +251,11 @@ async function handleResume(
   // Seeds
   if (!pc.seedsApplied) {
     logger.step(step, totalSteps, "Applying seeds...");
-    await applySeedsStep(spinner, session.localDbUrl, 'Run "postkit db apply" again to retry from seeds.');
+    await applySeedsStep(
+      spinner,
+      session.localDbUrl,
+      'Run "postkit db apply" again to retry from seeds.',
+    );
     await updatePendingChanges({seedsApplied: true});
   } else {
     logger.step(step, totalSteps, "Seeds already applied - skipping");
@@ -290,12 +300,17 @@ async function handleFreshApply(
     const trackedFileNames = new Set(trackedFiles.map((f) => f.name));
     const files = await fs.readdir(sessionMigrationsDir);
     const newManualFiles = files.filter(
-      (f) => f.endsWith(".sql") && !trackedFileNames.has(f)
+      (f) => f.endsWith(".sql") && !trackedFileNames.has(f),
     );
 
     // If new manual files exist, use manual flow even if plan exists
     if (newManualFiles.length > 0) {
-      await handleManualMigrationApply(session, options, spinner, newManualFiles.length);
+      await handleManualMigrationApply(
+        session,
+        options,
+        spinner,
+        newManualFiles.length,
+      );
       return;
     }
   }
@@ -410,7 +425,7 @@ async function handleFreshApply(
     await deleteMigrationFile(migrationFile.path);
     throw new PostkitError(
       `Migration apply failed:\n${migrateResult.output}`,
-      "Migration file has been cleaned up. Fix the SQL and run \"postkit db apply\" again.",
+      'Migration file has been cleaned up. Fix the SQL and run "postkit db apply" again.',
     );
   }
 
@@ -433,12 +448,20 @@ async function handleFreshApply(
 
   // Step 6: Apply grants
   logger.step(6, 8, "Applying grants...");
-  await applyGrantsStep(spinner, session.localDbUrl, 'Migration is already applied. Run "postkit db apply" again to retry from grants.');
+  await applyGrantsStep(
+    spinner,
+    session.localDbUrl,
+    'Migration is already applied. Run "postkit db apply" again to retry from grants.',
+  );
   await updatePendingChanges({grantsApplied: true});
 
   // Step 7: Apply seeds
   logger.step(7, 8, "Applying seeds...");
-  await applySeedsStep(spinner, session.localDbUrl, 'Migration and grants are already applied. Run "postkit db apply" again to retry from seeds.');
+  await applySeedsStep(
+    spinner,
+    session.localDbUrl,
+    'Migration and grants are already applied. Run "postkit db apply" again to retry from seeds.',
+  );
   await updatePendingChanges({seedsApplied: true});
 
   // Step 8: Mark fully applied and clean up plan file
@@ -507,11 +530,6 @@ async function handleManualMigrationApply(
     );
   }
 
-  // Use migration filename as description (user already named it when creating)
-  const description = (migrationFiles[0] ?? "")
-    .replace(/^\d+_/, "")
-    .replace(/\.sql$/, "");
-
   // Step 1: Test local connection
   logger.step(1, 5, "Testing local database connection...");
   spinner.start("Connecting to local database...");
@@ -561,24 +579,30 @@ async function handleManualMigrationApply(
   await updatePendingChanges({
     migrationApplied: true,
     migrationFiles: appliedMigrations,
-    description,
   });
 
   // Step 4: Apply grants
   logger.step(4, 5, "Applying grants...");
-  await applyGrantsStep(spinner, session.localDbUrl, 'Migration(s) are already applied. Run "postkit db apply" again to retry from grants.');
+  await applyGrantsStep(
+    spinner,
+    session.localDbUrl,
+    'Migration(s) are already applied. Run "postkit db apply" again to retry from grants.',
+  );
   await updatePendingChanges({grantsApplied: true});
 
   // Step 5: Apply seeds
   logger.step(5, 5, "Applying seeds...");
-  await applySeedsStep(spinner, session.localDbUrl, 'Migration(s) and grants are already applied. Run "postkit db apply" again to retry from seeds.');
+  await applySeedsStep(
+    spinner,
+    session.localDbUrl,
+    'Migration(s) and grants are already applied. Run "postkit db apply" again to retry from seeds.',
+  );
   await updatePendingChanges({seedsApplied: true, applied: true});
 
   logger.blank();
   logger.success("Migration(s) applied to local database!");
   logger.blank();
   logger.info(`Files: ${migrationFiles.join(", ")}`);
-  logger.info(`Description: ${description}`);
   logger.blank();
   logger.info("Next steps:");
   logger.info("  - Verify the changes work correctly");

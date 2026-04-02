@@ -1,8 +1,12 @@
 import {Command} from "commander";
+import {createRequire} from "module";
 import {initCommand} from "./commands/init";
 import {registerDbModule} from "./modules/db/index";
 import {registerAuthModule} from "./modules/auth/index";
 import {logger} from "./common/logger";
+
+const require = createRequire(import.meta.url);
+const {version} = require("../package.json") as {version: string};
 
 // Catch any async error that escapes a command's try/catch.
 // Without this, Node prints a raw stack trace or silently fails.
@@ -16,12 +20,13 @@ const program = new Command();
 program
   .name("postkit")
   .description("PostKit - Developer toolkit for database management and more")
-  .version("1.0.0");
+  .version(version);
 
 // Global options
 program
   .option("-v, --verbose", "Enable verbose output")
-  .option("--dry-run", "Show what would be done without making changes");
+  .option("--dry-run", "Show what would be done without making changes")
+  .option("--json", "Output results as JSON (for scripting and CI)");
 
 // Register init command
 program

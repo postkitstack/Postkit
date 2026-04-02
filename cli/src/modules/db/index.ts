@@ -178,7 +178,7 @@ export function registerDbModule(program: Command): void {
     .action(async () => {
       await withInitCheck(async () => {
         const options = program.opts();
-        await remoteListCommand();
+        await remoteListCommand(options);
       });
     });
 

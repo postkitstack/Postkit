@@ -172,7 +172,8 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       logger.blank();
     }
 
-    const totalSteps = 13;
+    // 3 fixed steps (test, status, clone) + 4 runSteps × 2 passes (dry-run + target) + 2 fixed steps (mark deployed, cleanup)
+    const totalSteps = 3 + 4 * 2 + 2; // = 13
     const migrationNames = pendingMigrations.map(m => m.migrationFile.name);
 
     // Step 1: Test target DB connection
@@ -249,6 +250,17 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     logger.blank();
     logger.success("Dry run passed!");
     logger.blank();
+
+    // If --dry-run, stop here — don't touch the target database
+    if (options.dryRun) {
+      logger.info("Dry run complete. Target database was not modified.");
+      try {
+        await dropDatabase(localDbUrl);
+      } catch {
+        // Best effort cleanup
+      }
+      return;
+    }
 
     // Confirm deployment
     if (!options.force) {

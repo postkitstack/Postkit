@@ -31,6 +31,22 @@ async function showCommittedMigrations(): Promise<void> {
 export async function statusCommand(options: CommandOptions): Promise<void> {
   try {
     const session = await getSession();
+    const pendingCommitted = await getPendingCommittedMigrations();
+
+    if (options.json) {
+      const localConnected = session?.active ? await testConnection(session.localDbUrl) : false;
+      const remoteConnected = session?.active ? await testConnection(session.remoteDbUrl) : false;
+      console.log(JSON.stringify({
+        sessionActive: session?.active ?? false,
+        startedAt: session?.startedAt ?? null,
+        remoteName: session?.remoteName ?? null,
+        remoteSnapshot: session?.remoteSnapshot ?? null,
+        pendingChanges: session?.pendingChanges ?? null,
+        connections: session?.active ? {local: localConnected, remote: remoteConnected} : null,
+        pendingCommittedMigrations: pendingCommitted.length,
+      }, null, 2));
+      return;
+    }
 
     logger.heading("Migration Session Status");
 
@@ -172,8 +188,7 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
 
     logger.info('  - Run "postkit db abort" to cancel the session');
 
-    const pendingMigrations = await getPendingCommittedMigrations();
-    if (pendingMigrations.length > 0) {
+    if (pendingCommitted.length > 0) {
       logger.info('  - Run "postkit db deploy" to deploy committed migrations');
     }
   } catch (error) {

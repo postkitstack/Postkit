@@ -13,4 +13,5 @@ export interface CommandOptions {
   verbose?: boolean;
   dryRun?: boolean;
   force?: boolean;
+  json?: boolean;
 }

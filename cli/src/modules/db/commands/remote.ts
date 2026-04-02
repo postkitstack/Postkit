@@ -22,15 +22,31 @@ interface RemoteUseOptions extends CommandOptions {}
 /**
  * List all configured remotes
  */
-export async function remoteListCommand(): Promise<void> {
+export async function remoteListCommand(options: CommandOptions = {}): Promise<void> {
   try {
     const remotes = getRemoteList();
 
     if (remotes.length === 0) {
+      if (options.json) {
+        console.log(JSON.stringify({remotes: []}));
+        return;
+      }
       logger.info("No remotes configured.");
       logger.blank();
       logger.info("Add a remote with:");
       logger.info('  postkit db remote add <name> <url>');
+      return;
+    }
+
+    if (options.json) {
+      console.log(JSON.stringify({
+        remotes: remotes.map(r => ({
+          name: r.name,
+          url: maskRemoteUrl(r.url),
+          isDefault: r.isDefault,
+          addedAt: r.addedAt,
+        })),
+      }));
       return;
     }
 
@@ -118,6 +134,7 @@ export async function remoteUseCommand(
 ): Promise<void> {
   try {
     await setDefaultRemote(name);
+    logger.debug(`Default remote set to "${name}"`, options.verbose);
   } catch (error) {
     logger.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
