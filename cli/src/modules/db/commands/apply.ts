@@ -1,5 +1,6 @@
 import ora from "ora";
 import inquirer from "inquirer";
+import fs from "fs/promises";
 import {existsSync} from "fs";
 import {logger} from "../../../common/logger";
 import {getSession, updatePendingChanges} from "../utils/session";
@@ -112,7 +113,6 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
 
     // Check for migration files in session directory FIRST
     const sessionMigrationsDir = getSessionMigrationsPath();
-    const fs = await import("fs/promises");
     let migrationFiles: string[] = [];
 
     if (existsSync(sessionMigrationsDir)) {
@@ -290,8 +290,6 @@ async function handleFreshApply(
 ): Promise<void> {
   // Get session migrations path (used in multiple places)
   const sessionMigrationsDir = getSessionMigrationsPath();
-  const fs = await import("fs/promises");
-  const {existsSync} = await import("fs");
 
   // Check for NEW manual migration files first (before plan check)
 
@@ -469,9 +467,6 @@ async function handleFreshApply(
 
   // Clean up plan file since migration is now committed to session files
   if (session.pendingChanges.planFile) {
-    const fs = await import("fs/promises");
-    const {existsSync} = await import("fs");
-
     if (existsSync(session.pendingChanges.planFile)) {
       await fs.unlink(session.pendingChanges.planFile);
     }
@@ -511,7 +506,6 @@ async function handleManualMigrationApply(
 
   // Get migration files from session directory
   const sessionMigrationsDir = getSessionMigrationsPath();
-  const fs = await import("fs/promises");
 
   if (!existsSync(sessionMigrationsDir)) {
     throw new PostkitError(

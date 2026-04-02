@@ -34,6 +34,19 @@ const SCHEMA_ORDER: Record<string, number> = {
 };
 
 export async function generateSchemaSQL(): Promise<string> {
+  const {schemaFile} = await generateSchemaSQLAndFingerprint();
+  return schemaFile;
+}
+
+/**
+ * Generate schema SQL and compute fingerprint in a single filesystem pass.
+ * Use this instead of calling generateSchemaSQL() and generateSchemaFingerprint()
+ * separately to avoid reading schema files twice.
+ */
+export async function generateSchemaSQLAndFingerprint(): Promise<{
+  schemaFile: string;
+  fingerprint: string;
+}> {
   const config = getConfig();
   const schemaPath = config.schemaPath;
 
@@ -50,6 +63,8 @@ export async function generateSchemaSQL(): Promise<string> {
     "",
   ];
 
+  const hash = createHash("sha256");
+
   for (const section of sortedSections) {
     const sectionContent = await loadSectionFiles(section.path);
     if (sectionContent) {
@@ -59,6 +74,8 @@ export async function generateSchemaSQL(): Promise<string> {
       parts.push("");
       parts.push(sectionContent);
       parts.push("");
+      hash.update(section.path);
+      hash.update(sectionContent);
     }
   }
 
@@ -68,7 +85,7 @@ export async function generateSchemaSQL(): Promise<string> {
   const outputPath = getGeneratedSchemaPath();
   await fs.writeFile(outputPath, fullSchema, "utf-8");
 
-  return outputPath;
+  return {schemaFile: outputPath, fingerprint: hash.digest("hex")};
 }
 
 async function discoverSchemaSections(
