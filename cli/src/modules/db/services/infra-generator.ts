@@ -61,7 +61,7 @@ export async function getInfraSQL(): Promise<string> {
 
 export async function applyInfra(databaseUrl: string): Promise<void> {
   const {parseConnectionUrl} = await import("./database");
-  const {runCommandWithInput} = await import("../../../common/shell");
+  const {runSpawnCommand} = await import("../../../common/shell");
   const infra = await generateInfra();
   const dbInfo = parseConnectionUrl(databaseUrl);
 
@@ -69,7 +69,7 @@ export async function applyInfra(databaseUrl: string): Promise<void> {
     if (stmt.content.trim()) {
       // Args passed directly to OS — no shell, no injection risk.
       // PGPASSWORD supplied only via env, never interpolated into args.
-      const result = await runCommandWithInput(
+      const result = await runSpawnCommand(
         [
           "psql",
           "-h", dbInfo.host,
@@ -78,8 +78,7 @@ export async function applyInfra(databaseUrl: string): Promise<void> {
           "-d", dbInfo.database,
           "-v", "ON_ERROR_STOP=1",
         ],
-        stmt.content,
-        {env: {PGPASSWORD: dbInfo.password}},
+        {input: stmt.content, env: {PGPASSWORD: dbInfo.password}},
       );
 
       if (result.exitCode !== 0) {

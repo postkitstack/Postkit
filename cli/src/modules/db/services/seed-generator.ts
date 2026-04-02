@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
 import {getConfig} from "../utils/db-config";
+import {loadSqlGroup} from "../utils/sql-loader";
 import type {SeedStatement} from "../types/index";
 
 export async function generateSeeds(): Promise<SeedStatement[]> {
@@ -50,27 +51,7 @@ async function loadSeedsFromSubdir(
   dirPath: string,
   groupName: string,
 ): Promise<SeedStatement[]> {
-  const seeds: SeedStatement[] = [];
-  const files = await fs.readdir(dirPath);
-  const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
-
-  const contents: string[] = [];
-
-  for (const file of sqlFiles) {
-    const filePath = path.join(dirPath, file);
-    const content = await fs.readFile(filePath, "utf-8");
-    contents.push(`-- ${file}`);
-    contents.push(content.trim());
-  }
-
-  if (contents.length > 0) {
-    seeds.push({
-      name: groupName,
-      content: contents.join("\n\n"),
-    });
-  }
-
-  return seeds;
+  return loadSqlGroup(dirPath, groupName);
 }
 
 export async function getSeedsSQL(): Promise<string> {

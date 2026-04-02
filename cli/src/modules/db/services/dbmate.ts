@@ -2,6 +2,7 @@ import type {MigrationFile, ApplyResult} from "../types/index";
 import {runSpawnCommand, commandExists} from "../../../common/shell";
 import {getConfig} from "../utils/db-config";
 import {getCommittedMigrationsPath, getSessionMigrationsPath} from "../utils/db-config";
+import {formatTimestamp} from "../utils/session";
 import {getPostkitDir} from "../../../common/config";
 import fs from "fs/promises";
 import path from "path";
@@ -26,7 +27,7 @@ export async function createMigrationFile(
   migrationsDir?: string,
 ): Promise<MigrationFile> {
   const targetDir = migrationsDir || getSessionMigrationsPath();
-  const timestamp = generateTimestamp();
+  const timestamp = formatTimestamp(new Date());
   const safeName = description.replace(/[^a-z0-9]/gi, "_").toLowerCase();
   const fileName = `${timestamp}_${safeName}.sql`;
   const filePath = path.join(targetDir, fileName);
@@ -221,18 +222,6 @@ export async function deleteMigrationFile(filePath: string): Promise<boolean> {
   return false;
 }
 
-function generateTimestamp(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const seconds = String(now.getSeconds()).padStart(2, "0");
-
-  return `${year}${month}${day}${hours}${minutes}${seconds}`;
-}
-
 /**
  * Extracts the -- migrate:up section content from a dbmate migration file
  */
@@ -302,7 +291,7 @@ export async function mergeSessionMigrations(
   }
 
   // Build the merged migration content
-  const timestamp = generateTimestamp();
+  const timestamp = formatTimestamp(new Date());
   const safeName = description.replace(/[^a-z0-9]/gi, "_").toLowerCase();
   const fileName = `${timestamp}_${safeName}.sql`;
   const committedAt = new Date().toISOString();

@@ -19,6 +19,66 @@ import type {CommandOptions} from "../../../common/types";
 import type {SessionState} from "../types/index";
 import {PostkitError} from "../../../errors";
 
+async function applyInfraStep(
+  spinner: ReturnType<typeof ora>,
+  dbUrl: string,
+): Promise<void> {
+  const infra = await generateInfra();
+  if (infra.length === 0) {
+    spinner.info("No infra files found - skipping");
+    return;
+  }
+  spinner.start("Applying infra...");
+  await applyInfra(dbUrl);
+  spinner.succeed(`Infra applied (${infra.length} file(s))`);
+}
+
+async function applyGrantsStep(
+  spinner: ReturnType<typeof ora>,
+  dbUrl: string,
+  retryHint: string,
+): Promise<void> {
+  const grants = await generateGrants();
+  if (grants.length === 0) {
+    spinner.info("No grant files found - skipping");
+    return;
+  }
+  try {
+    spinner.start("Applying grants...");
+    await applyGrants(dbUrl);
+    spinner.succeed(`Grants applied (${grants.length} file(s))`);
+  } catch (error) {
+    spinner.fail("Failed to apply grants");
+    throw new PostkitError(
+      `Grants failed: ${error instanceof Error ? error.message : String(error)}`,
+      retryHint,
+    );
+  }
+}
+
+async function applySeedsStep(
+  spinner: ReturnType<typeof ora>,
+  dbUrl: string,
+  retryHint: string,
+): Promise<void> {
+  const seeds = await generateSeeds();
+  if (seeds.length === 0) {
+    spinner.info("No seed files found - skipping");
+    return;
+  }
+  try {
+    spinner.start("Applying seed data...");
+    await applySeeds(dbUrl);
+    spinner.succeed(`Seeds applied (${seeds.length} file(s))`);
+  } catch (error) {
+    spinner.fail("Failed to apply seeds");
+    throw new PostkitError(
+      `Seeds failed: ${error instanceof Error ? error.message : String(error)}`,
+      retryHint,
+    );
+  }
+}
+
 export async function applyCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();
 
@@ -174,25 +234,7 @@ async function handleResume(
   // Grants
   if (!pc.grantsApplied) {
     logger.step(step, totalSteps, "Applying grants...");
-
-    try {
-      const grants = await generateGrants();
-
-      if (grants.length === 0) {
-        spinner.info("No grant files found - skipping");
-      } else {
-        spinner.start("Applying grants...");
-        await applyGrants(session.localDbUrl);
-        spinner.succeed(`Grants applied (${grants.length} file(s))`);
-      }
-    } catch (error) {
-      spinner.fail("Failed to apply grants");
-      throw new PostkitError(
-        `Grants failed: ${error instanceof Error ? error.message : String(error)}`,
-        'Run "postkit db apply" again to retry from grants.',
-      );
-    }
-
+    await applyGrantsStep(spinner, session.localDbUrl, 'Run "postkit db apply" again to retry from grants.');
     await updatePendingChanges({grantsApplied: true});
   } else {
     logger.step(step, totalSteps, "Grants already applied - skipping");
@@ -203,25 +245,7 @@ async function handleResume(
   // Seeds
   if (!pc.seedsApplied) {
     logger.step(step, totalSteps, "Applying seeds...");
-
-    try {
-      const seeds = await generateSeeds();
-
-      if (seeds.length === 0) {
-        spinner.info("No seed files found - skipping");
-      } else {
-        spinner.start("Applying seed data...");
-        await applySeeds(session.localDbUrl);
-        spinner.succeed(`Seeds applied (${seeds.length} file(s))`);
-      }
-    } catch (error) {
-      spinner.fail("Failed to apply seeds");
-      throw new PostkitError(
-        `Seeds failed: ${error instanceof Error ? error.message : String(error)}`,
-        'Run "postkit db apply" again to retry from seeds.',
-      );
-    }
-
+    await applySeedsStep(spinner, session.localDbUrl, 'Run "postkit db apply" again to retry from seeds.');
     await updatePendingChanges({seedsApplied: true});
   } else {
     logger.step(step, totalSteps, "Seeds already applied - skipping");
@@ -342,16 +366,7 @@ async function handleFreshApply(
 
   // Step 3: Apply infra (roles, schemas, extensions)
   logger.step(3, 8, "Applying infrastructure...");
-
-  const infra = await generateInfra();
-
-  if (infra.length === 0) {
-    spinner.info("No infra files found - skipping");
-  } else {
-    spinner.start("Applying infra...");
-    await applyInfra(session.localDbUrl);
-    spinner.succeed(`Infra applied (${infra.length} file(s))`);
-  }
+  await applyInfraStep(spinner, session.localDbUrl);
 
   // Step 4: Create migration file in session migrations dir
   logger.step(4, 8, "Creating migration file...");
@@ -418,48 +433,12 @@ async function handleFreshApply(
 
   // Step 6: Apply grants
   logger.step(6, 8, "Applying grants...");
-
-  try {
-    const grants = await generateGrants();
-
-    if (grants.length === 0) {
-      spinner.info("No grant files found - skipping");
-    } else {
-      spinner.start("Applying grants...");
-      await applyGrants(session.localDbUrl);
-      spinner.succeed(`Grants applied (${grants.length} file(s))`);
-    }
-  } catch (error) {
-    spinner.fail("Failed to apply grants");
-    throw new PostkitError(
-      `Grants failed: ${error instanceof Error ? error.message : String(error)}`,
-      'Migration is already applied. Run "postkit db apply" again to retry from grants.',
-    );
-  }
-
+  await applyGrantsStep(spinner, session.localDbUrl, 'Migration is already applied. Run "postkit db apply" again to retry from grants.');
   await updatePendingChanges({grantsApplied: true});
 
   // Step 7: Apply seeds
   logger.step(7, 8, "Applying seeds...");
-
-  try {
-    const seeds = await generateSeeds();
-
-    if (seeds.length === 0) {
-      spinner.info("No seed files found - skipping");
-    } else {
-      spinner.start("Applying seed data...");
-      await applySeeds(session.localDbUrl);
-      spinner.succeed(`Seeds applied (${seeds.length} file(s))`);
-    }
-  } catch (error) {
-    spinner.fail("Failed to apply seeds");
-    throw new PostkitError(
-      `Seeds failed: ${error instanceof Error ? error.message : String(error)}`,
-      'Migration and grants are already applied. Run "postkit db apply" again to retry from seeds.',
-    );
-  }
-
+  await applySeedsStep(spinner, session.localDbUrl, 'Migration and grants are already applied. Run "postkit db apply" again to retry from seeds.');
   await updatePendingChanges({seedsApplied: true});
 
   // Step 8: Mark fully applied and clean up plan file
@@ -551,15 +530,7 @@ async function handleManualMigrationApply(
 
   // Step 2: Apply infra
   logger.step(2, 5, "Applying infrastructure...");
-  const infra = await generateInfra();
-
-  if (infra.length === 0) {
-    spinner.info("No infra files found - skipping");
-  } else {
-    spinner.start("Applying infra...");
-    await applyInfra(session.localDbUrl);
-    spinner.succeed(`Infra applied (${infra.length} file(s))`);
-  }
+  await applyInfraStep(spinner, session.localDbUrl);
 
   // Step 3: Apply migrations via dbmate
   logger.step(3, 5, "Applying migration(s) to local database...");
@@ -595,48 +566,12 @@ async function handleManualMigrationApply(
 
   // Step 4: Apply grants
   logger.step(4, 5, "Applying grants...");
-
-  try {
-    const grants = await generateGrants();
-
-    if (grants.length === 0) {
-      spinner.info("No grant files found - skipping");
-    } else {
-      spinner.start("Applying grants...");
-      await applyGrants(session.localDbUrl);
-      spinner.succeed(`Grants applied (${grants.length} file(s))`);
-    }
-  } catch (error) {
-    spinner.fail("Failed to apply grants");
-    throw new PostkitError(
-      `Grants failed: ${error instanceof Error ? error.message : String(error)}`,
-      'Migration(s) are already applied. Run "postkit db apply" again to retry from grants.',
-    );
-  }
-
+  await applyGrantsStep(spinner, session.localDbUrl, 'Migration(s) are already applied. Run "postkit db apply" again to retry from grants.');
   await updatePendingChanges({grantsApplied: true});
 
   // Step 5: Apply seeds
   logger.step(5, 5, "Applying seeds...");
-
-  try {
-    const seeds = await generateSeeds();
-
-    if (seeds.length === 0) {
-      spinner.info("No seed files found - skipping");
-    } else {
-      spinner.start("Applying seed data...");
-      await applySeeds(session.localDbUrl);
-      spinner.succeed(`Seeds applied (${seeds.length} file(s))`);
-    }
-  } catch (error) {
-    spinner.fail("Failed to apply seeds");
-    throw new PostkitError(
-      `Seeds failed: ${error instanceof Error ? error.message : String(error)}`,
-      'Migration(s) and grants are already applied. Run "postkit db apply" again to retry from seeds.',
-    );
-  }
-
+  await applySeedsStep(spinner, session.localDbUrl, 'Migration(s) and grants are already applied. Run "postkit db apply" again to retry from seeds.');
   await updatePendingChanges({seedsApplied: true, applied: true});
 
   logger.blank();

@@ -40,12 +40,12 @@ export async function runCommand(
   }
 }
 
-export async function runCommandWithInput(
+export async function runSpawnCommand(
   args: string[],
-  input: string,
   options: {
     cwd?: string;
     env?: Record<string, string>;
+    input?: string;
   } = {},
 ): Promise<ShellResult> {
   const [cmd, ...rest] = args;
@@ -83,52 +83,10 @@ export async function runCommandWithInput(
       });
     });
 
-    child.stdin.write(input);
+    if (options.input !== undefined) {
+      child.stdin.write(options.input);
+    }
     child.stdin.end();
-  });
-}
-
-export async function runSpawnCommand(
-  args: string[],
-  options: {
-    cwd?: string;
-    env?: Record<string, string>;
-  } = {},
-): Promise<ShellResult> {
-  const [cmd, ...rest] = args;
-  return new Promise((resolve) => {
-    const child = spawn(cmd, rest, {
-      cwd: options.cwd,
-      env: {...process.env, ...options.env},
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout.on("data", (data) => {
-      stdout += data.toString();
-    });
-
-    child.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
-
-    child.on("close", (code) => {
-      resolve({
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
-        exitCode: code || 0,
-      });
-    });
-
-    child.on("error", (error) => {
-      resolve({
-        stdout: "",
-        stderr: error.message,
-        exitCode: 1,
-      });
-    });
   });
 }
 
