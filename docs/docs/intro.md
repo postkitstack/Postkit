@@ -2,46 +2,51 @@
 sidebar_position: 1
 ---
 
-# Tutorial Intro
+# PostKit
 
-Let's discover **Docusaurus in less than 5 minutes**.
+**PostKit** is a framework designed to streamline development workflows for backend applications using the Appri open-source stack.
 
-## Getting Started
+## Tools
 
-Get started by **creating a new site**.
+PostKit includes a modular CLI toolkit with the following tools:
 
-Or **try Docusaurus immediately** with **[docusaurus.new](https://docusaurus.new)**.
+- **CLI** - Command-line interface for database migrations, auth management, and more
+- More tools coming soon...
 
-### What you'll need
+## Features
 
-- [Node.js](https://nodejs.org/en/download/) version 20.0 or above:
-  - When installing Node.js, you are recommended to check all checkboxes related to dependencies.
+- **Session-based database migrations** - Clone remote databases locally, develop and test changes safely, then deploy with confidence
+- **Modular architecture** - Each feature is a pluggable module (database, auth, and more coming soon)
+- **Safe deployments** - Dry-run verification ensures your migrations work before touching production
 
-## Generate a new site
+## The Stack
 
-Generate a new Docusaurus site using the **classic template**.
+PostKit is built for the Appri stack:
 
-The classic template will automatically be added to your project after you run the command:
+- **PostgreSQL** - Core database
+- **PostgREST** - Auto-generated REST API
+- **Keycloak** - Authentication and authorization
+- **Graphile Worker** - Background job processing
+- **Appri Function Runtime** - Serverless-style JS/TS function handler
+- **PG-Storage** - Supabase Storage fork
+- **Traefik** - API Gateway and reverse proxy
 
-```bash
-npm init docusaurus@latest my-website classic
-```
-
-You can type this command into Command Prompt, Powershell, Terminal, or any other integrated terminal of your code editor.
-
-The command also installs all necessary dependencies you need to run Docusaurus.
-
-## Start your site
-
-Run the development server:
+## Quick Start
 
 ```bash
-cd my-website
-npm run start
+# Install CLI
+npm install -g @appri/postkit
+
+# Initialize a new project
+postkit init
+
+# Start a database migration session
+postkit db start
 ```
 
-The `cd` command changes the directory you're working with. In order to work with your newly created Docusaurus site, you'll need to navigate the terminal there.
+## CLI Modules
 
-The `npm run start` command builds your website locally and serves it through a development server, ready for you to view at http://localhost:3000/.
-
-Open `docs/intro.md` (this page) and edit some lines: the site **reloads automatically** and displays your changes.
+| Module | Description |
+|--------|-------------|
+| [`db`](/docs/modules/db/overview) | Session-based database migration workflow |
+| [`auth`](/docs/modules/auth/overview) | Keycloak realm configuration management |
