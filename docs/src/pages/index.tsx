@@ -21,7 +21,13 @@ function HomepageHeader() {
           <Link
             className="button button--secondary button--lg"
             to="/docs/getting-started/installation">
-            Get Started - 5min ⏱️
+            Get Started
+          </Link>
+          <Link
+            className="button button--outline button--lg"
+            to="https://github.com/appritechnologies/postkit"
+            target="_blank">
+            GitHub
           </Link>
         </div>
       </div>
@@ -33,8 +39,8 @@ export default function Home(): ReactNode {
   const {siteConfig} = useDocusaurusContext();
   return (
     <Layout
-      title={`Hello from ${siteConfig.title}`}
-      description="Description will go into a meta tag in <head />">
+      title={`${siteConfig.title} - Developer Toolkit`}
+      description="PostKit - A framework for backend development with database migrations, auth management, and more.">
       <HomepageHeader />
       <main>
         <HomepageFeatures />

@@ -6,7 +6,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'PostKit',
-  tagline: 'A framework for backend development with the Appri stack',
+  tagline: 'Developer toolkit for database migrations and backend automation',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -124,7 +124,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Appri. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} AppriTeam. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,
