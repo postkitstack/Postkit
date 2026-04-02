@@ -1,11 +1,11 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
 import {getSession, updatePendingChanges} from "../utils/session";
-import {generateSchemaSQL, generateSchemaFingerprint} from "../services/schema-generator";
+import {generateSchemaSQLAndFingerprint} from "../services/schema-generator";
 import {runPgschemaplan} from "../services/pgschema";
 import {testConnection} from "../services/database";
-import {applyInfra, generateInfra} from "../services/infra-generator";
 import type {CommandOptions} from "../../../common/types";
+import {PostkitError} from "../../../errors";
 
 export async function planCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();
@@ -15,53 +15,39 @@ export async function planCommand(options: CommandOptions): Promise<void> {
     const session = await getSession();
 
     if (!session || !session.active) {
-      logger.error("No active migration session.");
-      logger.info('Run "postkit db start" to begin a new session.');
-      process.exit(1);
+      throw new PostkitError(
+        "No active migration session.",
+        'Run "postkit db start" to begin a new session.',
+      );
     }
 
     logger.heading("Generating Migration Plan");
 
     // Step 1: Test local connection
-    logger.step(1, 5, "Testing local database connection...");
+    logger.step(1, 3, "Testing local database connection...");
     spinner.start("Connecting to local database...");
 
     const localConnected = await testConnection(session.localDbUrl);
 
     if (!localConnected) {
       spinner.fail("Failed to connect to local database");
-      logger.error("Could not connect to the local database.");
-      logger.info(
+      throw new PostkitError(
+        "Could not connect to the local database.",
         'The local clone may have been removed. Run "postkit db start" again.',
       );
-      process.exit(1);
     }
 
     spinner.succeed("Connected to local database");
 
-    // Step 2: Apply infra (pre-step so pgschema can resolve schemas/extensions/roles)
-    logger.step(2, 5, "Applying infrastructure...");
-
-    const infra = await generateInfra();
-
-    if (infra.length === 0) {
-      spinner.info("No infra files found - skipping");
-    } else {
-      spinner.start("Applying infra...");
-      await applyInfra(session.localDbUrl);
-      spinner.succeed(`Infra applied (${infra.length} file(s))`);
-    }
-
-    // Step 3: Generate combined schema
-    logger.step(3, 5, "Generating schema SQL...");
+    // Step 2: Generate combined schema
+    logger.step(2, 3, "Generating schema SQL...");
     spinner.start("Combining schema files...");
 
-    const schemaFile = await generateSchemaSQL();
-    const schemaFingerprint = await generateSchemaFingerprint();
+    const {schemaFile, fingerprint: schemaFingerprint} = await generateSchemaSQLAndFingerprint();
     spinner.succeed(`Schema generated: ${schemaFile}`);
 
-    // Step 4: Run pgschema plan
-    logger.step(4, 5, "Running pgschema plan...");
+    // Step 3: Run pgschema plan
+    logger.step(3, 3, "Running pgschema plan...");
     spinner.start("Comparing schema against local database...");
 
     const planResult = await runPgschemaplan(schemaFile, session.localDbUrl);
@@ -76,9 +62,7 @@ export async function planCommand(options: CommandOptions): Promise<void> {
 
     spinner.succeed("Plan generated");
 
-    // Step 5: Update session
-    logger.step(5, 5, "Updating session state...");
-
+    // Update session
     await updatePendingChanges({
       planned: true,
       applied: false,
@@ -109,11 +93,10 @@ export async function planCommand(options: CommandOptions): Promise<void> {
     logger.info("Next steps:");
     logger.info("  - Review the changes above");
     logger.info('  - Run "postkit db apply" to apply to local clone');
-    logger.info('  - Run "postkit db commit <description>" when ready');
+    logger.info('  - Run "postkit db commit" when ready');
   } catch (error) {
     spinner.fail("Failed to generate plan");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }
 

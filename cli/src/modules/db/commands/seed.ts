@@ -1,7 +1,7 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
 import {
-  generateSeeds,
+  loadSeeds,
   getSeedsSQL,
   applySeeds,
 } from "../services/seed-generator";
@@ -24,7 +24,7 @@ export async function seedCommand(options: SeedOptions): Promise<void> {
     logger.step(1, 2, "Loading seed files...");
     spinner.start("Scanning for seed files...");
 
-    const seeds = await generateSeeds();
+    const seeds = await loadSeeds();
 
     if (seeds.length === 0) {
       spinner.warn("No seed files found");
@@ -60,9 +60,9 @@ export async function seedCommand(options: SeedOptions): Promise<void> {
         if (session) {
           targetUrl = session.remoteDbUrl;
         } else {
-          const {getConfig} = await import("../utils/db-config");
-          const config = getConfig();
-          targetUrl = config.remoteDbUrl;
+          const {resolveRemote} = await import("../utils/remotes");
+          const {url} = resolveRemote();
+          targetUrl = url;
         }
         targetName = "remote";
       } else {

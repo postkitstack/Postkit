@@ -6,7 +6,6 @@ import {
   exportRealm,
   cleanRealmConfig,
   saveRawExport,
-  saveCleanExport,
 } from "../services/keycloak";
 import type {CommandOptions} from "../../../common/types";
 
@@ -58,7 +57,7 @@ export async function exportCommand(options: CommandOptions): Promise<void> {
       spinner.start("Stripping IDs, secrets, and credentials...");
 
       const cleaned = cleanRealmConfig(rawExport);
-      await saveCleanExport(cleaned, config.cleanFilePath);
+      await saveRawExport(cleaned, config.cleanFilePath);
 
       spinner.succeed("Config cleaned and saved");
     }

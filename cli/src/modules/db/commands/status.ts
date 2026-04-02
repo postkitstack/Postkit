@@ -4,11 +4,49 @@ import {getSession, formatSessionDuration} from "../utils/session";
 import {testConnection, getTableCount} from "../services/database";
 import {getPlanFileContent} from "../services/pgschema";
 import {runDbmateStatus} from "../services/dbmate";
+import {getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
+
+async function showCommittedMigrations(): Promise<void> {
+  const pendingMigrations = await getPendingCommittedMigrations();
+
+  if (pendingMigrations.length === 0) {
+    return;
+  }
+
+  logger.blank();
+  logger.info("Committed Migrations (Pending Deployment):");
+  logger.blank();
+
+  for (const cm of pendingMigrations) {
+    const committedAt = new Date(cm.committedAt).toLocaleString();
+    logger.info(`  • ${cm.migrationFile.name}`);
+    logger.info(`    Description: ${cm.description}`);
+    logger.info(`    Merged from: ${cm.sessionMigrations.length} session migration(s)`);
+    logger.info(`    Committed: ${committedAt}`);
+    logger.blank();
+  }
+}
 
 export async function statusCommand(options: CommandOptions): Promise<void> {
   try {
     const session = await getSession();
+    const pendingCommitted = await getPendingCommittedMigrations();
+
+    if (options.json) {
+      const localConnected = session?.active ? await testConnection(session.localDbUrl) : false;
+      const remoteConnected = session?.active ? await testConnection(session.remoteDbUrl) : false;
+      console.log(JSON.stringify({
+        sessionActive: session?.active ?? false,
+        startedAt: session?.startedAt ?? null,
+        remoteName: session?.remoteName ?? null,
+        clonedAt: session?.clonedAt ?? null,
+        pendingChanges: session?.pendingChanges ?? null,
+        connections: session?.active ? {local: localConnected, remote: remoteConnected} : null,
+        pendingCommittedMigrations: pendingCommitted.length,
+      }, null, 2));
+      return;
+    }
 
     logger.heading("Migration Session Status");
 
@@ -16,6 +54,9 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
       logger.info("No active migration session.");
       logger.blank();
       logger.info('Run "postkit db start" to begin a new session.');
+
+      // Show committed migrations even without active session
+      await showCommittedMigrations();
 
       // Show dbmate status anyway
       if (options.verbose) {
@@ -33,8 +74,12 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
       ["Status", chalk.green("Active")],
       ["Started", session.startedAt],
       ["Duration", formatSessionDuration(session.startedAt)],
-      ["Snapshot", session.remoteSnapshot],
+      ["Cloned At", session.clonedAt],
     ];
+
+    if (session.remoteName) {
+      rows.push(["Remote", session.remoteName]);
+    }
 
     logger.table(["Property", "Value"], rows);
 
@@ -60,52 +105,14 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
       changeRows.push(["Plan File", session.pendingChanges.planFile]);
     }
 
-    logger.table(["Stage", "Status"], changeRows);
-
-    // Commit state (if a previous commit failed partway)
-    if (session.commitState) {
-      logger.blank();
-      logger.info("Commit Recovery State:");
-      logger.blank();
-
-      const cs = session.commitState;
-      const commitRows: string[][] = [];
-
-      if (cs.migrationFile) {
-        commitRows.push(["Migration File", cs.migrationFile.name]);
-      }
-
-      commitRows.push([
-        "Remote Applied",
-        cs.remoteApplied ? chalk.green("Yes") : chalk.red("No"),
+    if (session.pendingChanges.migrationFiles.length > 0) {
+      changeRows.push([
+        "Session Migrations",
+        String(session.pendingChanges.migrationFiles.length),
       ]);
-      commitRows.push([
-        "Grants Applied",
-        cs.grantsApplied ? chalk.green("Yes") : chalk.yellow("No"),
-      ]);
-      commitRows.push([
-        "Seeds Applied",
-        cs.seedsApplied ? chalk.green("Yes") : chalk.yellow("No"),
-      ]);
-      commitRows.push(["Description", cs.description]);
-
-      logger.table(["Property", "Status"], commitRows);
-
-      logger.blank();
-      if (cs.remoteApplied) {
-        logger.warn(
-          "A previous commit was partially applied to the remote database.",
-        );
-        logger.info(
-          'Run "postkit db commit" to resume from where it left off.',
-        );
-      } else {
-        logger.warn("A previous commit failed before applying to remote.");
-        logger.info(
-          'Run "postkit db commit" to clean up and start fresh, or "postkit db abort" to cancel.',
-        );
-      }
     }
+
+    logger.table(["Stage", "Status"], changeRows);
 
     logger.blank();
 
@@ -162,49 +169,43 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
 
     logger.blank();
 
+    // Show committed migrations
+    await showCommittedMigrations();
+
     // Next steps
     logger.info("Next Steps:");
 
-    if (session.commitState) {
-      if (session.commitState.remoteApplied) {
-        logger.info(
-          '  - Run "postkit db commit" to resume the failed commit',
-        );
-      } else {
-        logger.info(
-          '  - Run "postkit db commit" to clean up and retry',
-        );
-        logger.info('  - Run "postkit db abort" to cancel the session');
-      }
-    } else if (!session.pendingChanges.planned) {
+    if (!session.pendingChanges.planned) {
       logger.info("  - Modify schema files in db/schema/");
       logger.info('  - Run "postkit db plan" to generate a plan');
+      logger.info('  - Run "postkit db migrate <name>" to create a manual migration');
     } else if (!session.pendingChanges.applied) {
       logger.info("  - Review the plan above");
       logger.info('  - Run "postkit db apply" to test on local clone');
     } else {
-      logger.info('  - Run "postkit db commit <description>" to finalize');
+      logger.info('  - Run "postkit db commit" to commit session migrations');
     }
 
-    if (!session.commitState) {
-      logger.info('  - Run "postkit db abort" to cancel the session');
+    logger.info('  - Run "postkit db abort" to cancel the session');
+
+    if (pendingCommitted.length > 0) {
+      logger.info('  - Run "postkit db deploy" to deploy committed migrations');
     }
   } catch (error) {
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }
 
 async function showDbmateStatus(): Promise<void> {
   try {
-    const {getConfig} = await import("../utils/db-config");
-    const config = getConfig();
+    const {resolveRemote} = await import("../utils/remotes");
 
     logger.blank();
     logger.info("Dbmate Status (Remote):");
     logger.blank();
 
-    const status = await runDbmateStatus(config.remoteDbUrl);
+    const {url} = resolveRemote();
+    const status = await runDbmateStatus(url);
     console.log(status);
   } catch {
     // Ignore errors for dbmate status

@@ -1,18 +1,63 @@
 import path from "path";
-import {cliRoot, projectRoot, loadPostkitConfig, getPostkitDir} from "../../../common/config";
-import type {Config} from "../types/index";
+import {existsSync} from "fs";
+import {resolveBinary as resolveDbmateBinary} from "dbmate";
+import {cliRoot, projectRoot, loadPostkitConfig, getPostkitDir, getVendorDir} from "../../../common/config";
 
-export function getConfig(): Config {
+// Map Node.js platform/arch values to Go-style names used in pgschema binaries
+const PLATFORM_MAP: Record<string, string> = {
+  darwin: "darwin",
+  linux: "linux",
+  win32: "windows",
+};
+
+const ARCH_MAP: Record<string, string> = {
+  x64: "amd64",
+  arm64: "arm64",
+};
+
+/**
+ * Resolves the pgschema binary path from bundled vendor directory.
+ * Falls back to system PATH if bundled binary not found.
+ */
+function resolvePgSchemaBin(): string {
+  // Try bundled vendor binary first
+  const platform = PLATFORM_MAP[process.platform];
+  const arch = ARCH_MAP[process.arch];
+
+  if (platform && arch) {
+    const ext = process.platform === "win32" ? ".exe" : "";
+    const binaryName = `pgschema-${platform}-${arch}${ext}`;
+    const vendorPath = path.join(getVendorDir(), "pgschema", binaryName);
+
+    if (existsSync(vendorPath)) {
+      return vendorPath;
+    }
+  }
+
+  // Fallback to system PATH
+  return "pgschema";
+}
+
+/**
+ * Resolves the dbmate binary path from npm package.
+ * Falls back to system PATH if npm binary not found.
+ */
+function resolveDbmateBin(): string {
+  // Try npm-installed dbmate binary first
+  try {
+    return resolveDbmateBinary();
+  } catch {
+    // Package not installed or binary not found for this platform
+  }
+
+  // Fallback to system PATH
+  return "dbmate";
+}
+
+export function getConfig() {
   const config = loadPostkitConfig();
 
-  const remoteDbUrl = config.db.remoteDbUrl;
   const localDbUrl = config.db.localDbUrl;
-
-  if (!remoteDbUrl) {
-    throw new Error(
-      "db.remoteDbUrl is not set in postkit.config.json",
-    );
-  }
 
   if (!localDbUrl) {
     throw new Error(
@@ -24,36 +69,41 @@ export function getConfig(): Config {
     ? path.resolve(projectRoot, config.db.schemaPath)
     : path.resolve(projectRoot, "schema");
 
-  const migrationsPath = config.db.migrationsPath
-    ? path.resolve(projectRoot, config.db.migrationsPath)
-    : path.resolve(projectRoot, "migrations");
-
   return {
-    remoteDbUrl,
     localDbUrl,
     schemaPath,
-    migrationsPath,
     schema: config.db.schema || "public",
-    pgSchemaBin: config.db.pgSchemaBin || "pgschema",
-    dbmateBin: config.db.dbmateBin || "dbmate",
+    pgSchemaBin: resolvePgSchemaBin(),
+    dbmateBin: resolveDbmateBin(),
     cliRoot,
     projectRoot,
-    environments: config.db.environments || {},
   };
 }
 
+export function getPostkitDbDir(): string {
+  return path.join(getPostkitDir(), "db");
+}
+
 export function getSessionFilePath(): string {
-  return path.join(getPostkitDir(), "session.json");
+  return path.join(getPostkitDbDir(), "session.json");
 }
 
 export function getPlanFilePath(): string {
-  return path.join(getPostkitDir(), "plan.sql");
+  return path.join(getPostkitDbDir(), "plan.sql");
 }
 
 export function getGeneratedSchemaPath(): string {
-  return path.join(getPostkitDir(), "schema.sql");
+  return path.join(getPostkitDbDir(), "schema.sql");
 }
 
 export function getSessionMigrationsPath(): string {
-  return path.join(getPostkitDir(), "migrations");
+  return path.join(getPostkitDbDir(), "session");
+}
+
+export function getCommittedMigrationsPath(): string {
+  return path.join(getPostkitDbDir(), "migrations");
+}
+
+export function getCommittedFilePath(): string {
+  return path.join(getPostkitDbDir(), "committed.json");
 }

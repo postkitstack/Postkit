@@ -70,14 +70,14 @@ export const logger = {
       return Math.max(h.length, maxRowWidth);
     });
 
-    const headerRow = headers.map((h, i) => h.padEnd(colWidths[i])).join(" | ");
-    const separator = colWidths.map((w) => "-".repeat(w)).join("-+-");
+    const headerRow = headers.map((h, i) => h.padEnd(colWidths[i] ?? 0)).join(" | ");
+    const separator = colWidths.map((w) => "-".repeat(w ?? 0)).join("-+-");
 
     console.log(chalk.bold(headerRow));
     console.log(chalk.gray(separator));
     for (const row of rows) {
       console.log(
-        row.map((c, i) => (c || "").padEnd(colWidths[i])).join(" | "),
+        row.map((c, i) => (c || "").padEnd(colWidths[i] ?? 0)).join(" | "),
       );
     }
   },

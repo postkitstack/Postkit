@@ -7,6 +7,10 @@
   "bin": {
     "postkit": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "vendor"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/index.ts",
@@ -26,6 +30,7 @@
   "dependencies": {
     "chalk": "^5.3.0",
     "commander": "^12.0.0",
+    "dbmate": "^2.32.0",
     "inquirer": "^9.2.0",
     "ora": "^8.0.0",
     "pg": "^8.14.0"

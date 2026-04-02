@@ -2,9 +2,11 @@ import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
 import {getConfig} from "../utils/db-config";
+import {parseConnectionUrl} from "./database";
+import {runSpawnCommand} from "../../../common/shell";
 import type {InfraStatement} from "../types/index";
 
-export async function generateInfra(): Promise<InfraStatement[]> {
+export async function loadInfra(): Promise<InfraStatement[]> {
   const config = getConfig();
   const infraPath = path.join(config.schemaPath, "infra");
 
@@ -37,7 +39,7 @@ async function loadInfraFromDirectory(
 }
 
 export async function getInfraSQL(): Promise<string> {
-  const infra = await generateInfra();
+  const infra = await loadInfra();
 
   if (infra.length === 0) {
     return "-- No infra files found";
@@ -60,24 +62,32 @@ export async function getInfraSQL(): Promise<string> {
 }
 
 export async function applyInfra(databaseUrl: string): Promise<void> {
-  const {parseConnectionUrl} = await import("./database");
-  const {runCommandWithInput} = await import("../../../common/shell");
-  const infra = await generateInfra();
+  const infra = await loadInfra();
+  const nonEmpty = infra.filter((stmt) => stmt.content.trim());
+
+  if (nonEmpty.length === 0) {
+    return;
+  }
+
   const dbInfo = parseConnectionUrl(databaseUrl);
 
-  for (const stmt of infra) {
-    if (stmt.content.trim()) {
-      const result = await runCommandWithInput(
-        `psql -h ${dbInfo.host} -p ${dbInfo.port} -U ${dbInfo.user} -d ${dbInfo.database} -v ON_ERROR_STOP=1`,
-        stmt.content,
-        {
-          env: {PGPASSWORD: dbInfo.password},
-        },
-      );
+  // Batch all statements into a single psql call — one process instead of N.
+  // Args passed directly to OS — no shell, no injection risk.
+  // PGPASSWORD supplied only via env, never interpolated into args.
+  const combinedSQL = nonEmpty.map((stmt) => stmt.content).join("\n\n");
+  const result = await runSpawnCommand(
+    [
+      "psql",
+      "-h", dbInfo.host,
+      "-p", String(dbInfo.port),
+      "-U", dbInfo.user,
+      "-d", dbInfo.database,
+      "-v", "ON_ERROR_STOP=1",
+    ],
+    {input: combinedSQL, env: {PGPASSWORD: dbInfo.password}},
+  );
 
-      if (result.exitCode !== 0) {
-        throw new Error(`Failed to apply infra "${stmt.name}": ${result.stderr || result.stdout}`);
-      }
-    }
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to apply infra: ${result.stderr || result.stdout}`);
   }
 }

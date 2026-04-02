@@ -2,9 +2,10 @@ import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
 import {getConfig} from "../utils/db-config";
+import {loadSqlGroup} from "../utils/sql-loader";
 import type {GrantStatement} from "../types/index";
 
-export async function generateGrants(): Promise<GrantStatement[]> {
+export async function loadGrants(): Promise<GrantStatement[]> {
   const config = getConfig();
   const grantsPath = path.join(config.schemaPath, "grants");
 
@@ -56,31 +57,12 @@ async function loadGrantsFromSubdir(
   dirPath: string,
   schemaName: string,
 ): Promise<GrantStatement[]> {
-  const grants: GrantStatement[] = [];
-  const files = await fs.readdir(dirPath);
-  const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
-
-  const contents: string[] = [];
-
-  for (const file of sqlFiles) {
-    const filePath = path.join(dirPath, file);
-    const content = await fs.readFile(filePath, "utf-8");
-    contents.push(`-- ${file}`);
-    contents.push(content.trim());
-  }
-
-  if (contents.length > 0) {
-    grants.push({
-      schema: schemaName,
-      content: contents.join("\n\n"),
-    });
-  }
-
-  return grants;
+  const entries = await loadSqlGroup(dirPath, schemaName);
+  return entries.map((e) => ({schema: e.name, content: e.content}));
 }
 
 export async function getGrantsSQL(): Promise<string> {
-  const grants = await generateGrants();
+  const grants = await loadGrants();
 
   if (grants.length === 0) {
     return "-- No grant files found";
@@ -104,7 +86,7 @@ export async function getGrantsSQL(): Promise<string> {
 
 export async function applyGrants(databaseUrl: string): Promise<void> {
   const {executeSQL} = await import("./database");
-  const grants = await generateGrants();
+  const grants = await loadGrants();
 
   for (const grant of grants) {
     if (grant.content.trim()) {

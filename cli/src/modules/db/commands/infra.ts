@@ -1,7 +1,7 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
 import {
-  generateInfra,
+  loadInfra,
   getInfraSQL,
   applyInfra,
 } from "../services/infra-generator";
@@ -24,7 +24,7 @@ export async function infraCommand(options: InfraOptions): Promise<void> {
     logger.step(1, 2, "Loading infra files...");
     spinner.start("Scanning for infra files...");
 
-    const infra = await generateInfra();
+    const infra = await loadInfra();
 
     if (infra.length === 0) {
       spinner.warn("No infra files found");
@@ -59,9 +59,9 @@ export async function infraCommand(options: InfraOptions): Promise<void> {
         if (session) {
           targetUrl = session.remoteDbUrl;
         } else {
-          const {getConfig} = await import("../utils/db-config");
-          const config = getConfig();
-          targetUrl = config.remoteDbUrl;
+          const {resolveRemote} = await import("../utils/remotes");
+          const {url} = resolveRemote();
+          targetUrl = url;
         }
         targetName = "remote";
       } else {

@@ -1,7 +1,7 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
 import {
-  generateGrants,
+  loadGrants,
   getGrantsSQL,
   applyGrants,
 } from "../services/grant-generator";
@@ -24,7 +24,7 @@ export async function grantsCommand(options: GrantsOptions): Promise<void> {
     logger.step(1, 2, "Loading grant files...");
     spinner.start("Scanning for grant files...");
 
-    const grants = await generateGrants();
+    const grants = await loadGrants();
 
     if (grants.length === 0) {
       spinner.warn("No grant files found");
@@ -60,9 +60,9 @@ export async function grantsCommand(options: GrantsOptions): Promise<void> {
         if (session) {
           targetUrl = session.remoteDbUrl;
         } else {
-          const {getConfig} = await import("../utils/db-config");
-          const config = getConfig();
-          targetUrl = config.remoteDbUrl;
+          const {resolveRemote} = await import("../utils/remotes");
+          const {url} = resolveRemote();
+          targetUrl = url;
         }
         targetName = "remote";
       } else {

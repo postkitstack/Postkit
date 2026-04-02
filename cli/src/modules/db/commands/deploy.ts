@@ -11,50 +11,36 @@ import {
   dropDatabase,
   getTableCount,
 } from "../services/database";
-import {runDbmateMigrate} from "../services/dbmate";
-import {generateInfra, applyInfra} from "../services/infra-generator";
-import {generateGrants, applyGrants} from "../services/grant-generator";
-import {generateSeeds, applySeeds} from "../services/seed-generator";
+import {runCommittedMigrate, runDbmateStatus} from "../services/dbmate";
+import {loadInfra, applyInfra} from "../services/infra-generator";
+import {loadGrants, applyGrants} from "../services/grant-generator";
+import {loadSeeds, applySeeds} from "../services/seed-generator";
+import {getPendingCommittedMigrations, markMigrationDeployed} from "../utils/committed";
+import {resolveRemote, maskRemoteUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
-import type {Config} from "../types/index";
+import {PostkitError} from "../../../errors";
 
 interface DeployOptions extends CommandOptions {
-  target?: string;
+  remote?: string;
   url?: string;
 }
 
-function resolveTargetUrl(options: DeployOptions, config: Config): {url: string; label: string} {
+function resolveTargetUrl(options: DeployOptions): {url: string; label: string} {
   if (options.url) {
     return {url: options.url, label: "direct URL"};
   }
 
-  if (!options.target) {
-    throw new Error(
-      "Either --target or --url is required.\n" +
-      "Usage:\n" +
-      '  postkit db deploy --target=staging\n' +
-      '  postkit db deploy --url=postgres://...',
-    );
+  if (options.remote) {
+    const resolved = resolveRemote(options.remote);
+    return {url: resolved.url, label: resolved.name};
   }
 
-  const envUrl = config.environments[options.target];
-
-  if (!envUrl) {
-    const available = Object.keys(config.environments);
-    const availableStr = available.length > 0
-      ? `Available environments: ${available.join(", ")}`
-      : "No environments configured in postkit.config.json";
-    throw new Error(
-      `Unknown environment: "${options.target}"\n${availableStr}\n\n` +
-      "Add environments to your postkit.config.json:\n" +
-      '  "db": { "environments": { "staging": "postgres://..." } }',
-    );
-  }
-
-  return {url: envUrl, label: options.target};
+  // Use default remote
+  const resolved = resolveRemote();
+  return {url: resolved.url, label: `${resolved.name} (default)`};
 }
 
-async function cleanupExistingSession(
+async function confirmAndRemoveSession(
   spinner: ReturnType<typeof ora>,
   options: DeployOptions,
 ): Promise<void> {
@@ -69,8 +55,7 @@ async function cleanupExistingSession(
     ]);
 
     if (!confirm) {
-      logger.info("Deploy cancelled.");
-      process.exit(0);
+      throw new PostkitError("Deploy cancelled.", undefined, 0);
     }
   }
 
@@ -87,12 +72,13 @@ async function runSteps(
   spinner: ReturnType<typeof ora>,
   stepOffset: number,
   totalSteps: number,
+  migrationFilter?: string[],
 ): Promise<void> {
   let step = stepOffset;
 
   // Infra
   logger.step(step, totalSteps, `Applying infra to ${label}...`);
-  const infra = await generateInfra();
+  const infra = await loadInfra();
 
   if (infra.length === 0) {
     spinner.info("No infra files found - skipping");
@@ -107,7 +93,7 @@ async function runSteps(
   // Dbmate migrate
   logger.step(step, totalSteps, `Running migrations on ${label}...`);
   spinner.start(`Running dbmate migrate on ${label}...`);
-  const migrateResult = await runDbmateMigrate(dbUrl);
+  const migrateResult = await runCommittedMigrate(dbUrl, migrationFilter);
 
   if (!migrateResult.success) {
     spinner.fail(`Failed to run migrations on ${label}`);
@@ -119,7 +105,7 @@ async function runSteps(
 
   // Grants
   logger.step(step, totalSteps, `Applying grants to ${label}...`);
-  const grants = await generateGrants();
+  const grants = await loadGrants();
 
   if (grants.length === 0) {
     spinner.info("No grant files found - skipping");
@@ -133,7 +119,7 @@ async function runSteps(
 
   // Seeds
   logger.step(step, totalSteps, `Applying seeds to ${label}...`);
-  const seeds = await generateSeeds();
+  const seeds = await loadSeeds();
 
   if (seeds.length === 0) {
     spinner.info("No seed files found - skipping");
@@ -151,21 +137,44 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     const config = getConfig();
 
     // Step 1: Resolve target URL
-    const {url: targetUrl, label: targetLabel} = resolveTargetUrl(options, config);
+    const {url: targetUrl, label: targetLabel} = resolveTargetUrl(options);
 
     logger.heading("Deploy Migrations");
     logger.info(`Target: ${targetLabel}`);
     logger.blank();
 
-    // Step 2: Check for active session
+    // Step 2: Check for pending committed migrations
+    const pendingMigrations = await getPendingCommittedMigrations();
+
+    if (pendingMigrations.length === 0) {
+      logger.info("No committed migrations pending deployment.");
+      logger.blank();
+      logger.info("To commit migrations:");
+      logger.info('  1. Run "postkit db start" to begin a session');
+      logger.info('  2. Make schema changes or run "postkit db plan"');
+      logger.info('  3. Run "postkit db apply" to test locally');
+      logger.info('  4. Run "postkit db commit" to commit migrations');
+      logger.blank();
+      return;
+    }
+
+    logger.info(`Found ${pendingMigrations.length} committed migration(s) to deploy:`);
+    for (const cm of pendingMigrations) {
+      logger.info(`  - ${cm.migrationFile.name} (${cm.description})`);
+    }
+    logger.blank();
+
+    // Step 3: Check for active session
     const sessionActive = await hasActiveSession();
 
     if (sessionActive) {
-      await cleanupExistingSession(spinner, options);
+      await confirmAndRemoveSession(spinner, options);
       logger.blank();
     }
 
-    const totalSteps = 11;
+    // 3 fixed steps (test, status, clone) + 4 runSteps × 2 passes (dry-run + target) + 2 fixed steps (mark deployed, cleanup)
+    const totalSteps = 3 + 4 * 2 + 2; // = 13
+    const migrationNames = pendingMigrations.map(m => m.migrationFile.name);
 
     // Step 1: Test target DB connection
     logger.step(1, totalSteps, "Testing target database connection...");
@@ -174,28 +183,52 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
 
     if (!targetConnected) {
       spinner.fail("Failed to connect to target database");
-      logger.error("Could not connect to the target database. Check your connection URL.");
-      process.exit(1);
+      throw new PostkitError(
+        "Could not connect to the target database.",
+        "Check the remote URL: postkit db remote list",
+      );
     }
 
     const targetTableCount = await getTableCount(targetUrl);
     spinner.succeed(`Connected to target database (${targetTableCount} tables)`);
 
-    // Step 2: Clone target DB to local
+    // Step 2: Check target migration status
+    logger.step(2, totalSteps, "Checking target migration status...");
+    spinner.start("Checking migration status...");
+
+    const statusOutput = await runDbmateStatus(targetUrl);
+
+    // Check for pending migrations on target
+    const hasPendingItems = statusOutput.includes("[ ") &&
+                          !statusOutput.match(/Pending:\s*0\b/);
+
+    if (hasPendingItems) {
+      spinner.succeed(`Found ${pendingMigrations.length} pending migration(s) to deploy`);
+      logger.blank();
+      logger.info("These migrations will be applied to the target database:");
+      for (const cm of pendingMigrations) {
+        logger.info(`  - ${cm.migrationFile.name} (${cm.description})`);
+      }
+      logger.blank();
+    } else {
+      spinner.succeed("Target database up to date");
+    }
+
+    // Step 3: Clone target DB to local
     const localDbUrl = config.localDbUrl;
 
-    logger.step(2, totalSteps, "Cloning target database to local...");
+    logger.step(3, totalSteps, "Cloning target database to local...");
     spinner.start("Cloning target database to local for dry-run verification...");
     await cloneDatabase(targetUrl, localDbUrl);
     const localTableCount = await getTableCount(localDbUrl);
     spinner.succeed(`Target cloned to local (${localTableCount} tables)`);
 
-    // Steps 3-6: Dry run on local clone
+    // Steps 4-7: Dry run on local clone
     logger.blank();
     logger.heading("Dry Run (local verification)");
 
     try {
-      await runSteps(localDbUrl, "local clone", spinner, 3, totalSteps);
+      await runSteps(localDbUrl, "local clone", spinner, 4, totalSteps, migrationNames);
     } catch (error) {
       spinner.fail("Dry run failed on local clone");
       logger.error(error instanceof Error ? error.message : String(error));
@@ -209,13 +242,25 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
         // Best effort cleanup
       }
 
-      logger.error("Deployment aborted — dry run failed. No changes were made to the target database.");
-      process.exit(1);
+      throw new PostkitError(
+        "Deployment aborted — dry run failed. No changes were made to the target database.",
+      );
     }
 
     logger.blank();
     logger.success("Dry run passed!");
     logger.blank();
+
+    // If --dry-run, stop here — don't touch the target database
+    if (options.dryRun) {
+      logger.info("Dry run complete. Target database was not modified.");
+      try {
+        await dropDatabase(localDbUrl);
+      } catch {
+        // Best effort cleanup
+      }
+      return;
+    }
 
     // Confirm deployment
     if (!options.force) {
@@ -223,7 +268,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
         {
           type: "confirm",
           name: "confirm",
-          message: `Deploy to ${targetLabel}? This will apply migrations to the target database.`,
+          message: `Deploy to ${targetLabel}? This will apply ${pendingMigrations.length} migration(s) to the target database.`,
           default: false,
         },
       ]);
@@ -240,30 +285,40 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       }
     }
 
-    // Steps 7-10: Apply to target
+    // Steps 8-11: Apply to target
     logger.blank();
     logger.heading("Deploying to Target");
 
     try {
-      await runSteps(targetUrl, targetLabel, spinner, 7, totalSteps);
+      await runSteps(targetUrl, targetLabel, spinner, 8, totalSteps, migrationNames);
     } catch (error) {
       logger.error(error instanceof Error ? error.message : String(error));
       logger.blank();
-      logger.error("Target deployment failed. The target database may be in a partial state.");
-      logger.info("Investigate and fix manually, then retry: postkit db deploy");
-
-      // Clean up local clone
       try {
         await dropDatabase(localDbUrl);
       } catch {
-        // Best effort
+        // Best effort cleanup
       }
 
-      process.exit(1);
+      throw new PostkitError(
+        "Target deployment failed. The target database may be in a partial state.",
+        "Investigate and fix manually, then retry: postkit db deploy",
+      );
     }
 
-    // Step 11: Drop local clone
-    logger.step(11, totalSteps, "Cleaning up local clone...");
+    // Step 12: Mark migrations as deployed
+    logger.step(12, totalSteps, "Marking migrations as deployed...");
+    spinner.start("Updating committed state...");
+
+    for (const migration of pendingMigrations) {
+      await markMigrationDeployed(migration.migrationFile.name);
+    }
+
+    spinner.succeed(`${pendingMigrations.length} migration(s) marked as deployed`);
+
+    // Drop local clone
+    logger.blank();
+    logger.step(13, totalSteps, "Cleaning up local clone...");
     spinner.start("Dropping local clone database...");
 
     try {
@@ -273,13 +328,17 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       spinner.warn("Failed to drop local clone (non-fatal): " + (error instanceof Error ? error.message : String(error)));
     }
 
-    // Step 9: Report success
+    // Report success
     logger.blank();
     logger.success(`Deployment to ${targetLabel} completed successfully!`);
     logger.blank();
+    logger.info(`Deployed ${pendingMigrations.length} migration(s):`);
+    for (const cm of pendingMigrations) {
+      logger.info(`  ✓ ${cm.migrationFile.name} - ${cm.description}`);
+    }
+    logger.blank();
   } catch (error) {
     spinner.fail("Deployment failed");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }

@@ -1,32 +1,37 @@
 import ora from "ora";
+import inquirer from "inquirer";
 import path from "path";
 import {existsSync} from "fs";
 import fs from "fs/promises";
 import {logger} from "../../../common/logger";
 import {getConfig} from "../utils/db-config";
 import {createSession, hasActiveSession, getSession} from "../utils/session";
+import {resolveRemote, maskRemoteUrl} from "../utils/remotes";
 import {
   testConnection,
   cloneDatabase,
   getTableCount,
 } from "../services/database";
 import {checkPgschemaInstalled} from "../services/pgschema";
-import {checkDbmateInstalled} from "../services/dbmate";
+import {checkDbmateInstalled, runDbmateStatus} from "../services/dbmate";
+import {getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
+import {PostkitError} from "../../../errors";
 
-export async function startCommand(options: CommandOptions): Promise<void> {
+interface StartOptions extends CommandOptions {
+  remote?: string;
+}
+
+export async function startCommand(options: StartOptions): Promise<void> {
   const spinner = ora();
 
   try {
-    // Check for existing session
     if (await hasActiveSession()) {
       const session = await getSession();
-      logger.warn("An active migration session already exists.");
-      logger.info(`Started at: ${session?.startedAt}`);
-      logger.info(
-        'Run "postkit db abort" to cancel it or "postkit db status" to see details.',
+      throw new PostkitError(
+        `An active migration session already exists (started at ${session?.startedAt}).`,
+        'Run "postkit db abort" to cancel it, or "postkit db status" to see details.',
       );
-      process.exit(1);
     }
 
     logger.heading("Starting Migration Session");
@@ -38,17 +43,17 @@ export async function startCommand(options: CommandOptions): Promise<void> {
     const dbmateInstalled = await checkDbmateInstalled();
 
     if (!pgschemaInstalled) {
-      logger.error("pgschema is not installed. Please install it first.");
-      logger.info("Visit: https://github.com/pgschema/pgschema");
-      process.exit(1);
+      throw new PostkitError(
+        "pgschema binary not found.",
+        "Visit: https://github.com/pgschema/pgschema",
+      );
     }
 
     if (!dbmateInstalled) {
-      logger.error("dbmate is not installed. Please install it first.");
-      logger.info(
-        "Install with: brew install dbmate (macOS) or go install github.com/amacneil/dbmate@latest",
+      throw new PostkitError(
+        "dbmate binary not found.",
+        "Install with: brew install dbmate  or  go install github.com/amacneil/dbmate@latest",
       );
-      process.exit(1);
     }
 
     logger.debug("Prerequisites check passed", options.verbose);
@@ -57,8 +62,33 @@ export async function startCommand(options: CommandOptions): Promise<void> {
     logger.step(2, 5, "Loading configuration...");
 
     const config = getConfig();
+
+    // Resolve remote
+    let targetRemoteName: string;
+    let targetRemoteUrl: string;
+
+    try {
+      const resolved = resolveRemote(options.remote);
+      targetRemoteName = resolved.name;
+      targetRemoteUrl = resolved.url;
+
+      if (options.remote) {
+        logger.info(`Using remote: ${targetRemoteName}`);
+      } else {
+        logger.debug(`Using default remote: ${targetRemoteName}`, options.verbose);
+      }
+    } catch (error) {
+      throw new PostkitError(
+        error instanceof Error ? error.message : String(error),
+        "Manage remotes with:\n" +
+        "  postkit db remote list   — list all remotes\n" +
+        "  postkit db remote add    — add a new remote\n" +
+        "  postkit db remote use    — set the default remote",
+      );
+    }
+
     logger.debug(
-      `Remote DB: ${maskConnectionUrl(config.remoteDbUrl)}`,
+      `Remote DB (${targetRemoteName}): ${maskRemoteUrl(targetRemoteUrl)}`,
       options.verbose,
     );
     logger.debug(
@@ -73,44 +103,117 @@ export async function startCommand(options: CommandOptions): Promise<void> {
     logger.step(3, 5, "Testing remote database connection...");
     spinner.start("Connecting to remote database...");
 
-    const remoteConnected = await testConnection(config.remoteDbUrl);
+    const remoteConnected = await testConnection(targetRemoteUrl);
 
     if (!remoteConnected) {
       spinner.fail("Failed to connect to remote database");
-      logger.error(
-        "Could not connect to the remote database. Check your REMOTE_DATABASE_URL.",
+      throw new PostkitError(
+        "Could not connect to the remote database.",
+        "Check the URL for this remote: postkit db remote list",
       );
-      process.exit(1);
     }
 
     spinner.succeed("Connected to remote database");
 
-    const remoteTableCount = await getTableCount(config.remoteDbUrl);
+    const remoteTableCount = await getTableCount(targetRemoteUrl);
     logger.info(`Remote database has ${remoteTableCount} tables`);
 
-    // Step 4: Clone database
+    // Step 4: Verify database state
+    logger.step(4, 6, "Verifying database state...");
+
+    // Check 1: Pending committed migrations
+    const pendingCommitted = await getPendingCommittedMigrations();
+
+    if (pendingCommitted.length > 0) {
+      logger.blank();
+      logger.error("Database state verification failed!");
+      logger.blank();
+      logger.warn(`You have ${pendingCommitted.length} committed migration(s) pending deployment:`);
+      for (const cm of pendingCommitted) {
+        logger.warn(`  - ${cm.migrationFile.name} (${cm.description})`);
+      }
+      logger.blank();
+      logger.error("Cannot start a new session while committed migrations are pending deployment.");
+      logger.info("The remote database is not in sync with your committed migrations.");
+      logger.blank();
+      logger.info("To fix this:");
+      logger.info('  1. Run "postkit db deploy" to deploy committed migrations');
+      logger.info("  2. Then run \"postkit db start\" again");
+      logger.blank();
+      throw new PostkitError(
+        `Cannot start a new session — ${pendingCommitted.length} committed migration(s) are pending deployment.`,
+        'Run "postkit db deploy" to deploy them, then try "postkit db start" again.\n' +
+        "  (To discard committed migrations, delete .postkit/committed.json manually.)",
+      );
+    }
+
+    spinner.succeed("No pending committed migrations");
+
+    // Check 2: Run dbmate status to detect any pending migrations
+    spinner.start("Checking migration status...");
+    const statusOutput = await runDbmateStatus(targetRemoteUrl);
+
+    // Check if there are actually pending migrations (look for [ ] unchecked items or Pending > 0)
+    // dbmate status shows "[ ] filename.sql" for pending and "[X] filename.sql" for applied
+    const hasPendingItems = statusOutput.includes("[ ") && !statusOutput.match(/Pending:\s*0\b/);
+
+    if (hasPendingItems) {
+      spinner.warn("Found pending migrations in migrations directory");
+      logger.blank();
+      logger.warn("dbmate status output:");
+      console.log(statusOutput);
+      logger.blank();
+      logger.warn("There are migration files in your migrations/ directory that haven't been applied to the remote database.");
+      logger.info("This may cause unexpected behavior. Consider:");
+      logger.info('  1. Applying these migrations to the remote database first');
+      logger.info('  2. Or removing/moving these migration files if they\'re not needed');
+      logger.blank();
+
+      // Ask user if they want to continue
+      if (!options.force) {
+        const {confirm} = await inquirer.prompt([
+          {
+            type: "confirm",
+            name: "confirm",
+            message: "Continue starting session despite pending migrations?",
+            default: false,
+          },
+        ]);
+
+        if (!confirm) {
+          throw new PostkitError("Session start cancelled.", undefined, 0);
+        }
+      } else {
+        logger.info("Continuing due to --force flag...");
+      }
+    } else {
+      spinner.succeed("All migrations applied - database is in sync");
+    }
+
+    // Step 5: Clone database
     logger.step(4, 5, "Cloning remote database to local...");
     spinner.start("Cloning database (this may take a moment)...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping database clone");
     } else {
-      await cloneDatabase(config.remoteDbUrl, config.localDbUrl);
+      await cloneDatabase(targetRemoteUrl, config.localDbUrl);
       spinner.succeed("Database cloned successfully");
 
       const localTableCount = await getTableCount(config.localDbUrl);
       logger.info(`Local clone has ${localTableCount} tables`);
     }
 
-    // Step 5: Create session
-    logger.step(5, 5, "Creating session...");
+    // Step 6: Create session
+    logger.step(6, 6, "Creating session...");
 
     if (!options.dryRun) {
       const session = await createSession(
-        config.remoteDbUrl,
+        targetRemoteUrl,
         config.localDbUrl,
+        targetRemoteName,
       );
-      logger.success(`Session created (snapshot: ${session.remoteSnapshot})`);
+      logger.success(`Session created (cloned at: ${session.clonedAt})`);
     } else {
       logger.info("Dry run - session not created");
     }
@@ -125,8 +228,7 @@ export async function startCommand(options: CommandOptions): Promise<void> {
     logger.info('  4. Run "postkit db commit <description>" when ready');
   } catch (error) {
     spinner.fail("Failed to start migration session");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }
 

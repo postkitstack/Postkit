@@ -4,6 +4,41 @@ import {existsSync} from "fs";
 import type {AuthConfig} from "../utils/auth-config";
 
 // ============================================
+// Keycloak API types
+// ============================================
+
+export interface KeycloakClient {
+  secret?: string;
+  [key: string]: unknown;
+}
+
+export interface KeycloakStorageProvider {
+  config?: {bindCredential?: string; [key: string]: unknown};
+  [key: string]: unknown;
+}
+
+export interface KeycloakComponents {
+  "org.keycloak.keys.KeyProvider"?: unknown;
+  "org.keycloak.storage.UserStorageProvider"?: KeycloakStorageProvider[];
+  [key: string]: unknown;
+}
+
+export interface KeycloakIdentityProvider {
+  config?: {clientSecret?: string; [key: string]: unknown};
+  [key: string]: unknown;
+}
+
+export interface KeycloakRealm {
+  users?: unknown[];
+  clients?: KeycloakClient[];
+  components?: KeycloakComponents;
+  smtpServer?: {password?: string; [key: string]: unknown};
+  identityProviders?: KeycloakIdentityProvider[];
+  defaultRole?: {id?: string; [key: string]: unknown};
+  [key: string]: unknown;
+}
+
+// ============================================
 // Token acquisition
 // ============================================
 
@@ -51,7 +86,7 @@ export async function exportRealm(
   url: string,
   realm: string,
   token: string,
-): Promise<Record<string, unknown>> {
+): Promise<KeycloakRealm> {
   const exportUrl = `${url}/admin/realms/${realm}/partial-export?exportClients=true&exportGroupsAndRoles=true`;
 
   const response = await fetch(exportUrl, {
@@ -73,7 +108,7 @@ export async function exportRealm(
     throw new Error("Export returned empty response");
   }
 
-  return data as Record<string, unknown>;
+  return data as KeycloakRealm;
 }
 
 // ============================================
@@ -86,12 +121,13 @@ function stripIds(obj: unknown): unknown {
   }
   if (obj !== null && typeof obj === "object") {
     const record = obj as Record<string, unknown>;
-    delete record["id"];
-    delete record["_id"];
+    const result: Record<string, unknown> = {};
     for (const key of Object.keys(record)) {
-      record[key] = stripIds(record[key]);
+      if (key !== "id" && key !== "_id") {
+        result[key] = stripIds(record[key]);
+      }
     }
-    return record;
+    return result;
   }
   return obj;
 }
@@ -102,89 +138,65 @@ function stripContainerIds(obj: unknown): unknown {
   }
   if (obj !== null && typeof obj === "object") {
     const record = obj as Record<string, unknown>;
-    delete record["containerId"];
+    const result: Record<string, unknown> = {};
     for (const key of Object.keys(record)) {
-      record[key] = stripContainerIds(record[key]);
+      if (key !== "containerId") {
+        result[key] = stripContainerIds(record[key]);
+      }
     }
-    return record;
+    return result;
   }
   return obj;
 }
 
-export function cleanRealmConfig(
-  realm: Record<string, unknown>,
-): Record<string, unknown> {
-  // Deep clone to avoid mutating original
-  const cleaned = JSON.parse(JSON.stringify(realm)) as Record<string, unknown>;
+export function cleanRealmConfig(realm: KeycloakRealm): KeycloakRealm {
+  // Deep clone to avoid mutating the original export
+  const cleaned = JSON.parse(JSON.stringify(realm)) as KeycloakRealm;
 
   // Remove users
-  delete cleaned["users"];
+  delete cleaned.users;
 
   // Remove client secrets
-  const clients = cleaned["clients"] as
-    | Array<Record<string, unknown>>
-    | undefined;
-  if (Array.isArray(clients)) {
-    for (const client of clients) {
-      delete client["secret"];
+  if (Array.isArray(cleaned.clients)) {
+    for (const client of cleaned.clients) {
+      delete client.secret;
     }
   }
 
-  // Remove key providers from components
-  const components = cleaned["components"] as
-    | Record<string, unknown>
-    | undefined;
-  if (components && typeof components === "object") {
-    delete components["org.keycloak.keys.KeyProvider"];
+  // Remove key providers and storage provider credentials from components
+  if (cleaned.components) {
+    delete cleaned.components["org.keycloak.keys.KeyProvider"];
 
-    // Remove storage provider credentials
-    const storageProviders = components[
-      "org.keycloak.storage.UserStorageProvider"
-    ] as Array<Record<string, unknown>> | undefined;
-    if (Array.isArray(storageProviders)) {
-      for (const provider of storageProviders) {
-        const cfg = provider["config"] as Record<string, unknown> | undefined;
-        if (cfg && typeof cfg === "object") {
-          delete cfg["bindCredential"];
+    if (Array.isArray(cleaned.components["org.keycloak.storage.UserStorageProvider"])) {
+      for (const provider of cleaned.components["org.keycloak.storage.UserStorageProvider"]) {
+        if (provider.config) {
+          delete provider.config.bindCredential;
         }
       }
     }
   }
 
   // Remove SMTP password
-  const smtpServer = cleaned["smtpServer"] as
-    | Record<string, unknown>
-    | undefined;
-  if (smtpServer && typeof smtpServer === "object") {
-    delete smtpServer["password"];
+  if (cleaned.smtpServer) {
+    delete cleaned.smtpServer.password;
   }
 
   // Remove identity provider client secrets
-  const identityProviders = cleaned["identityProviders"] as
-    | Array<Record<string, unknown>>
-    | undefined;
-  if (Array.isArray(identityProviders)) {
-    for (const idp of identityProviders) {
-      const cfg = idp["config"] as Record<string, unknown> | undefined;
-      if (cfg && typeof cfg === "object") {
-        delete cfg["clientSecret"];
+  if (Array.isArray(cleaned.identityProviders)) {
+    for (const idp of cleaned.identityProviders) {
+      if (idp.config) {
+        delete idp.config.clientSecret;
       }
     }
   }
 
   // Remove default role ID
-  const defaultRole = cleaned["defaultRole"] as
-    | Record<string, unknown>
-    | undefined;
-  if (defaultRole && typeof defaultRole === "object") {
-    delete defaultRole["id"];
+  if (cleaned.defaultRole) {
+    delete cleaned.defaultRole.id;
   }
 
-  // Strip all IDs and container IDs
-  stripIds(cleaned);
-  stripContainerIds(cleaned);
-
-  return cleaned;
+  // Strip all IDs and container IDs (pure — return new objects)
+  return stripContainerIds(stripIds(cleaned)) as KeycloakRealm;
 }
 
 // ============================================
@@ -192,7 +204,7 @@ export function cleanRealmConfig(
 // ============================================
 
 export async function saveRawExport(
-  data: Record<string, unknown>,
+  data: KeycloakRealm,
   filePath: string,
 ): Promise<void> {
   const dir = path.dirname(filePath);
@@ -202,23 +214,10 @@ export async function saveRawExport(
   await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
-export async function saveCleanExport(
-  data: Record<string, unknown>,
-  filePath: string,
-): Promise<void> {
-  const dir = path.dirname(filePath);
-  if (!existsSync(dir)) {
-    await fs.mkdir(dir, {recursive: true});
-  }
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
-}
-
-export async function loadCleanExport(
-  filePath: string,
-): Promise<Record<string, unknown>> {
+export async function loadCleanExport(filePath: string): Promise<KeycloakRealm> {
   if (!existsSync(filePath)) {
     throw new Error(`Cleaned config not found: ${filePath}`);
   }
   const content = await fs.readFile(filePath, "utf-8");
-  return JSON.parse(content) as Record<string, unknown>;
+  return JSON.parse(content) as KeycloakRealm;
 }

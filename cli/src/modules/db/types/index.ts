@@ -1,16 +1,8 @@
-export interface CommitState {
-  migrationFile: { name: string; path: string } | null;
-  remoteApplied: boolean;
-  infraApplied: boolean;
-  grantsApplied: boolean;
-  seedsApplied: boolean;
-  description: string;
-}
-
 export interface SessionState {
   active: boolean;
   startedAt: string;
-  remoteSnapshot: string;
+  clonedAt: string;
+  remoteName?: string;
   localDbUrl: string;
   remoteDbUrl: string;
   pendingChanges: {
@@ -24,20 +16,6 @@ export interface SessionState {
     grantsApplied: boolean;
     seedsApplied: boolean;
   };
-  commitState?: CommitState;
-}
-
-export interface Config {
-  remoteDbUrl: string;
-  localDbUrl: string;
-  schemaPath: string;
-  migrationsPath: string;
-  schema: string;
-  pgSchemaBin: string;
-  dbmateBin: string;
-  cliRoot: string;
-  projectRoot: string;
-  environments: Record<string, string>;
 }
 
 export interface DatabaseConnectionInfo {
@@ -78,4 +56,17 @@ export interface SeedStatement {
 export interface InfraStatement {
   name: string;
   content: string;
+}
+
+export interface CommittedMigration {
+  migrationFile: { name: string; path: string; timestamp: string };
+  description: string;
+  sessionMigrations: { name: string; path: string }[];
+  committedAt: string;
+  deployed: boolean;
+  deployedAt?: string;
+}
+
+export interface CommittedState {
+  migrations: CommittedMigration[];
 }

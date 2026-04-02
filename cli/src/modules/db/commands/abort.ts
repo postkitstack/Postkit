@@ -2,9 +2,9 @@ import ora from "ora";
 import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
 import {getSession, deleteSession} from "../utils/session";
+import {getSessionMigrationsPath} from "../utils/db-config";
 import {deletePlanFile} from "../services/pgschema";
 import {deleteGeneratedSchema} from "../services/schema-generator";
-import {deleteMigrationFile} from "../services/dbmate";
 import {dropDatabase, parseConnectionUrl} from "../services/database";
 import type {CommandOptions} from "../../../common/types";
 
@@ -25,19 +25,14 @@ export async function abortCommand(options: CommandOptions): Promise<void> {
     // Show session info
     logger.info("Current session:");
     logger.info(`  Started: ${session.startedAt}`);
-    logger.info(`  Snapshot: ${session.remoteSnapshot}`);
+    logger.info(`  Remote: ${session.remoteName || "unknown"}`);
+    logger.info(`  Cloned at: ${session.clonedAt}`);
     logger.info(
       `  Plan generated: ${session.pendingChanges.planned ? "Yes" : "No"}`,
     );
     logger.info(
       `  Applied to local: ${session.pendingChanges.applied ? "Yes" : "No"}`,
     );
-
-    if (session.commitState) {
-      logger.info(
-        `  Commit in progress: Yes (remote applied: ${session.commitState.remoteApplied ? "Yes" : "No"})`,
-      );
-    }
 
     logger.blank();
 
@@ -69,40 +64,8 @@ export async function abortCommand(options: CommandOptions): Promise<void> {
       spinner.succeed("Plan file removed");
     }
 
-    // Step 2: Clean up orphaned migration file
-    logger.step(2, 5, "Checking for orphaned migration files...");
-
-    if (options.dryRun) {
-      spinner.info("Dry run - skipping migration file cleanup");
-    } else if (session.commitState?.migrationFile) {
-      if (session.commitState.remoteApplied) {
-        spinner.warn(
-          `Migration "${session.commitState.migrationFile.name}" was already applied to remote - keeping file`,
-        );
-        logger.warn(
-          "This migration has been applied to the remote database and cannot be undone by aborting.",
-        );
-        logger.info(
-          "You may need to create a new migration to revert these changes.",
-        );
-      } else {
-        const deleted = await deleteMigrationFile(
-          session.commitState.migrationFile.path,
-        );
-        if (deleted) {
-          spinner.succeed(
-            `Orphaned migration file removed: ${session.commitState.migrationFile.name}`,
-          );
-        } else {
-          spinner.info("Migration file already removed");
-        }
-      }
-    } else {
-      spinner.info("No orphaned migration files found");
-    }
-
-    // Step 3: Delete generated schema
-    logger.step(3, 5, "Removing generated schema...");
+    // Step 2: Delete generated schema
+    logger.step(2, 5, "Removing generated schema...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping file removal");
@@ -111,8 +74,8 @@ export async function abortCommand(options: CommandOptions): Promise<void> {
       spinner.succeed("Generated schema removed");
     }
 
-    // Step 4: Drop local clone database
-    logger.step(4, 5, "Dropping local clone database...");
+    // Step 3: Drop local clone database
+    logger.step(3, 5, "Dropping local clone database...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping database drop");
@@ -131,33 +94,52 @@ export async function abortCommand(options: CommandOptions): Promise<void> {
       }
     }
 
-    // Step 5: Delete session file
-    logger.step(5, 5, "Removing session file...");
+    // Step 4: Delete session migrations folder
+    logger.step(4, 5, "Removing session migrations folder...");
+
+    if (options.dryRun) {
+      spinner.info("Dry run - skipping folder removal");
+    } else {
+      const sessionMigrationsDir = getSessionMigrationsPath();
+      const fs = await import("fs/promises");
+      const {existsSync} = await import("fs");
+
+      if (existsSync(sessionMigrationsDir)) {
+        await fs.rm(sessionMigrationsDir, {recursive: true, force: true});
+        spinner.succeed("Session migrations folder removed");
+      } else {
+        spinner.info("No session migrations folder found");
+      }
+    }
+
+    // Step 5: Delete session state
+    logger.step(5, 5, "Removing session state...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping session removal");
     } else {
       await deleteSession();
-      spinner.succeed("Session file removed");
+      spinner.succeed("Session state removed");
     }
 
     logger.blank();
     logger.success("Migration session aborted.");
     logger.blank();
-    logger.info("All local changes have been discarded.");
-    if (session.commitState?.remoteApplied) {
-      logger.warn(
-        "Note: The migration was already applied to the remote database.",
-      );
-      logger.info(
-        "Create a new session to revert remote changes if needed.",
-      );
-    } else {
-      logger.info('Run "postkit db start" to begin a new session.');
-    }
+    logger.info("Cleaned up:");
+    logger.info("  - Plan file removed");
+    logger.info("  - Generated schema removed");
+    logger.info("  - Local clone database dropped");
+    logger.info("  - Session migrations folder removed");
+    logger.info("  - Session state removed");
+    logger.blank();
+    logger.info("Preserved:");
+    logger.info("  - Committed migrations (.postkit/db/migrations/)");
+    logger.blank();
+    logger.info("Next steps:");
+    logger.info('  - Run "postkit db start" to begin a new session');
+    logger.info('  - Run "postkit db deploy" to deploy committed migrations');
   } catch (error) {
     spinner.fail("Failed to abort session");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }
