@@ -116,6 +116,9 @@ All PostKit runtime files are stored in `.postkit/` (gitignored):
 - `getSessionMigrationsPath()` - `.postkit/db/session/`
 - `getCommittedMigrationsPath()` - `.postkit/db/migrations/`
 
+**Key functions** (from `modules/db/services/`):
+- `generateSchemaSQLAndFingerprint()` - Reads all schema files once and returns both the output path (`.postkit/db/schema.sql`) and a SHA-256 fingerprint of the source files
+
 ### Configuration System
 
 Config is loaded from `postkit.config.json` in the project root. Use `loadPostkitConfig()` from `common/config.ts`.
@@ -202,6 +205,11 @@ export async function someCommand(options: CommandOptions): Promise<void> {
   // Business logic...
 }
 ```
+
+`CommandOptions` includes the following global flags available to all commands:
+- `verbose` - Enable verbose/debug output (`-v, --verbose`)
+- `dryRun` - Show what would be done without making changes (`--dry-run`)
+- `json` - Output results as machine-readable JSON, useful for scripting/CI (`--json`)
 
 ### Shell Command Execution
 

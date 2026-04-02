@@ -237,7 +237,7 @@ postkit db apply -f          # Skip confirmation
 
 **What it does:**
 1. Validates schema fingerprint (ensures schema files haven't changed since plan)
-2. Displays the planned changes and asks for a migration description
+2. Displays the planned changes
 3. Tests local database connection
 4. Applies infrastructure SQL from `db/schema/infra/`
 5. Wraps the plan SQL and creates a dbmate migration file (staged in `.postkit/db/session/`)
@@ -276,6 +276,7 @@ postkit db deploy                        # Uses default remote
 postkit db deploy --remote staging       # Use specific remote
 postkit db deploy --url=postgres://...   # Direct URL override
 postkit db deploy --remote production -f # Skip confirmations
+postkit db deploy --dry-run              # Verify only, don't touch target
 ```
 
 **What it does:**
@@ -284,10 +285,11 @@ postkit db deploy --remote production -f # Skip confirmations
 3. Tests the target database connection
 4. Clones the target database to local (using `LOCAL_DATABASE_URL`)
 5. Runs a full dry-run on the local clone: infra, dbmate migrate, grants, seeds
-6. Reports dry-run results and confirms deployment (unless `-f`)
-7. Applies to target: infra, dbmate migrate, grants, seeds
-8. Drops the local clone database
-9. Marks migrations as deployed in `.postkit/db/committed.json`
+6. If `--dry-run` is set, stops here and reports results without touching the target
+7. Reports dry-run results and confirms deployment (unless `-f`)
+8. Applies to target: infra, dbmate migrate, grants, seeds
+9. Drops the local clone database
+10. Marks migrations as deployed in `.postkit/db/committed.json`
 
 If the dry run fails, deployment is aborted and no changes are made to the target database.
 
@@ -300,6 +302,7 @@ Manage named remote databases.
 ```bash
 # List all remotes
 postkit db remote list
+postkit db remote list --json   # Machine-readable JSON output
 
 # Add a new remote
 postkit db remote add staging "postgres://user:pass@host:5432/db"
@@ -332,6 +335,7 @@ Show the current session state and pending changes.
 
 ```bash
 postkit db status
+postkit db status --json   # Machine-readable JSON output
 ```
 
 ---
@@ -425,7 +429,7 @@ Session state is stored in `.postkit/db/session.json`:
 {
   "active": true,
   "startedAt": "2026-02-11T12:00:00Z",
-  "remoteSnapshot": "20260211120000",
+  "clonedAt": "20260211120000",
   "remoteName": "staging",
   "localDbUrl": "postgres://...",
   "remoteDbUrl": "postgres://...",

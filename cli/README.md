@@ -52,6 +52,7 @@ postkit <module> <command> [options]
 |--------|-------------|
 | `-v, --verbose` | Enable verbose/debug output |
 | `--dry-run` | Show what would be done without making changes |
+| `--json` | Output results as JSON (for scripting/CI) |
 | `-V, --version` | Output version number |
 | `-h, --help` | Display help for command |
 
