@@ -18,7 +18,6 @@ import {generateSeeds, applySeeds} from "../services/seed-generator";
 import {getPendingCommittedMigrations, markMigrationDeployed} from "../utils/committed";
 import {resolveRemote, maskRemoteUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
-import type {Config} from "../types/index";
 import {PostkitError} from "../../../errors";
 
 interface DeployOptions extends CommandOptions {

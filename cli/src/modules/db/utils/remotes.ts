@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import {logger} from "../../../common/logger";
-import {loadPostkitConfig, getConfigFilePath, projectRoot} from "../../../common/config";
-import type {RemoteConfig} from "./remote-types";
+import {loadPostkitConfig, getConfigFilePath, invalidateConfig, projectRoot} from "../../../common/config";
+import type {RemoteConfig} from "../../../common/config";
 
 export interface RemoteInfo {
   name: string;
@@ -133,6 +133,7 @@ export async function addRemote(name: string, url: string, setAsDefault: boolean
 
   // Save the updated config
   await fs.writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
+  invalidateConfig();
 
   logger.success(`Remote "${name}" added successfully`);
 }
@@ -185,6 +186,7 @@ export async function removeRemote(name: string, force: boolean = false): Promis
 
   // Save the updated config
   await fs.writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
+  invalidateConfig();
 
   logger.success(`Remote "${name}" removed successfully`);
 }
@@ -212,6 +214,7 @@ export async function setDefaultRemote(name: string): Promise<void> {
 
   // Save the updated config
   await fs.writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
+  invalidateConfig();
 
   logger.success(`Remote "${name}" set as default`);
 }

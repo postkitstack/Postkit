@@ -66,6 +66,10 @@ export interface PostkitConfig {
 
 let cachedConfig: PostkitConfig | null = null;
 
+export function invalidateConfig(): void {
+  cachedConfig = null;
+}
+
 /**
  * Check if postkit project is initialized
  * Throws error if not initialized

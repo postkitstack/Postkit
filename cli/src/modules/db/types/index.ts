@@ -18,16 +18,6 @@ export interface SessionState {
   };
 }
 
-export interface Config {
-  localDbUrl: string;
-  schemaPath: string;
-  schema: string;
-  pgSchemaBin: string;
-  dbmateBin: string;
-  cliRoot: string;
-  projectRoot: string;
-}
-
 export interface DatabaseConnectionInfo {
   host: string;
   port: number;

@@ -2,7 +2,6 @@ import path from "path";
 import {existsSync} from "fs";
 import {resolveBinary as resolveDbmateBinary} from "dbmate";
 import {cliRoot, projectRoot, loadPostkitConfig, getPostkitDir, getVendorDir} from "../../../common/config";
-import type {Config} from "../types/index";
 
 // Map Node.js platform/arch values to Go-style names used in pgschema binaries
 const PLATFORM_MAP: Record<string, string> = {
@@ -55,7 +54,7 @@ function resolveDbmateBin(): string {
   return "dbmate";
 }
 
-export function getConfig(): Config {
+export function getConfig() {
   const config = loadPostkitConfig();
 
   const localDbUrl = config.db.localDbUrl;
