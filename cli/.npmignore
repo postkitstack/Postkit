@@ -1,0 +1,17 @@
+# Source files
+src/
+tsconfig.json
+tsup.config.ts
+*.sh
+
+# Dev files
+.env
+.env.*
+*.local
+
+# Build scripts inside vendor
+vendor/**/*.sh
+
+# Misc
+*.tgz
+analyze.md

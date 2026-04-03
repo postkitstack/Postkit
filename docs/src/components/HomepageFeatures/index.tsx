@@ -11,32 +11,32 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Easy to Use',
+    title: 'Safe Database Migrations',
     Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        Clone remote databases locally, develop and test changes safely, then
+        deploy with confidence. Your production database is never at risk.
       </>
     ),
   },
   {
-    title: 'Focus on What Matters',
+    title: 'Modular CLI Toolkit',
     Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
+        Each feature is a pluggable module. Use only what you need — database
+        migrations, auth management, and more coming soon.
       </>
     ),
   },
   {
-    title: 'Powered by React',
+    title: 'Production Ready',
     Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
     description: (
       <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
+        Dry-run verification ensures your migrations work before touching
+        production. Deploy with confidence knowing everything has been tested.
       </>
     ),
   },
@@ -60,6 +60,14 @@ export default function HomepageFeatures(): ReactNode {
   return (
     <section className={styles.features}>
       <div className="container">
+        <div className="row">
+          <div className="col col--12 text--center padding-bottom--lg">
+            <Heading as="h2">Why PostKit?</Heading>
+            <p className="hero__subtitle" style={{fontSize: '1.2rem', marginTop: '1rem'}}>
+              Everything you need to manage backend development with confidence
+            </p>
+          </div>
+        </div>
         <div className="row">
           {FeatureList.map((props, idx) => (
             <Feature key={idx} {...props} />
