@@ -78,22 +78,60 @@ The `db` module provides a **session-based database migration workflow** for saf
 | [`grants`](/docs/modules/db/commands/grants) | Manage grant statements |
 | [`seed`](/docs/modules/db/commands/seed) | Manage seed data |
 
+## Important Notes
+
+**pgschema operates at the schema level only.** Cluster and database level commands (like `CREATE DATABASE`, `CREATE ROLE`, `CREATE EXTENSION`) are not supported and must be handled through the `infra/` directory or manual migrations.
+
+See [Plan Command Limitations](/docs/modules/db/plan-limitations) for details.
+
 ## Schema Directory Structure
+
+Your schema files are organized into three categories:
+
+### 1. Infrastructure (Handled Separately)
+
+```
+db/schema/infra/
+├── 001_roles.sql       # CREATE ROLE, CREATE USER (pre-migration)
+├── 002_schemas.sql      # CREATE SCHEMA (pre-migration)
+└── 003_extensions.sql   # CREATE EXTENSION (pre-migration)
+```
+
+**Note:** Files in `infra/` are **excluded from pgschema** and applied separately.
+
+### 2. Schema Objects (Processed by `postkit db plan`)
+
+The `plan` command uses pgschema to process these directories:
 
 ```
 db/schema/
-├── infra/                    # Pre-migration (roles, schemas, extensions)
-├── extensions/
-├── types/
-├── enums/
-├── tables/
-├── views/
-├── functions/
-├── triggers/
-├── indexes/
-├── grants/                   # Post-migration grants
-└── seeds/                    # Post-migration seeds
+├── types/              # Custom types
+├── enums/              # ENUM types
+├── tables/             # CREATE TABLE, ALTER TABLE
+├── views/              # CREATE VIEW, CREATE MATERIALIZED VIEW
+├── functions/          # CREATE FUNCTION
+├── triggers/           # CREATE TRIGGER
+├── indexes/             # CREATE INDEX
+└── constraints/        # PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK
 ```
+
+**Supported:** Tables, views, functions, triggers, indexes, constraints, enums, domains, sequences
+
+### 3. Post-Migration (Handled Separately)
+
+```
+db/schema/
+├── grants/             # GRANT statements (post-migration)
+└── seeds/              # Seed data (post-migration)
+```
+
+**Note:** These are applied separately after the main migration.
+
+### Execution Order
+
+1. **Pre-migration:** `infra/` (roles, schemas, extensions)
+2. **Migration:** pgschema processes types → enums → tables → views → functions → triggers → indexes → constraints
+3. **Post-migration:** `grants/` (permissions) → `seeds/` (data)
 
 ## Prerequisites
 

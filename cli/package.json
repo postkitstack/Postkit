@@ -1,6 +1,6 @@
 {
   "name": "@appritech/postkit",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "description": "PostKit - Developer toolkit for database management and more",
   "type": "module",
   "main": "dist/index.js",
@@ -10,7 +10,8 @@
   "files": [
     "dist",
     "vendor",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18.0.0"
@@ -31,14 +32,14 @@
     "toolkit"
   ],
   "author": "Appri Team",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/appri/postkit.git"
+    "url": "https://github.com/appritechnologies/postkit.git"
   },
-  "homepage": "https://github.com/appri/postkit#readme",
+  "homepage": "https://github.com/appritechnologies/postkit#readme",
   "bugs": {
-    "url": "https://github.com/appri/postkit/issues"
+    "url": "https://github.com/appritechnologies/postkit/issues"
   },
   "dependencies": {
     "chalk": "^5.3.0",

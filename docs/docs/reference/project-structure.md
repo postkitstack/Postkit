@@ -36,21 +36,34 @@ my-project/
 
 ## Schema Directory
 
-The `db/schema/` directory contains your database schema definitions:
+The `db/schema/` directory is organized into three categories:
 
-| Directory | Description |
-|-----------|-------------|
-| `infra/` | Pre-migration infrastructure (roles, schemas, extensions) |
-| `extensions/` | Database extensions |
-| `types/` | Custom types |
-| `enums/` | Enum definitions |
-| `tables/` | Table definitions |
-| `views/` | View definitions |
-| `functions/` | Function definitions |
-| `triggers/` | Trigger definitions |
-| `indexes/` | Index definitions |
-| `grants/` | Post-migration grant statements |
-| `seeds/` | Post-migration seed data |
+### Infrastructure (Handled Separately)
+
+| Directory | Description | Processed By |
+|-----------|-------------|--------------|
+| `infra/` | Pre-migration: roles, schemas, extensions | Applied separately (excluded from pgschema) |
+
+### Schema Objects (Processed by `postkit db plan`)
+
+| Directory | Description | Supported by pgschema |
+|-----------|-------------|---------------------|
+| `types/` | Custom types | ✅ Yes |
+| `enums/` | ENUM types | ✅ Yes |
+| `tables/` | Table definitions | ✅ Yes |
+| `views/` | View definitions | ✅ Yes |
+| `functions/` | Function definitions | ✅ Yes |
+| `triggers/` | Trigger definitions | ✅ Yes |
+| `indexes/` | Index definitions | ✅ Yes |
+
+### Post-Migration (Handled Separately)
+
+| Directory | Description | Processed By |
+|-----------|-------------|--------------|
+| `grants/` | Grant statements | Applied separately |
+| `seeds/` | Seed data | Applied separately |
+
+**Note:** Cluster and database level commands (CREATE DATABASE, CREATE ROLE, CREATE EXTENSION, etc.) are not supported by pgschema. Use `db/schema/infra/` or manual migrations instead.
 
 ## PostKit Runtime Directory
 

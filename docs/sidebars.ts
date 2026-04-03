@@ -44,6 +44,7 @@ const sidebars: SidebarsConfig = {
           ],
         },
         'modules/db/troubleshooting',
+        'modules/db/plan-limitations',
       ],
     },
 
