@@ -121,6 +121,10 @@ const config: Config = {
               label: 'GitHub',
               href: 'https://github.com/appritechnologies/postkit',
             },
+            {
+              label: 'Documentation',
+              href: 'https://docs.postkitstack.com/',
+            },
           ],
         },
       ],
