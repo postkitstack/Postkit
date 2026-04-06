@@ -80,9 +80,22 @@ Keycloak realm configuration management.
 
 | Command | Description |
 |---------|-------------|
-| `postkit auth export` | Export realm from source Keycloak |
-| `postkit auth import` | Import realm config to target Keycloak |
-| `postkit auth sync` | Export from source then import to target |
+| `postkit auth export` | Export realm from source Keycloak, clean, and save |
+| `postkit auth import` | Import cleaned realm config to target Keycloak |
+| `postkit auth sync` | Export + Import in sequence (full sync) |
+
+All auth commands support:
+- `-f, --force` — Skip confirmation prompts
+- `-v, --verbose` — Enable detailed output
+
+Output is stored in `.postkit/auth/`:
+```
+.postkit/auth/
+├── raw/
+│   └── {realm}.json      # Raw export from source
+└── realm/
+    └── {realm}.json      # Cleaned config for import
+```
 
 ## 📖 Documentation
 
@@ -115,8 +128,35 @@ Create a `postkit.config.json` in your project root:
         "url": "postgres://user:pass@staging-host:5432/myapp"
       }
     }
+  },
+  "auth": {
+    "source": {
+      "url": "https://keycloak-dev.example.com",
+      "adminUser": "admin",
+      "adminPass": "dev-password",
+      "realm": "myapp-realm"
+    },
+    "target": {
+      "url": "https://keycloak-staging.example.com",
+      "adminUser": "admin",
+      "adminPass": "staging-password"
+    },
+    "configCliImage": "adorsys/keycloak-config-cli:6.4.0-24"
   }
 }
+```
+
+Run `postkit init` to create the `.postkit/` directory structure:
+
+```
+.postkit/
+├── db/           # Database migration state
+│   ├── session/
+│   ├── migrations/
+│   └── ...
+└── auth/         # Auth module output
+    ├── raw/      # Raw exports from source
+    └── realm/    # Cleaned configs for import
 ```
 
 ## 🌐 Global Options

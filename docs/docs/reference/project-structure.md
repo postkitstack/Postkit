@@ -22,13 +22,18 @@ my-project/
 │       ├── grants/           # Grant statements
 │       └── seeds/            # Seed data
 ├── .postkit/                 # PostKit runtime (gitignored)
-│   └── db/                   # All DB runtime files
-│       ├── session.json      # Session state
-│       ├── committed.json    # Committed migrations tracking
-│       ├── plan.sql          # Generated plan
-│       ├── schema.sql        # Generated schema
-│       ├── session/          # Session migrations (temporary)
-│       └── migrations/       # Committed migrations (for deploy)
+│   ├── db/                   # All DB runtime files
+│   │   ├── session.json      # Session state
+│   │   ├── committed.json    # Committed migrations tracking
+│   │   ├── plan.sql          # Generated plan
+│   │   ├── schema.sql        # Generated schema
+│   │   ├── session/          # Session migrations (temporary)
+│   │   └── migrations/       # Committed migrations (for deploy)
+│   └── auth/                 # Auth module runtime files
+│       ├── raw/              # Raw exports from source Keycloak
+│       │   └── {realm}.json
+│       └── realm/            # Cleaned configs for import
+│           └── {realm}.json
 ├── postkit.config.json       # Project configuration
 ├── .env                      # Environment variables (gitignored)
 └── package.json
@@ -69,6 +74,8 @@ The `db/schema/` directory is organized into three categories:
 
 The `.postkit/` directory contains runtime files that are **not** tracked by git:
 
+### Database Module (`db/`)
+
 | File/Directory | Description |
 |----------------|-------------|
 | `session.json` | Current session state |
@@ -77,6 +84,13 @@ The `.postkit/` directory contains runtime files that are **not** tracked by git
 | `schema.sql` | Generated schema from files |
 | `session/` | Session migrations (temporary, cleared on commit) |
 | `migrations/` | Committed migrations (for deployment) |
+
+### Auth Module (`auth/`)
+
+| File/Directory | Description |
+|----------------|-------------|
+| `raw/{realm}.json` | Raw export from source Keycloak (includes IDs, secrets) |
+| `realm/{realm}.json` | Cleaned config ready for import (IDs, secrets stripped) |
 
 ## Config File
 
@@ -94,6 +108,22 @@ The `.postkit/` directory contains runtime files that are **not** tracked by git
         "default": true
       }
     }
+  },
+  "auth": {
+    "source": {
+      "url": "https://keycloak-dev.example.com",
+      "adminUser": "admin",
+      "adminPass": "password",
+      "realm": "myapp-realm"
+    },
+    "target": {
+      "url": "https://keycloak-staging.example.com",
+      "adminUser": "admin",
+      "adminPass": "password"
+    },
+    "configCliImage": "adorsys/keycloak-config-cli:6.4.0-24"
   }
 }
 ```
+
+Run `postkit init` to create the `.postkit/` directory structure.

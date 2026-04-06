@@ -21,7 +21,7 @@ The `auth` module provides **Keycloak realm configuration management** — expor
 │                                    │                              │
 │                           ┌────────▼─────────┐                    │
 │                           │ 3. Save raw to    │                    │
-│                           │    .tmp-config/   │                    │
+│                           │ .postkit/auth/raw │                    │
 │                           └────────┬─────────┘                    │
 │                                    │                              │
 │                           ┌────────▼─────────┐                    │
@@ -32,7 +32,8 @@ The `auth` module provides **Keycloak realm configuration management** — expor
 │                                    │                              │
 │                           ┌────────▼─────────┐                    │
 │                           │ 5. Save cleaned   │                    │
-│                           │    to realm-config│                    │
+│                           │ .postkit/auth/    │                    │
+│                           │    realm/         │                    │
 │                           └──────────────────┘                    │
 │                                                                   │
 │  $ postkit auth import                                            │
@@ -61,7 +62,18 @@ The `auth` module provides **Keycloak realm configuration management** — expor
 
 ## Configuration
 
-The auth module uses environment variables for Keycloak connections. See [Auth Configuration](/docs/modules/auth/configuration) for details.
+The auth module is configured in `postkit.config.json`. See [Auth Configuration](/docs/modules/auth/configuration) for details.
+
+## Output Structure
+
+```
+.postkit/
+└── auth/
+    ├── raw/
+    │   └── {realm}.json      # Raw export from source
+    └── realm/
+        └── {realm}.json      # Cleaned config for import
+```
 
 ## What Gets Cleaned
 
