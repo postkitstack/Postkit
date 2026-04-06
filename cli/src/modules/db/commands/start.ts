@@ -16,7 +16,7 @@ import {checkPgschemaInstalled} from "../services/pgschema";
 import {checkDbmateInstalled, runDbmateStatus} from "../services/dbmate";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
-import {PostkitError} from "../../../errors";
+import {PostkitError} from "../../../common/errors";
 
 interface StartOptions extends CommandOptions {
   remote?: string;

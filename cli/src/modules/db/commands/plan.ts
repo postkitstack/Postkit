@@ -5,7 +5,7 @@ import {generateSchemaSQLAndFingerprint} from "../services/schema-generator";
 import {runPgschemaplan} from "../services/pgschema";
 import {testConnection} from "../services/database";
 import type {CommandOptions} from "../../../common/types";
-import {PostkitError} from "../../../errors";
+import {PostkitError} from "../../../common/errors";
 
 export async function planCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();

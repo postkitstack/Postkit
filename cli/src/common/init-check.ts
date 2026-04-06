@@ -1,6 +1,6 @@
 import {checkInitialized} from "./config";
 import {logger} from "./logger";
-import {PostkitError} from "../errors";
+import {PostkitError} from "./errors";
 
 /**
  * Wrapper to check initialization before running module commands.

@@ -1,72 +1,33 @@
-export interface SessionState {
-  active: boolean;
-  startedAt: string;
-  clonedAt: string;
-  remoteName?: string;
-  localDbUrl: string;
-  remoteDbUrl: string;
-  pendingChanges: {
-    planned: boolean;
-    applied: boolean;
-    planFile: string | null;
-    migrationFiles: { name: string; path: string }[];
-    description: string | null;
-    schemaFingerprint: string | null;
-    migrationApplied: boolean;
-    grantsApplied: boolean;
-    seedsApplied: boolean;
-  };
-}
+/**
+ * DB module types - re-exports from separate type files
+ */
 
-export interface DatabaseConnectionInfo {
-  host: string;
-  port: number;
-  database: string;
-  user: string;
-  password: string;
-}
+// Config types
+export type {
+  RemoteInputConfig,
+  DbInputConfig,
+  RemoteConfig,
+  DbConfig,
+} from "./config";
 
-export interface PlanResult {
-  hasChanges: boolean;
-  planOutput: string;
-  planFile: string | null;
-}
+// Session types
+export type {
+  SessionState,
+  CommittedMigration,
+  CommittedState,
+} from "./session";
 
-export interface ApplyResult {
-  success: boolean;
-  output: string;
-}
+// Database types
+export type {
+  DatabaseConnectionInfo,
+  PlanResult,
+  ApplyResult,
+  MigrationFile,
+} from "./database";
 
-export interface MigrationFile {
-  name: string;
-  path: string;
-  timestamp: string;
-}
-
-export interface GrantStatement {
-  schema: string;
-  content: string;
-}
-
-export interface SeedStatement {
-  name: string;
-  content: string;
-}
-
-export interface InfraStatement {
-  name: string;
-  content: string;
-}
-
-export interface CommittedMigration {
-  migrationFile: { name: string; path: string; timestamp: string };
-  description: string;
-  sessionMigrations: { name: string; path: string }[];
-  committedAt: string;
-  deployed: boolean;
-  deployedAt?: string;
-}
-
-export interface CommittedState {
-  migrations: CommittedMigration[];
-}
+// Schema types
+export type {
+  GrantStatement,
+  SeedStatement,
+  InfraStatement,
+} from "./schema";

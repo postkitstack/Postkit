@@ -1,8 +1,15 @@
 import path from "path";
 import {z} from "zod";
 import {getPostkitAuthDir, loadPostkitConfig} from "../../../common/config";
+import type {AuthConfig} from "../types/config";
 
-// Zod schemas for validation
+// Re-export types for convenience
+export type {AuthConfig, AuthInputConfig} from "../types/config";
+
+// ============================================
+// Zod Schemas for Validation
+// ============================================
+
 const AuthSourceSchema = z.object({
   url: z.string().min(1, "Source URL is required"),
   adminUser: z.string().min(1, "Source admin user is required"),
@@ -22,26 +29,9 @@ const AuthConfigInputSchema = z.object({
   configCliImage: z.string().optional(),
 });
 
-// Runtime config with flattened properties for easier use in commands
-export interface AuthConfig {
-  // Source Keycloak (export from)
-  sourceUrl: string;
-  sourceAdminUser: string;
-  sourceAdminPass: string;
-  sourceRealm: string;
-
-  // Target Keycloak (import to)
-  targetUrl: string;
-  targetAdminUser: string;
-  targetAdminPass: string;
-
-  // Docker image
-  configCliImage: string;
-
-  // Resolved paths
-  rawFilePath: string;
-  cleanFilePath: string;
-}
+// ============================================
+// Error Formatting
+// ============================================
 
 /**
  * Format Zod validation errors into user-friendly messages
@@ -55,6 +45,14 @@ function formatZodErrors(error: z.ZodError): string {
   return lines.join("\n");
 }
 
+// ============================================
+// Config Loader
+// ============================================
+
+/**
+ * Get validated auth configuration
+ * @throws Error if configuration is invalid
+ */
 export function getAuthConfig(): AuthConfig {
   const config = loadPostkitConfig();
 
