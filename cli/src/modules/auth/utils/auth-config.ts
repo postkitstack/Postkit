@@ -4,30 +4,44 @@ import {getPostkitAuthDir, loadPostkitConfig} from "../../../common/config";
 
 // Zod schemas for validation
 const AuthSourceSchema = z.object({
-  url: z.url("Source URL must be a valid URL"),
+  url: z.string().min(1, "Source URL is required"),
   adminUser: z.string().min(1, "Source admin user is required"),
   adminPass: z.string().min(1, "Source admin password is required"),
   realm: z.string().min(1, "Source realm is required"),
 });
 
 const AuthTargetSchema = z.object({
-  url: z.url("Target URL must be a valid URL"),
+  url: z.string().min(1, "Target URL is required"),
   adminUser: z.string().min(1, "Target admin user is required"),
   adminPass: z.string().min(1, "Target admin password is required"),
 });
 
-const AuthConfigSchema = z.object({
+const AuthConfigInputSchema = z.object({
   source: AuthSourceSchema,
   target: AuthTargetSchema,
   configCliImage: z.string().optional(),
 });
 
-// Inferred type from schema
-export type AuthConfig = z.infer<typeof AuthConfigSchema> & {
-  // Resolved paths (added at runtime)
+// Runtime config with flattened properties for easier use in commands
+export interface AuthConfig {
+  // Source Keycloak (export from)
+  sourceUrl: string;
+  sourceAdminUser: string;
+  sourceAdminPass: string;
+  sourceRealm: string;
+
+  // Target Keycloak (import to)
+  targetUrl: string;
+  targetAdminUser: string;
+  targetAdminPass: string;
+
+  // Docker image
+  configCliImage: string;
+
+  // Resolved paths
   rawFilePath: string;
   cleanFilePath: string;
-};
+}
 
 /**
  * Format Zod validation errors into user-friendly messages
@@ -45,7 +59,7 @@ export function getAuthConfig(): AuthConfig {
   const config = loadPostkitConfig();
 
   // Validate with Zod
-  const result = AuthConfigSchema.safeParse(config.auth);
+  const result = AuthConfigInputSchema.safeParse(config.auth);
 
   if (!result.success) {
     throw new Error(formatZodErrors(result.error));
@@ -59,8 +73,15 @@ export function getAuthConfig(): AuthConfig {
   const configCliImage =
     auth.configCliImage || "adorsys/keycloak-config-cli:6.4.0-24";
 
+  // Return flattened structure for easier use in commands
   return {
-    ...auth,
+    sourceUrl: auth.source.url,
+    sourceAdminUser: auth.source.adminUser,
+    sourceAdminPass: auth.source.adminPass,
+    sourceRealm: auth.source.realm,
+    targetUrl: auth.target.url,
+    targetAdminUser: auth.target.adminUser,
+    targetAdminPass: auth.target.adminPass,
     configCliImage,
     rawFilePath: path.join(authDir, "raw", outputFilename),
     cleanFilePath: path.join(authDir, "realm", outputFilename),
