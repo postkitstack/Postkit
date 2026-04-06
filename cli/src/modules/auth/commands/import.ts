@@ -1,4 +1,5 @@
 import ora from "ora";
+import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
 import {getAuthConfig} from "../utils/auth-config";
 import {importRealm} from "../services/importer";
@@ -11,23 +12,38 @@ export async function importCommand(options: CommandOptions): Promise<void> {
     logger.heading("Keycloak Realm Import");
 
     // Step 1: Load config
-    logger.step(1, 2, "Loading configuration...");
+    logger.step(1, 3, "Loading configuration...");
     const config = getAuthConfig();
 
     logger.info(`Target : ${config.targetUrl}`);
     logger.info(`Config : ${config.cleanFilePath}`);
     logger.blank();
 
-    // Step 2: Import via Docker
-    logger.step(2, 2, "Importing via keycloak-config-cli...");
+    // Step 2: Confirm import (unless force flag)
+    logger.step(2, 3, "Confirming import...");
+    if (!options.force) {
+      const {confirm} = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "confirm",
+          message: `Import realm config to ${config.targetUrl}?`,
+          default: false,
+        },
+      ]);
 
-    if (options.dryRun) {
-      spinner.info("Dry run — skipping import");
+      if (!confirm) {
+        logger.info("Import cancelled.");
+        return;
+      }
     } else {
-      spinner.start("Running keycloak-config-cli Docker container...");
-      await importRealm(config);
-      spinner.succeed("Realm imported successfully");
+      logger.info("Skipping confirmation (--force)");
     }
+
+    // Step 3: Import via Docker
+    logger.step(3, 3, "Importing via keycloak-config-cli...");
+    spinner.start("Running keycloak-config-cli Docker container...");
+    await importRealm(config);
+    spinner.succeed("Realm imported successfully");
 
     logger.blank();
     logger.success("Import complete!");

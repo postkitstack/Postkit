@@ -13,9 +13,10 @@ export function registerAuthModule(program: Command): void {
   auth
     .command("export")
     .description("Export realm from source Keycloak, clean, and save")
-    .action(async () => {
+    .option("-f, --force", "Skip confirmation prompts")
+    .action(async (cmdOptions) => {
       await withInitCheck(async () => {
-        const options = program.opts();
+        const options = {...program.opts(), ...cmdOptions};
         await exportCommand(options);
       });
     });
@@ -24,9 +25,10 @@ export function registerAuthModule(program: Command): void {
   auth
     .command("import")
     .description("Import cleaned realm config to target Keycloak")
-    .action(async () => {
+    .option("-f, --force", "Skip confirmation prompts")
+    .action(async (cmdOptions) => {
       await withInitCheck(async () => {
-        const options = program.opts();
+        const options = {...program.opts(), ...cmdOptions};
         await importCommand(options);
       });
     });
@@ -35,9 +37,10 @@ export function registerAuthModule(program: Command): void {
   auth
     .command("sync")
     .description("Export + Import in sequence (full sync)")
-    .action(async () => {
+    .option("-f, --force", "Skip confirmation prompts")
+    .action(async (cmdOptions) => {
       await withInitCheck(async () => {
-        const options = program.opts();
+        const options = {...program.opts(), ...cmdOptions};
         await syncCommand(options);
       });
     });
