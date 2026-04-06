@@ -39,7 +39,6 @@ const SCAFFOLD_CONFIG: PostkitConfig = {
       adminUser: "",
       adminPass: "",
     },
-    outputFilename: "realm.json",
     configCliImage: "adorsys/keycloak-config-cli:6.4.0-24",
   },
 };

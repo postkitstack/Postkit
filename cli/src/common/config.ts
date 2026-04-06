@@ -61,9 +61,6 @@ export interface PostkitConfig {
       adminUser: string;
       adminPass: string;
     };
-    rawExportDir?: string;
-    cleanOutputDir?: string;
-    outputFilename?: string;
     configCliImage?: string;
   };
 }

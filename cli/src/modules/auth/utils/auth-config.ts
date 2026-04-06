@@ -13,11 +13,6 @@ export interface AuthConfig {
   targetAdminUser: string;
   targetAdminPass: string;
 
-  // Directories
-  rawExportDir: string;
-  cleanOutputDir: string;
-  outputFilename: string;
-
   // Docker image
   configCliImage: string;
 
@@ -50,12 +45,9 @@ export function getAuthConfig(): AuthConfig {
     );
   }
 
-  // Use .postkit/auth/ as default locations
+  // Use .postkit/auth/ as default locations with realm name as filename
   const authDir = getPostkitAuthDir();
-  const rawExportDir = config.auth.rawExportDir || path.join(authDir, "raw");
-  const cleanOutputDir = config.auth.cleanOutputDir || path.join(authDir, "realm");
-  const outputFilename =
-    config.auth.outputFilename || "realm.json";
+  const outputFilename = `${sourceRealm}.json`;
   const configCliImage =
     config.auth.configCliImage || "adorsys/keycloak-config-cli:6.4.0-24";
 
@@ -67,11 +59,8 @@ export function getAuthConfig(): AuthConfig {
     targetUrl,
     targetAdminUser,
     targetAdminPass,
-    rawExportDir,
-    cleanOutputDir,
-    outputFilename,
     configCliImage,
-    rawFilePath: path.join(rawExportDir, outputFilename),
-    cleanFilePath: path.join(cleanOutputDir, outputFilename),
+    rawFilePath: path.join(authDir, "raw", outputFilename),
+    cleanFilePath: path.join(authDir, "realm", outputFilename),
   };
 }
