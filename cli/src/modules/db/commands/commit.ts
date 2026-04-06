@@ -9,7 +9,7 @@ import {deleteGeneratedSchema} from "../services/schema-generator";
 import {addCommittedMigration, getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
 import type {SessionState} from "../types/index";
-import {PostkitError} from "../../../errors";
+import {PostkitError} from "../../../common/errors";
 
 export async function commitCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();

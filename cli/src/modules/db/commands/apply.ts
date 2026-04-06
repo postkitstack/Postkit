@@ -18,7 +18,7 @@ import {applyGrants, loadGrants} from "../services/grant-generator";
 import {applySeeds, loadSeeds} from "../services/seed-generator";
 import type {CommandOptions} from "../../../common/types";
 import type {SessionState} from "../types/index";
-import {PostkitError} from "../../../errors";
+import {PostkitError} from "../../../common/errors";
 
 async function applyInfraStep(
   spinner: ReturnType<typeof ora>,

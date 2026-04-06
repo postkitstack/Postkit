@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import {fileURLToPath} from "url";
+import type {DbInputConfig} from "../modules/db/types/config";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,35 +35,33 @@ export function getVendorDir(): string {
   return path.join(cliRoot, "vendor");
 }
 
-// Remote configuration
-export interface RemoteConfig {
+// Re-export db types for convenience (single source of truth is db/types/config.ts)
+export type {DbInputConfig, RemoteInputConfig, RemoteConfig, DbConfig} from "../modules/db/types/config";
+
+// Auth configuration types (defined here since auth module doesn't have a separate types file)
+export interface AuthSourceConfig {
   url: string;
-  default?: boolean;
-  addedAt?: string;
+  adminUser: string;
+  adminPass: string;
+  realm: string;
+}
+
+export interface AuthTargetConfig {
+  url: string;
+  adminUser: string;
+  adminPass: string;
+}
+
+export interface AuthInputConfig {
+  source: AuthSourceConfig;
+  target: AuthTargetConfig;
+  configCliImage?: string;
 }
 
 // PostkitConfig interface matching the JSON structure
 export interface PostkitConfig {
-  db: {
-    localDbUrl: string;
-    schemaPath: string;
-    schema: string;
-    remotes?: Record<string, RemoteConfig>;
-  };
-  auth: {
-    source: {
-      url: string;
-      adminUser: string;
-      adminPass: string;
-      realm: string;
-    };
-    target: {
-      url: string;
-      adminUser: string;
-      adminPass: string;
-    };
-    configCliImage?: string;
-  };
+  db: DbInputConfig;
+  auth: AuthInputConfig;
 }
 
 let cachedConfig: PostkitConfig | null = null;
@@ -81,7 +80,7 @@ export function checkInitialized(): void {
   if (!fs.existsSync(configPath)) {
     throw new Error(
       "Postkit project is not initialized.\n" +
-      `Run \"postkit init\" to initialize your project first.`
+        `Run \"postkit init\" to initialize your project first.`,
     );
   }
 }
