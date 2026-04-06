@@ -50,3 +50,5 @@ postkit db start
 |--------|-------------|
 | [`db`](/docs/modules/db/overview) | Session-based database migration workflow |
 | [`auth`](/docs/modules/auth/overview) | Keycloak realm configuration management |
+
+**Full Documentation:** [https://docs.postkitstack.com/](https://docs.postkitstack.com/)

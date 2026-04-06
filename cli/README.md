@@ -9,6 +9,8 @@
 
 PostKit CLI is a modular toolkit for backend development with the Appri stack. It provides safe database migrations, auth management, and more.
 
+**📚 Documentation:** [https://docs.postkitstack.com/](https://docs.postkitstack.com/)
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -171,7 +173,7 @@ For more help, see [Troubleshooting](https://postkit.appri.dev/docs/modules/db/t
 ## 🔗 Links
 
 - **npm Package**: https://www.npmjs.com/package/@appritech/postkit
-- **Documentation**: https://postkit.appri.dev
+- **Documentation**: https://docs.postkitstack.com/
 - **GitHub**: https://github.com/appritechnologies/postkit
 - **Issues**: https://github.com/appritechnologies/postkit/issues
 
