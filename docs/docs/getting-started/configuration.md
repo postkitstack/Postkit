@@ -81,16 +81,38 @@ Then reference them in your config:
 
 ## Auth Module Configuration
 
-The auth module uses environment variables for Keycloak connections:
+The auth module is configured in `postkit.config.json`:
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `KC_SOURCE_URL` | Source Keycloak base URL | Yes |
-| `KC_SOURCE_ADMIN_USER` | Source admin username | Yes |
-| `KC_SOURCE_ADMIN_PASS` | Source admin password | Yes |
-| `KC_SOURCE_REALM` | Realm name to export | Yes |
-| `KC_TARGET_URL` | Target Keycloak base URL | Yes |
-| `KC_TARGET_ADMIN_USER` | Target admin username | Yes |
-| `KC_TARGET_ADMIN_PASS` | Target admin password | Yes |
+```json
+{
+  "auth": {
+    "source": {
+      "url": "https://keycloak-dev.example.com",
+      "adminUser": "admin",
+      "adminPass": "dev-password",
+      "realm": "myapp-realm"
+    },
+    "target": {
+      "url": "https://keycloak-staging.example.com",
+      "adminUser": "admin",
+      "adminPass": "staging-password"
+    },
+    "configCliImage": "adorsys/keycloak-config-cli:6.4.0-24"
+  }
+}
+```
+
+### Auth Configuration Options
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `auth.source.url` | string | Yes | Source Keycloak base URL |
+| `auth.source.adminUser` | string | Yes | Source admin username |
+| `auth.source.adminPass` | string | Yes | Source admin password |
+| `auth.source.realm` | string | Yes | Realm name to export |
+| `auth.target.url` | string | Yes | Target Keycloak base URL |
+| `auth.target.adminUser` | string | Yes | Target admin username |
+| `auth.target.adminPass` | string | Yes | Target admin password |
+| `auth.configCliImage` | string | No | Docker image for import (default: `adorsys/keycloak-config-cli:6.4.0-24`) |
 
 See [Auth Configuration](/docs/modules/auth/configuration) for more details.

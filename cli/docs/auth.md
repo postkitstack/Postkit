@@ -19,7 +19,7 @@ Keycloak realm configuration management — export, clean, and import realm conf
 │                                    │                              │
 │                           ┌────────▼─────────┐                    │
 │                           │ 3. Save raw to    │                    │
-│                           │    .tmp-config/   │                    │
+│                           │ .postkit/auth/raw │                    │
 │                           └────────┬─────────┘                    │
 │                                    │                              │
 │                           ┌────────▼─────────┐                    │
@@ -30,7 +30,8 @@ Keycloak realm configuration management — export, clean, and import realm conf
 │                                    │                              │
 │                           ┌────────▼─────────┐                    │
 │                           │ 5. Save cleaned   │                    │
-│                           │    to realm-config│                    │
+│                           │ .postkit/auth/    │                    │
+│                           │    realm/         │                    │
 │                           └──────────────────┘                    │
 │                                                                   │
 │  $ postkit auth import                                            │
@@ -55,21 +56,44 @@ Keycloak realm configuration management — export, clean, and import realm conf
 
 ## ⚙️ Configuration
 
-Set these in your `.env` file:
+Configure in `postkit.config.json`:
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `KC_SOURCE_URL` | Source Keycloak base URL | Yes |
-| `KC_SOURCE_ADMIN_USER` | Source admin username | Yes |
-| `KC_SOURCE_ADMIN_PASS` | Source admin password | Yes |
-| `KC_SOURCE_REALM` | Realm name to export | Yes |
-| `KC_TARGET_URL` | Target Keycloak base URL | Yes |
-| `KC_TARGET_ADMIN_USER` | Target admin username | Yes |
-| `KC_TARGET_ADMIN_PASS` | Target admin password | Yes |
-| `RAW_EXPORT_DIR` | Raw export directory | No (default: `.tmp-config`) |
-| `CLEAN_OUTPUT_DIR` | Cleaned output directory | No (default: `realm-config`) |
-| `OUTPUT_FILENAME` | Output filename | No (default: `pro-application-realm.json`) |
-| `KC_CONFIG_CLI_IMAGE` | Docker image for import | No (default: `adorsys/keycloak-config-cli:6.4.0-24`) |
+```json
+{
+  "auth": {
+    "source": {
+      "url": "https://keycloak-dev.example.com",
+      "adminUser": "admin",
+      "adminPass": "dev-password",
+      "realm": "myapp-realm"
+    },
+    "target": {
+      "url": "https://keycloak-staging.example.com",
+      "adminUser": "admin",
+      "adminPass": "staging-password"
+    },
+    "configCliImage": "adorsys/keycloak-config-cli:6.4.0-24"
+  }
+}
+```
+
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `auth.source.url` | Source Keycloak base URL |
+| `auth.source.adminUser` | Source admin username |
+| `auth.source.adminPass` | Source admin password |
+| `auth.source.realm` | Realm name to export |
+| `auth.target.url` | Target Keycloak base URL |
+| `auth.target.adminUser` | Target admin username |
+| `auth.target.adminPass` | Target admin password |
+
+### Optional Fields
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `auth.configCliImage` | Docker image for import | `adorsys/keycloak-config-cli:6.4.0-24` |
 
 ---
 
@@ -81,15 +105,22 @@ Export realm from source Keycloak, clean it, and save to disk.
 
 ```bash
 postkit auth export
-postkit auth export --verbose
+postkit auth export --force    # Skip confirmation
 ```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-f, --force` | Skip confirmation prompts |
+| `-v, --verbose` | Enable verbose output |
 
 **What it does:**
 1. Authenticates with source Keycloak (admin token via REST API)
 2. Exports realm config via partial-export API
-3. Saves raw export to `.tmp-config/`
+3. Saves raw export to `.postkit/auth/raw/{realm}.json`
 4. Cleans config (strips IDs, secrets, keys, credentials)
-5. Saves cleaned config to `realm-config/`
+5. Saves cleaned config to `.postkit/auth/realm/{realm}.json`
 
 ---
 
@@ -99,7 +130,15 @@ Import cleaned realm config to target Keycloak via `keycloak-config-cli` Docker 
 
 ```bash
 postkit auth import
+postkit auth import --force    # Skip confirmation
 ```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-f, --force` | Skip confirmation prompts |
+| `-v, --verbose` | Enable verbose output |
 
 **Requires:** Docker running, cleaned config file present (run `export` first).
 
@@ -111,19 +150,27 @@ Full sync — export from source then import to target, in sequence.
 
 ```bash
 postkit auth sync
+postkit auth sync --force    # Skip all confirmations
 ```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-f, --force` | Skip confirmation prompts |
+| `-v, --verbose` | Enable verbose output |
 
 ---
 
-## 📋 Typical Workflow
+## 📂 Output Structure
 
-```bash
-# Export from source, clean, and import to target
-postkit auth sync
-
-# Or step by step:
-postkit auth export   # Export + clean
-postkit auth import   # Import to target
+```
+.postkit/
+└── auth/
+    ├── raw/
+    │   └── {realm}.json      # Raw export from source
+    └── realm/
+        └── {realm}.json      # Cleaned config for import
 ```
 
 ---

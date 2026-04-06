@@ -1,7 +1,5 @@
 import {Command} from "commander";
-import {checkInitialized} from "../../common/config";
-import {logger} from "../../common/logger";
-import {PostkitError} from "../../errors";
+import {withInitCheck} from "../../common/init-check";
 import {startCommand} from "./commands/start";
 import {planCommand} from "./commands/plan";
 import {applyCommand} from "./commands/apply";
@@ -19,27 +17,6 @@ import {
   remoteRemoveCommand,
   remoteUseCommand,
 } from "./commands/remote";
-
-/**
- * Wrapper to check initialization before running db commands.
- *
- * - PostkitError  → user-facing: log message + hint, exit with its exit code
- * - Anything else → programming bug: re-throw so unhandledRejection shows it
- */
-async function withInitCheck(fn: () => Promise<void>): Promise<void> {
-  try {
-    checkInitialized();
-    await fn();
-  } catch (error) {
-    if (error instanceof PostkitError) {
-      logger.error(error.message);
-      if (error.hint) logger.info(error.hint);
-      process.exit(error.exitCode);
-    }
-    // Unexpected error — re-throw so the unhandledRejection handler shows it
-    throw error;
-  }
-}
 
 export function registerDbModule(program: Command): void {
   const db = program

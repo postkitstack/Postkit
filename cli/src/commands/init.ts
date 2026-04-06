@@ -9,6 +9,7 @@ import {
   POSTKIT_DIR,
   getConfigFilePath,
   getPostkitDir,
+  getPostkitAuthDir,
 } from "../common/config";
 import type {CommandOptions} from "../common/types";
 import type {PostkitConfig} from "../common/config";
@@ -38,9 +39,6 @@ const SCAFFOLD_CONFIG: PostkitConfig = {
       adminUser: "",
       adminPass: "",
     },
-    rawExportDir: ".tmp-config",
-    cleanOutputDir: "realm-config",
-    outputFilename: "pro-application-realm.json",
     configCliImage: "adorsys/keycloak-config-cli:6.4.0-24",
   },
 };
@@ -76,7 +74,7 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     }
   }
 
-  const totalSteps = 4;
+  const totalSteps = 5;
 
   // Step 1: Create .postkit/db/ directory
   logger.step(1, totalSteps, "Creating .postkit/db/ directory");
@@ -103,8 +101,25 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     spinner.succeed(".postkit/db/ directory created");
   }
 
-  // Step 2: Generate postkit.config.json
-  logger.step(2, totalSteps, "Generating postkit.config.json");
+  // Step 2: Create .postkit/auth/ directory
+  logger.step(2, totalSteps, "Creating .postkit/auth/ directory");
+  if (options.dryRun) {
+    logger.info(`Dry run: would create ${POSTKIT_DIR}/auth/`);
+  } else {
+    const spinner = ora("Creating .postkit/auth/ directory...").start();
+    const postkitAuthDir = getPostkitAuthDir();
+    // Create subdirectories
+    for (const subdir of ["raw", "realm"]) {
+      const subPath = path.join(postkitAuthDir, subdir);
+      if (!fs.existsSync(subPath)) {
+        fs.mkdirSync(subPath, {recursive: true});
+      }
+    }
+    spinner.succeed(".postkit/auth/ directory created");
+  }
+
+  // Step 3: Generate postkit.config.json
+  logger.step(3, totalSteps, "Generating postkit.config.json");
   if (options.dryRun) {
     logger.info(`Dry run: would create ${POSTKIT_CONFIG_FILE}`);
   } else {
@@ -113,8 +128,8 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     spinner.succeed("postkit.config.json created");
   }
 
-  // Step 3: Update .gitignore
-  logger.step(3, totalSteps, "Updating .gitignore");
+  // Step 4: Update .gitignore
+  logger.step(4, totalSteps, "Updating .gitignore");
   const gitignorePath = path.join(projectRoot, ".gitignore");
   if (options.dryRun) {
     logger.info("Dry run: would update .gitignore with Postkit entries");
@@ -141,8 +156,8 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     }
   }
 
-  // Step 4: Summary
-  logger.step(4, totalSteps, "Done");
+  // Step 5: Summary
+  logger.step(5, totalSteps, "Done");
   logger.blank();
   logger.success("Postkit project initialized!");
   logger.blank();

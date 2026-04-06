@@ -1,6 +1,28 @@
 import path from "path";
-import {projectRoot, loadPostkitConfig} from "../../../common/config";
+import {z} from "zod";
+import {getPostkitAuthDir, loadPostkitConfig} from "../../../common/config";
 
+// Zod schemas for validation
+const AuthSourceSchema = z.object({
+  url: z.string().min(1, "Source URL is required"),
+  adminUser: z.string().min(1, "Source admin user is required"),
+  adminPass: z.string().min(1, "Source admin password is required"),
+  realm: z.string().min(1, "Source realm is required"),
+});
+
+const AuthTargetSchema = z.object({
+  url: z.string().min(1, "Target URL is required"),
+  adminUser: z.string().min(1, "Target admin user is required"),
+  adminPass: z.string().min(1, "Target admin password is required"),
+});
+
+const AuthConfigInputSchema = z.object({
+  source: AuthSourceSchema,
+  target: AuthTargetSchema,
+  configCliImage: z.string().optional(),
+});
+
+// Runtime config with flattened properties for easier use in commands
 export interface AuthConfig {
   // Source Keycloak (export from)
   sourceUrl: string;
@@ -13,11 +35,6 @@ export interface AuthConfig {
   targetAdminUser: string;
   targetAdminPass: string;
 
-  // Directories
-  rawExportDir: string;
-  cleanOutputDir: string;
-  outputFilename: string;
-
   // Docker image
   configCliImage: string;
 
@@ -26,54 +43,47 @@ export interface AuthConfig {
   cleanFilePath: string;
 }
 
+/**
+ * Format Zod validation errors into user-friendly messages
+ */
+function formatZodErrors(error: z.ZodError): string {
+  const lines = ["Invalid auth configuration:"];
+  for (const issue of error.issues) {
+    const path = issue.path.join(".");
+    lines.push(`  • ${path}: ${issue.message}`);
+  }
+  return lines.join("\n");
+}
+
 export function getAuthConfig(): AuthConfig {
   const config = loadPostkitConfig();
 
-  const sourceUrl = config.auth.source.url;
-  const sourceAdminUser = config.auth.source.adminUser;
-  const sourceAdminPass = config.auth.source.adminPass;
-  const sourceRealm = config.auth.source.realm;
+  // Validate with Zod
+  const result = AuthConfigInputSchema.safeParse(config.auth);
 
-  if (!sourceUrl || !sourceAdminUser || !sourceAdminPass || !sourceRealm) {
-    throw new Error(
-      "Missing source Keycloak config. Set auth.source.url, auth.source.adminUser, auth.source.adminPass, auth.source.realm in postkit.config.json",
-    );
+  if (!result.success) {
+    throw new Error(formatZodErrors(result.error));
   }
 
-  const targetUrl = config.auth.target.url;
-  const targetAdminUser = config.auth.target.adminUser;
-  const targetAdminPass = config.auth.target.adminPass;
+  const auth = result.data;
 
-  if (!targetUrl || !targetAdminUser || !targetAdminPass) {
-    throw new Error(
-      "Missing target Keycloak config. Set auth.target.url, auth.target.adminUser, auth.target.adminPass in postkit.config.json",
-    );
-  }
-
-  const rawExportDir = config.auth.rawExportDir || ".tmp-config";
-  const cleanOutputDir = config.auth.cleanOutputDir || "realm-config";
-  const outputFilename =
-    config.auth.outputFilename || "pro-application-realm.json";
+  // Use .postkit/auth/ as default locations with realm name as filename
+  const authDir = getPostkitAuthDir();
+  const outputFilename = `${auth.source.realm}.json`;
   const configCliImage =
-    config.auth.configCliImage || "adorsys/keycloak-config-cli:6.4.0-24";
+    auth.configCliImage || "adorsys/keycloak-config-cli:6.4.0-24";
 
-  // Resolve paths relative to project root
-  const rawDir = path.resolve(projectRoot, rawExportDir);
-  const cleanDir = path.resolve(projectRoot, cleanOutputDir);
-
+  // Return flattened structure for easier use in commands
   return {
-    sourceUrl,
-    sourceAdminUser,
-    sourceAdminPass,
-    sourceRealm,
-    targetUrl,
-    targetAdminUser,
-    targetAdminPass,
-    rawExportDir,
-    cleanOutputDir,
-    outputFilename,
+    sourceUrl: auth.source.url,
+    sourceAdminUser: auth.source.adminUser,
+    sourceAdminPass: auth.source.adminPass,
+    sourceRealm: auth.source.realm,
+    targetUrl: auth.target.url,
+    targetAdminUser: auth.target.adminUser,
+    targetAdminPass: auth.target.adminPass,
     configCliImage,
-    rawFilePath: path.join(rawDir, outputFilename),
-    cleanFilePath: path.join(cleanDir, outputFilename),
+    rawFilePath: path.join(authDir, "raw", outputFilename),
+    cleanFilePath: path.join(authDir, "realm", outputFilename),
   };
 }
