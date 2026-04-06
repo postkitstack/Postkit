@@ -1,64 +1,66 @@
 import path from "path";
+import {z} from "zod";
 import {getPostkitAuthDir, loadPostkitConfig} from "../../../common/config";
 
-export interface AuthConfig {
-  // Source Keycloak (export from)
-  sourceUrl: string;
-  sourceAdminUser: string;
-  sourceAdminPass: string;
-  sourceRealm: string;
+// Zod schemas for validation
+const AuthSourceSchema = z.object({
+  url: z.url("Source URL must be a valid URL"),
+  adminUser: z.string().min(1, "Source admin user is required"),
+  adminPass: z.string().min(1, "Source admin password is required"),
+  realm: z.string().min(1, "Source realm is required"),
+});
 
-  // Target Keycloak (import to)
-  targetUrl: string;
-  targetAdminUser: string;
-  targetAdminPass: string;
+const AuthTargetSchema = z.object({
+  url: z.url("Target URL must be a valid URL"),
+  adminUser: z.string().min(1, "Target admin user is required"),
+  adminPass: z.string().min(1, "Target admin password is required"),
+});
 
-  // Docker image
-  configCliImage: string;
+const AuthConfigSchema = z.object({
+  source: AuthSourceSchema,
+  target: AuthTargetSchema,
+  configCliImage: z.string().optional(),
+});
 
-  // Resolved paths
+// Inferred type from schema
+export type AuthConfig = z.infer<typeof AuthConfigSchema> & {
+  // Resolved paths (added at runtime)
   rawFilePath: string;
   cleanFilePath: string;
+};
+
+/**
+ * Format Zod validation errors into user-friendly messages
+ */
+function formatZodErrors(error: z.ZodError): string {
+  const lines = ["Invalid auth configuration:"];
+  for (const issue of error.issues) {
+    const path = issue.path.join(".");
+    lines.push(`  • ${path}: ${issue.message}`);
+  }
+  return lines.join("\n");
 }
 
 export function getAuthConfig(): AuthConfig {
   const config = loadPostkitConfig();
 
-  const sourceUrl = config.auth.source.url;
-  const sourceAdminUser = config.auth.source.adminUser;
-  const sourceAdminPass = config.auth.source.adminPass;
-  const sourceRealm = config.auth.source.realm;
+  // Validate with Zod
+  const result = AuthConfigSchema.safeParse(config.auth);
 
-  if (!sourceUrl || !sourceAdminUser || !sourceAdminPass || !sourceRealm) {
-    throw new Error(
-      "Missing source Keycloak config. Set auth.source.url, auth.source.adminUser, auth.source.adminPass, auth.source.realm in postkit.config.json",
-    );
+  if (!result.success) {
+    throw new Error(formatZodErrors(result.error));
   }
 
-  const targetUrl = config.auth.target.url;
-  const targetAdminUser = config.auth.target.adminUser;
-  const targetAdminPass = config.auth.target.adminPass;
-
-  if (!targetUrl || !targetAdminUser || !targetAdminPass) {
-    throw new Error(
-      "Missing target Keycloak config. Set auth.target.url, auth.target.adminUser, auth.target.adminPass in postkit.config.json",
-    );
-  }
+  const auth = result.data;
 
   // Use .postkit/auth/ as default locations with realm name as filename
   const authDir = getPostkitAuthDir();
-  const outputFilename = `${sourceRealm}.json`;
+  const outputFilename = `${auth.source.realm}.json`;
   const configCliImage =
-    config.auth.configCliImage || "adorsys/keycloak-config-cli:6.4.0-24";
+    auth.configCliImage || "adorsys/keycloak-config-cli:6.4.0-24";
 
   return {
-    sourceUrl,
-    sourceAdminUser,
-    sourceAdminPass,
-    sourceRealm,
-    targetUrl,
-    targetAdminUser,
-    targetAdminPass,
+    ...auth,
     configCliImage,
     rawFilePath: path.join(authDir, "raw", outputFilename),
     cleanFilePath: path.join(authDir, "realm", outputFilename),

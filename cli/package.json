@@ -47,7 +47,8 @@
     "dbmate": "^2.32.0",
     "inquirer": "^9.2.0",
     "ora": "^8.0.0",
-    "pg": "^8.14.0"
+    "pg": "^8.14.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/inquirer": "^9.0.0",
