@@ -26,6 +26,10 @@ export function getPostkitDir(): string {
   return path.join(projectRoot, POSTKIT_DIR);
 }
 
+export function getPostkitAuthDir(): string {
+  return path.join(projectRoot, POSTKIT_DIR, "auth");
+}
+
 export function getVendorDir(): string {
   return path.join(cliRoot, "vendor");
 }
@@ -57,10 +61,10 @@ export interface PostkitConfig {
       adminUser: string;
       adminPass: string;
     };
-    rawExportDir: string;
-    cleanOutputDir: string;
-    outputFilename: string;
-    configCliImage: string;
+    rawExportDir?: string;
+    cleanOutputDir?: string;
+    outputFilename?: string;
+    configCliImage?: string;
   };
 }
 

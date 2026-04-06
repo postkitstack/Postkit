@@ -1,5 +1,5 @@
 import path from "path";
-import {projectRoot, loadPostkitConfig} from "../../../common/config";
+import {getPostkitAuthDir, loadPostkitConfig} from "../../../common/config";
 
 export interface AuthConfig {
   // Source Keycloak (export from)
@@ -50,16 +50,14 @@ export function getAuthConfig(): AuthConfig {
     );
   }
 
-  const rawExportDir = config.auth.rawExportDir || ".tmp-config";
-  const cleanOutputDir = config.auth.cleanOutputDir || "realm-config";
+  // Use .postkit/auth/ as default locations
+  const authDir = getPostkitAuthDir();
+  const rawExportDir = config.auth.rawExportDir || path.join(authDir, "raw");
+  const cleanOutputDir = config.auth.cleanOutputDir || path.join(authDir, "realm");
   const outputFilename =
-    config.auth.outputFilename || "pro-application-realm.json";
+    config.auth.outputFilename || "realm.json";
   const configCliImage =
     config.auth.configCliImage || "adorsys/keycloak-config-cli:6.4.0-24";
-
-  // Resolve paths relative to project root
-  const rawDir = path.resolve(projectRoot, rawExportDir);
-  const cleanDir = path.resolve(projectRoot, cleanOutputDir);
 
   return {
     sourceUrl,
@@ -73,7 +71,7 @@ export function getAuthConfig(): AuthConfig {
     cleanOutputDir,
     outputFilename,
     configCliImage,
-    rawFilePath: path.join(rawDir, outputFilename),
-    cleanFilePath: path.join(cleanDir, outputFilename),
+    rawFilePath: path.join(rawExportDir, outputFilename),
+    cleanFilePath: path.join(cleanOutputDir, outputFilename),
   };
 }
