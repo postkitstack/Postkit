@@ -58,6 +58,7 @@ If the dry run fails, deployment is aborted and no changes are made to the targe
 
 - Committed migrations must exist (run `db commit` first)
 - PostgreSQL client tools must be installed
+- `localDbUrl` must be different from the target remote URL
 
 ## Related
 
