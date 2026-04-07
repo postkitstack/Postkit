@@ -1,5 +1,4 @@
 import ora from "ora";
-import inquirer from "inquirer";
 import fs from "fs/promises";
 import {promptConfirm, promptInput} from "../../../common/prompt";
 import {existsSync} from "fs";

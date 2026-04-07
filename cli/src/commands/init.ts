@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import ora from "ora";
-import inquirer from "inquirer";
 import {logger} from "../common/logger";
 import {promptConfirm} from "../common/prompt";
 import {

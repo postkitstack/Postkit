@@ -1,4 +1,3 @@
-import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
 import {promptConfirm} from "../../../common/prompt";
 import {

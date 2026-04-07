@@ -1,10 +1,9 @@
 import ora from "ora";
-import inquirer from "inquirer";
 import path from "path";
-import {promptConfirm} from "../../../common/prompt";
 import {existsSync} from "fs";
 import fs from "fs/promises";
 import {logger} from "../../../common/logger";
+import {promptConfirm} from "../../../common/prompt";
 import {getConfig} from "../utils/db-config";
 import {createSession, hasActiveSession, getSession} from "../utils/session";
 import {resolveRemote, maskRemoteUrl} from "../utils/remotes";

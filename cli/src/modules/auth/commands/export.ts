@@ -1,5 +1,4 @@
 import ora from "ora";
-import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
 import {promptConfirm} from "../../../common/prompt";
 import {getAuthConfig} from "../utils/auth-config";
