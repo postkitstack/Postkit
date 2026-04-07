@@ -12,7 +12,11 @@ export async function getSession(): Promise<SessionState | null> {
 
   try {
     const content = await fs.readFile(sessionPath, "utf-8");
-    return JSON.parse(content) as SessionState;
+    const state = JSON.parse(content) as SessionState;
+    if (!state || typeof state.active !== "boolean" || !state.pendingChanges) {
+      return null;
+    }
+    return state;
   } catch {
     return null;
   }

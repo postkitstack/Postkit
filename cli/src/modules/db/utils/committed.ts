@@ -17,7 +17,7 @@ export async function getCommittedState(): Promise<CommittedState> {
   try {
     const content = await fs.readFile(committedFilePath, "utf-8");
     const state = JSON.parse(content) as CommittedState;
-    return state;
+    return {migrations: state.migrations ?? []};
   } catch (error) {
     logger.warn(
       `committed.json is corrupted and could not be parsed — treating as empty. ` +
