@@ -2,7 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
 import {createHash} from "crypto";
-import {getConfig, getGeneratedSchemaPath} from "../utils/db-config";
+import {getDbConfig, getGeneratedSchemaPath} from "../utils/db-config";
 
 interface SchemaSection {
   name: string;
@@ -47,7 +47,7 @@ export async function generateSchemaSQLAndFingerprint(): Promise<{
   schemaFile: string;
   fingerprint: string;
 }> {
-  const config = getConfig();
+  const config = getDbConfig();
   const schemaPath = config.schemaPath;
 
   if (!existsSync(schemaPath)) {
@@ -155,7 +155,7 @@ async function loadSectionFiles(sectionPath: string): Promise<string> {
 }
 
 async function getSchemaFiles(): Promise<string[]> {
-  const config = getConfig();
+  const config = getDbConfig();
   const schemaPath = config.schemaPath;
 
   if (!existsSync(schemaPath)) {

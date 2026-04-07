@@ -1,7 +1,7 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
 import {promptConfirm} from "../../../common/prompt";
-import {getConfig} from "../utils/db-config";
+import {getDbConfig} from "../utils/db-config";
 import {hasActiveSession, deleteSession} from "../utils/session";
 import {deletePlanFile} from "../services/pgschema";
 import {deleteGeneratedSchema} from "../services/schema-generator";
@@ -128,7 +128,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
   const spinner = ora();
 
   try {
-    const config = getConfig();
+    const config = getDbConfig();
 
     // Step 1: Resolve target URL
     const {url: targetUrl, label: targetLabel} = resolveTargetUrl(options);

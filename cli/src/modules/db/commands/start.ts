@@ -4,7 +4,7 @@ import {existsSync} from "fs";
 import fs from "fs/promises";
 import {logger} from "../../../common/logger";
 import {promptConfirm} from "../../../common/prompt";
-import {getConfig} from "../utils/db-config";
+import {getDbConfig} from "../utils/db-config";
 import {createSession, hasActiveSession, getSession} from "../utils/session";
 import {resolveRemote, maskRemoteUrl} from "../utils/remotes";
 import {
@@ -61,7 +61,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
     // Step 2: Load configuration
     logger.step(2, 5, "Loading configuration...");
 
-    const config = getConfig();
+    const config = getDbConfig();
 
     // Resolve remote
     let targetRemoteName: string;

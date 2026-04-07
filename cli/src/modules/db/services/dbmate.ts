@@ -1,6 +1,6 @@
 import type {MigrationFile, ApplyResult} from "../types/index";
 import {runSpawnCommand, commandExists} from "../../../common/shell";
-import {getConfig} from "../utils/db-config";
+import {getDbConfig} from "../utils/db-config";
 import {getCommittedMigrationsPath, getSessionMigrationsPath} from "../utils/db-config";
 import {formatTimestamp} from "../utils/session";
 import {getPostkitDir} from "../../../common/config";
@@ -9,7 +9,7 @@ import path from "path";
 import {existsSync} from "fs";
 
 export async function checkDbmateInstalled(): Promise<boolean> {
-  const config = getConfig();
+  const config = getDbConfig();
 
   // If resolved to an absolute path (npm-installed binary), check file existence
   if (path.isAbsolute(config.dbmateBin)) {
@@ -62,7 +62,7 @@ export async function createMigrationFile(
 export async function runSessionMigrate(
   databaseUrl: string,
 ): Promise<ApplyResult> {
-  const config = getConfig();
+  const config = getDbConfig();
   const sessionDir = getSessionMigrationsPath();
 
   // Args passed directly — no shell interpolation, no injection risk.
@@ -89,7 +89,7 @@ export async function runCommittedMigrate(
   databaseUrl: string,
   migrationFilter?: string[],
 ): Promise<ApplyResult> {
-  const config = getConfig();
+  const config = getDbConfig();
   let targetDir = getCommittedMigrationsPath();
 
   if (migrationFilter && migrationFilter.length > 0) {
@@ -125,7 +125,7 @@ export async function deleteSessionMigrations(
 }
 
 export async function runDbmateStatus(databaseUrl: string): Promise<string> {
-  const config = getConfig();
+  const config = getDbConfig();
 
   const result = await runSpawnCommand([
     config.dbmateBin,

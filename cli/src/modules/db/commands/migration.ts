@@ -5,7 +5,7 @@ import {getSession, updatePendingChanges} from "../utils/session";
 import {getSessionMigrationsPath} from "../utils/db-config";
 import {createMigrationFile} from "../services/dbmate";
 import {testConnection} from "../services/database";
-import {getConfig} from "../utils/db-config";
+import {getDbConfig} from "../utils/db-config";
 import type {CommandOptions} from "../../../common/types";
 
 interface MigrateOptions extends CommandOptions {
@@ -91,7 +91,7 @@ export async function migrationCommand(options: MigrateOptions, name?: string): 
     logger.step(2, 3, "Creating migration file...");
     spinner.start("Creating migration file with template...");
 
-    const config = getConfig();
+    const config = getDbConfig();
     const sessionMigrationsDir = getSessionMigrationsPath();
     const template = getMigrationTemplate(config.schema);
 

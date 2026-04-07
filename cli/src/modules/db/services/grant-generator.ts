@@ -1,12 +1,12 @@
 import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
-import {getConfig} from "../utils/db-config";
+import {getDbConfig} from "../utils/db-config";
 import {loadSqlGroup} from "../utils/sql-loader";
 import type {GrantStatement} from "../types/index";
 
 export async function loadGrants(): Promise<GrantStatement[]> {
-  const config = getConfig();
+  const config = getDbConfig();
   const grantsPath = path.join(config.schemaPath, "grants");
 
   if (!existsSync(grantsPath)) {

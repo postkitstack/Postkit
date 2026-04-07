@@ -1,13 +1,13 @@
 import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
-import {getConfig} from "../utils/db-config";
+import {getDbConfig} from "../utils/db-config";
 import {parseConnectionUrl} from "./database";
 import {runSpawnCommand} from "../../../common/shell";
 import type {InfraStatement} from "../types/index";
 
 export async function loadInfra(): Promise<InfraStatement[]> {
-  const config = getConfig();
+  const config = getDbConfig();
   const infraPath = path.join(config.schemaPath, "infra");
 
   if (!existsSync(infraPath)) {
