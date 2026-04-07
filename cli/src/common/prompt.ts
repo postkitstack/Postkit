@@ -10,21 +10,30 @@ export function isInteractive(): boolean {
 
 /**
  * Prompt for confirmation with non-TTY handling
- * In non-TTY mode:
- * - With force flag: returns default value
- * - Without force: returns default value (false if not specified)
+ * - With force flag: returns true immediately
+ * - Non-TTY without force: returns true if default is true, otherwise throws Error
  */
 export async function promptConfirm(
   message: string,
-  options: { default?: boolean; force?: boolean } = {},
+  options: {default?: boolean; force?: boolean} = {},
 ): Promise<boolean> {
-  // Skip prompt if force flag or non-interactive
-  if (options.force || !isInteractive()) {
-    const defaultValue = options.default ?? false;
+  // 1. Force flag overrides everything and means "Proceed (YES)"
+  if (options.force) {
     if (isInteractive()) {
-      logger.info(`${message} ${defaultValue ? "Y" : "N"}`);
+      logger.info(`${message} Y (forced)`);
     }
-    return defaultValue;
+    return true;
+  }
+
+  // 2. Non-interactive environments without force
+  if (!isInteractive()) {
+    if (options.default === true) {
+      return true;
+    }
+
+    throw new Error(
+      `Cannot prompt for confirmation in a non-interactive environment. Please use the --force flag to confirm: "${message}"`,
+    );
   }
 
   // TTY: show prompt
@@ -73,7 +82,7 @@ export async function promptInput(
     if (options.required && options.default === undefined) {
       throw new Error(
         `Non-interactive mode requires a value for "${message}". ` +
-        `Use --force with a default, or provide via CLI flag.`,
+          `Use --force with a default, or provide via CLI flag.`,
       );
     }
     return options.default ?? "";
