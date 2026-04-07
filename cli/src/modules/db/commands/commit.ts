@@ -1,6 +1,6 @@
 import ora from "ora";
-import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
+import {promptInput} from "../../../common/prompt";
 import {getSession, deleteSession} from "../utils/session";
 import {getSessionMigrationsPath} from "../utils/db-config";
 import {mergeSessionMigrations, deleteSessionMigrations} from "../services/dbmate";
@@ -11,7 +11,11 @@ import type {CommandOptions} from "../../../common/types";
 import type {SessionState} from "../types/index";
 import {PostkitError} from "../../../common/errors";
 
-export async function commitCommand(options: CommandOptions): Promise<void> {
+interface CommitOptions extends CommandOptions {
+  message?: string;
+}
+
+export async function commitCommand(options: CommitOptions): Promise<void> {
   const spinner = ora();
 
   try {
@@ -61,16 +65,13 @@ export async function commitCommand(options: CommandOptions): Promise<void> {
     }
 
     // Prompt for commit message (required)
-    const {desc} = await inquirer.prompt([
-      {
-        type: "input",
-        name: "desc",
-        message: "Commit message (e.g. add_users_table):",
-        validate: (input: string) =>
-          input.trim().length > 0 || "Commit message is required",
-      },
-    ]);
-    const description = desc.trim();
+    // Use --message flag if provided, otherwise prompt
+    const description = options.message
+      ? options.message.trim()
+      : await promptInput("Commit message (e.g. add_users_table):", {
+          required: true,
+          force: options.force,
+        });
 
     // Step 1: Merge session migrations
     logger.step(1, 3, "Merging session migrations...");

@@ -142,12 +142,6 @@ export function getDbConfig(): DbConfig {
   };
 }
 
-/**
- * @deprecated Use getDbConfig() instead
- */
-export function getConfig() {
-  return getDbConfig();
-}
 
 // ============================================
 // Path Helpers

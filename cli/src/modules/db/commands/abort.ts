@@ -1,6 +1,6 @@
 import ora from "ora";
-import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
+import {promptConfirm} from "../../../common/prompt";
 import {getSession, deleteSession} from "../utils/session";
 import {getSessionMigrationsPath} from "../utils/db-config";
 import {deletePlanFile} from "../services/pgschema";
@@ -37,18 +37,13 @@ export async function abortCommand(options: CommandOptions): Promise<void> {
     logger.blank();
 
     // Confirm unless force flag
-    if (!options.force && !options.dryRun) {
-      const {confirm} = await inquirer.prompt([
-        {
-          type: "confirm",
-          name: "confirm",
-          message:
-            "Are you sure you want to abort this session? All changes will be lost.",
-          default: false,
-        },
-      ]);
+    if (!options.dryRun) {
+      const confirmed = await promptConfirm(
+        "Are you sure you want to abort this session? All changes will be lost.",
+        {default: false, force: options.force},
+      );
 
-      if (!confirm) {
+      if (!confirmed) {
         logger.info("Abort cancelled.");
         return;
       }

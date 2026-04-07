@@ -1,13 +1,13 @@
 import path from "path";
 import type {PlanResult} from "../types/index";
 import {runCommand, commandExists} from "../../../common/shell";
-import {getConfig, getPlanFilePath} from "../utils/db-config";
+import {getDbConfig, getPlanFilePath} from "../utils/db-config";
 import {parseConnectionUrl} from "./database";
 import fs from "fs/promises";
 import {existsSync} from "fs";
 
 export async function checkPgschemaInstalled(): Promise<boolean> {
-  const config = getConfig();
+  const config = getDbConfig();
 
   // If resolved to an absolute path (bundled binary), check file existence
   if (path.isAbsolute(config.pgSchemaBin)) {
@@ -22,7 +22,7 @@ export async function runPgschemaplan(
   schemaFile: string,
   databaseUrl: string,
 ): Promise<PlanResult> {
-  const config = getConfig();
+  const config = getDbConfig();
   const planFile = getPlanFilePath();
   const dbInfo = parseConnectionUrl(databaseUrl);
 
@@ -77,7 +77,7 @@ export async function runPgschemaplan(
 }
 
 export async function wrapPlanSQL(planFile: string): Promise<string> {
-  const config = getConfig();
+  const config = getDbConfig();
 
   if (!existsSync(planFile)) {
     throw new Error(`Plan file not found: ${planFile}`);
@@ -96,7 +96,7 @@ export async function runPgschemaDiff(
   schemaFile: string,
   databaseUrl: string,
 ): Promise<string> {
-  const config = getConfig();
+  const config = getDbConfig();
   const dbInfo = parseConnectionUrl(databaseUrl);
 
   // Run pgschema diff command to show differences (cwd set to schemaPath so .pgschemaignore is picked up)

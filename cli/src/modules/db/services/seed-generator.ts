@@ -1,12 +1,12 @@
 import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
-import {getConfig} from "../utils/db-config";
+import {getDbConfig} from "../utils/db-config";
 import {loadSqlGroup} from "../utils/sql-loader";
 import type {SeedStatement} from "../types/index";
 
 export async function loadSeeds(): Promise<SeedStatement[]> {
-  const config = getConfig();
+  const config = getDbConfig();
   const seedsPath = path.join(config.schemaPath, "seeds");
 
   if (!existsSync(seedsPath)) {

@@ -1,6 +1,6 @@
 import ora from "ora";
-import inquirer from "inquirer";
 import fs from "fs/promises";
+import {promptConfirm, promptInput} from "../../../common/prompt";
 import {existsSync} from "fs";
 import {logger} from "../../../common/logger";
 import {getSession, updatePendingChanges} from "../utils/session";
@@ -95,20 +95,14 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     }
 
     // Confirm apply operation (unless force flag)
-    if (!options.force) {
-      const {confirm} = await inquirer.prompt([
-        {
-          type: "confirm",
-          name: "confirm",
-          message: "Apply migration changes to the local database?",
-          default: true,
-        },
-      ]);
+    const confirmed = await promptConfirm(
+      "Apply migration changes to the local database?",
+      {default: true, force: options.force},
+    );
 
-      if (!confirm) {
-        logger.info("Apply cancelled.");
-        return;
-      }
+    if (!confirmed) {
+      logger.info("Apply cancelled.");
+      return;
     }
 
     // Check for migration files in session directory FIRST
@@ -350,16 +344,10 @@ async function handlePlanApply(
   }
 
   // Ask for migration description
-  const {desc} = await inquirer.prompt([
-    {
-      type: "input",
-      name: "desc",
-      message: "Migration description (e.g. add_users_table):",
-      validate: (input: string) =>
-        input.trim().length > 0 || "Description is required",
-    },
-  ]);
-  const description = desc.trim();
+  const description = await promptInput(
+    "Migration description (e.g. add_users_table):",
+    {required: true, force: options.force},
+  );
 
   // Step 2: Test local connection
   logger.step(2, 8, "Testing local database connection...");

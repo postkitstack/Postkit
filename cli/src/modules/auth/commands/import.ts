@@ -1,6 +1,6 @@
 import ora from "ora";
-import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
+import {promptConfirm} from "../../../common/prompt";
 import {getAuthConfig} from "../utils/auth-config";
 import {importRealm} from "../services/importer";
 import type {CommandOptions} from "../../../common/types";
@@ -21,21 +21,17 @@ export async function importCommand(options: CommandOptions): Promise<void> {
 
     // Step 2: Confirm import (unless force flag)
     logger.step(2, 3, "Confirming import...");
-    if (!options.force) {
-      const {confirm} = await inquirer.prompt([
-        {
-          type: "confirm",
-          name: "confirm",
-          message: `Import realm config to ${config.targetUrl}?`,
-          default: false,
-        },
-      ]);
+    const confirmed = await promptConfirm(
+      `Import realm config to ${config.targetUrl}?`,
+      {default: false, force: options.force},
+    );
 
-      if (!confirm) {
-        logger.info("Import cancelled.");
-        return;
-      }
-    } else {
+    if (!confirmed) {
+      logger.info("Import cancelled.");
+      return;
+    }
+
+    if (options.force) {
       logger.info("Skipping confirmation (--force)");
     }
 

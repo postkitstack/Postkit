@@ -1,7 +1,7 @@
 import ora from "ora";
-import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
-import {getConfig} from "../utils/db-config";
+import {promptConfirm} from "../../../common/prompt";
+import {getDbConfig} from "../utils/db-config";
 import {hasActiveSession, deleteSession} from "../utils/session";
 import {deletePlanFile} from "../services/pgschema";
 import {deleteGeneratedSchema} from "../services/schema-generator";
@@ -44,19 +44,13 @@ async function confirmAndRemoveSession(
   spinner: ReturnType<typeof ora>,
   options: DeployOptions,
 ): Promise<void> {
-  if (!options.force) {
-    const {confirm} = await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "confirm",
-        message: "An active migration session exists. Remove it to continue with deploy?",
-        default: false,
-      },
-    ]);
+  const confirmed = await promptConfirm(
+    "An active migration session exists. Remove it to continue with deploy?",
+    {default: false, force: options.force},
+  );
 
-    if (!confirm) {
-      throw new PostkitError("Deploy cancelled.", undefined, 0);
-    }
+  if (!confirmed) {
+    throw new PostkitError("Deploy cancelled.", undefined, 0);
   }
 
   spinner.start("Cleaning up existing session...");
@@ -134,7 +128,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
   const spinner = ora();
 
   try {
-    const config = getConfig();
+    const config = getDbConfig();
 
     // Step 1: Resolve target URL
     const {url: targetUrl, label: targetLabel} = resolveTargetUrl(options);
@@ -275,26 +269,20 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     }
 
     // Confirm deployment
-    if (!options.force) {
-      const {confirm} = await inquirer.prompt([
-        {
-          type: "confirm",
-          name: "confirm",
-          message: `Deploy to ${targetLabel}? This will apply ${pendingMigrations.length} migration(s) to the target database.`,
-          default: false,
-        },
-      ]);
+    const confirmed = await promptConfirm(
+      `Deploy to ${targetLabel}? This will apply ${pendingMigrations.length} migration(s) to the target database.`,
+      {default: false, force: options.force},
+    );
 
-      if (!confirm) {
-        logger.info("Deploy cancelled.");
-        // Clean up local clone
-        try {
-          await dropDatabase(localDbUrl);
-        } catch {
-          // Best effort cleanup
-        }
-        return;
+    if (!confirmed) {
+      logger.info("Deploy cancelled.");
+      // Clean up local clone
+      try {
+        await dropDatabase(localDbUrl);
+      } catch {
+        // Best effort cleanup
       }
+      return;
     }
 
     // Steps 8-11: Apply to target

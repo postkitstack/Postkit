@@ -32,7 +32,7 @@ program
 program
   .command("init")
   .description("Initialize a new Postkit project")
-  .option("-f, --force", "Skip confirmation prompt")
+  .option("-f, --force", "Skip confirmation prompts")
   .action(async (cmdOptions) => {
     const options = {...program.opts(), ...cmdOptions};
     await initCommand(options);
