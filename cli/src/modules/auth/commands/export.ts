@@ -1,6 +1,7 @@
 import ora from "ora";
 import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
+import {promptConfirm} from "../../../common/prompt";
 import {getAuthConfig} from "../utils/auth-config";
 import {
   getAdminToken,
@@ -26,21 +27,17 @@ export async function exportCommand(options: CommandOptions): Promise<void> {
 
     // Step 2: Confirm export (unless force flag)
     logger.step(2, 4, "Confirming export...");
-    if (!options.force) {
-      const {confirm} = await inquirer.prompt([
-        {
-          type: "confirm",
-          name: "confirm",
-          message: `Export realm "${config.sourceRealm}" from ${config.sourceUrl}?`,
-          default: true,
-        },
-      ]);
+    const confirmed = await promptConfirm(
+      `Export realm "${config.sourceRealm}" from ${config.sourceUrl}?`,
+      {default: true, force: options.force},
+    );
 
-      if (!confirm) {
-        logger.info("Export cancelled.");
-        return;
-      }
-    } else {
+    if (!confirmed) {
+      logger.info("Export cancelled.");
+      return;
+    }
+
+    if (options.force) {
       logger.info("Skipping confirmation (--force)");
     }
 

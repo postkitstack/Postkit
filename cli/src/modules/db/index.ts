@@ -58,9 +58,11 @@ export function registerDbModule(program: Command): void {
   // Commit command
   db.command("commit")
     .description("Merge session migrations into a single committed migration")
-    .action(async () => {
+    .option("-f, --force", "Skip confirmation prompts")
+    .option("-m, --message <msg>", "Commit message (skips prompt)")
+    .action(async (cmdOptions) => {
       await withInitCheck(async () => {
-        const options = program.opts();
+        const options = {...program.opts(), ...cmdOptions};
         await commitCommand(options);
       });
     });
@@ -90,6 +92,7 @@ export function registerDbModule(program: Command): void {
   db.command("migration")
     .description("Create a manual SQL migration file")
     .argument("[name]", "Migration name (e.g. add_users_table)")
+    .option("-f, --force", "Skip prompts in non-interactive mode")
     .action(async (name, cmdOptions) => {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};

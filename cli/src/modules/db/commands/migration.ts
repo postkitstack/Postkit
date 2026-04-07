@@ -1,6 +1,6 @@
 import ora from "ora";
-import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
+import {promptInput} from "../../../common/prompt";
 import {getSession, updatePendingChanges} from "../utils/session";
 import {getSessionMigrationsPath} from "../utils/db-config";
 import {createMigrationFile} from "../services/dbmate";
@@ -53,16 +53,10 @@ export async function migrationCommand(options: MigrateOptions, name?: string): 
     let migrationName = name || options.name;
 
     if (!migrationName) {
-      const {inputName} = await inquirer.prompt([
-        {
-          type: "input",
-          name: "inputName",
-          message: "Migration name (e.g. add_users_table):",
-          validate: (input: string) =>
-            input.trim().length > 0 || "Migration name is required",
-        },
-      ]);
-      migrationName = inputName.trim();
+      migrationName = await promptInput(
+        "Migration name (e.g. add_users_table):",
+        {required: true, force: options.force},
+      );
     }
 
     // Ensure migrationName is defined (TypeScript safety)

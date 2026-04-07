@@ -3,6 +3,7 @@ import path from "path";
 import ora from "ora";
 import inquirer from "inquirer";
 import {logger} from "../common/logger";
+import {promptConfirm} from "../common/prompt";
 import {
   projectRoot,
   POSTKIT_CONFIG_FILE,
@@ -59,16 +60,12 @@ export async function initCommand(options: CommandOptions): Promise<void> {
       return;
     }
 
-    const {confirm} = await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "confirm",
-        message: "Overwrite existing configuration?",
-        default: false,
-      },
-    ]);
+    const confirmed = await promptConfirm(
+      "Overwrite existing configuration?",
+      {default: false, force: options.force},
+    );
 
-    if (!confirm) {
+    if (!confirmed) {
       logger.info("Init cancelled.");
       return;
     }

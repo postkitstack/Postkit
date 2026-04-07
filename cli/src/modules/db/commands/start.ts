@@ -1,6 +1,7 @@
 import ora from "ora";
 import inquirer from "inquirer";
 import path from "path";
+import {promptConfirm} from "../../../common/prompt";
 import {existsSync} from "fs";
 import fs from "fs/promises";
 import {logger} from "../../../common/logger";
@@ -170,20 +171,16 @@ export async function startCommand(options: StartOptions): Promise<void> {
       logger.blank();
 
       // Ask user if they want to continue
-      if (!options.force) {
-        const {confirm} = await inquirer.prompt([
-          {
-            type: "confirm",
-            name: "confirm",
-            message: "Continue starting session despite pending migrations?",
-            default: false,
-          },
-        ]);
+      const confirmed = await promptConfirm(
+        "Continue starting session despite pending migrations?",
+        {default: false, force: options.force},
+      );
 
-        if (!confirm) {
-          throw new PostkitError("Session start cancelled.", undefined, 0);
-        }
-      } else {
+      if (!confirmed) {
+        throw new PostkitError("Session start cancelled.", undefined, 0);
+      }
+
+      if (options.force) {
         logger.info("Continuing due to --force flag...");
       }
     } else {

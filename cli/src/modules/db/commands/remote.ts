@@ -1,5 +1,6 @@
 import inquirer from "inquirer";
 import {logger} from "../../../common/logger";
+import {promptConfirm} from "../../../common/prompt";
 import {
   getRemoteList,
   addRemote,
@@ -101,21 +102,15 @@ export async function remoteRemoveCommand(
   name: string,
 ): Promise<void> {
   try {
-    // If not forcing, confirm before removing
-    if (!options.force) {
-      const {confirm} = await inquirer.prompt([
-        {
-          type: "confirm",
-          name: "confirm",
-          message: `Remove remote "${name}"?`,
-          default: false,
-        },
-      ]);
+    // Confirm before removing (unless force flag)
+    const confirmed = await promptConfirm(
+      `Remove remote "${name}"?`,
+      {default: false, force: options.force},
+    );
 
-      if (!confirm) {
-        logger.info("Remove cancelled.");
-        return;
-      }
+    if (!confirmed) {
+      logger.info("Remove cancelled.");
+      return;
     }
 
     await removeRemote(name, options.force);
