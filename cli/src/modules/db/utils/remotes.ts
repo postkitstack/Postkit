@@ -324,7 +324,7 @@ function isValidDatabaseUrl(url: string): boolean {
 /**
  * Normalize URL for comparison (remove trailing slash, lowercase host)
  */
-function normalizeUrl(url: string): string {
+export function normalizeUrl(url: string): string {
   try {
     const parsed = new URL(url);
     parsed.host = parsed.host.toLowerCase();
