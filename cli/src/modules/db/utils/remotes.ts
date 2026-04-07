@@ -94,7 +94,7 @@ export async function addRemote(name: string, url: string, setAsDefault: boolean
     );
   }
 
-  // Check if remote already exists
+  // Check if remote name already exists
   if (config.db.remotes && config.db.remotes[name]) {
     throw new Error(`Remote "${name}" already exists`);
   }
@@ -103,6 +103,23 @@ export async function addRemote(name: string, url: string, setAsDefault: boolean
   if (!isValidDatabaseUrl(url)) {
     throw new Error(
       "Invalid database URL format. Expected format: postgres://user:pass@host:port/database",
+    );
+  }
+
+  // Check if URL matches local database URL
+  if (config.db.localDbUrl && normalizeUrl(url) === normalizeUrl(config.db.localDbUrl)) {
+    throw new Error(
+      "Cannot add remote: URL matches local database URL.\n" +
+      "The remote URL must be different from your local database."
+    );
+  }
+
+  // Check if URL already exists in another remote
+  const existingRemote = findRemoteByUrl(config.db.remotes, url);
+  if (existingRemote) {
+    throw new Error(
+      `Cannot add remote: URL already used by remote "${existingRemote}".\n` +
+      "Each remote must have a unique URL."
     );
   }
 
@@ -302,6 +319,37 @@ function isValidDatabaseUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Normalize URL for comparison (remove trailing slash, lowercase host)
+ */
+export function normalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.host = parsed.host.toLowerCase();
+    parsed.pathname = parsed.pathname.replace(/\/$/, "") || "/";
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Find a remote by URL (returns remote name or null)
+ */
+function findRemoteByUrl(
+  remotes: Record<string, RemoteConfig> | undefined,
+  url: string,
+): string | null {
+  if (!remotes) return null;
+  const normalized = normalizeUrl(url);
+  for (const [name, config] of Object.entries(remotes)) {
+    if (normalizeUrl(config.url) === normalized) {
+      return name;
+    }
+  }
+  return null;
 }
 
 /**

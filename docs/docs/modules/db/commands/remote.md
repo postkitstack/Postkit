@@ -35,6 +35,12 @@ postkit db remote add <name> <url> [--default]
 |--------|-------------|
 | `--default` | Set as default remote |
 
+**Validations:**
+- Name must be alphanumeric (letters, numbers, hyphens, underscores)
+- URL must be a valid PostgreSQL connection string
+- URL cannot match `localDbUrl` (your local database)
+- URL cannot duplicate an existing remote
+
 **Example:**
 ```bash
 postkit db remote add staging "postgres://user:pass@host:5432/db"

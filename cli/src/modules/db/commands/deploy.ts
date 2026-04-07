@@ -16,7 +16,7 @@ import {loadInfra, applyInfra} from "../services/infra-generator";
 import {loadGrants, applyGrants} from "../services/grant-generator";
 import {loadSeeds, applySeeds} from "../services/seed-generator";
 import {getPendingCommittedMigrations, markMigrationDeployed} from "../utils/committed";
-import {resolveRemote, maskRemoteUrl} from "../utils/remotes";
+import {resolveRemote, maskRemoteUrl, normalizeUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
 import {PostkitError} from "../../../common/errors";
 
@@ -138,6 +138,18 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
 
     // Step 1: Resolve target URL
     const {url: targetUrl, label: targetLabel} = resolveTargetUrl(options);
+
+    // Validate: localDbUrl cannot equal target URL
+    const normalizedLocalUrl = normalizeUrl(config.localDbUrl);
+    const normalizedTargetUrl = normalizeUrl(targetUrl);
+
+    if (normalizedLocalUrl === normalizedTargetUrl) {
+      throw new PostkitError(
+        `Cannot deploy: localDbUrl equals target URL (${targetLabel}).`,
+        "Your local database URL must be different from the target remote. " +
+        "Update your postkit.config.json or use a different remote.",
+      );
+    }
 
     logger.heading("Deploy Migrations");
     logger.info(`Target: ${targetLabel}`);
