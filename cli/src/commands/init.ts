@@ -80,11 +80,17 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     const spinner = ora("Creating .postkit/db/ directory...").start();
     const postkitDbDir = path.join(postkitDir, "db");
     fs.mkdirSync(postkitDbDir, {recursive: true});
-    // Create empty runtime files
-    for (const file of ["session.json", "plan.sql", "schema.sql", "committed.json"]) {
+    // Create runtime files with proper initial content
+    // session.json is intentionally excluded — it is created only when a session starts
+    const runtimeFiles: Record<string, string> = {
+      "committed.json": JSON.stringify({migrations: []}, null, 2),
+      "plan.sql": "",
+      "schema.sql": "",
+    };
+    for (const [file, content] of Object.entries(runtimeFiles)) {
       const filePath = path.join(postkitDbDir, file);
       if (!fs.existsSync(filePath)) {
-        fs.writeFileSync(filePath, "");
+        fs.writeFileSync(filePath, content);
       }
     }
     // Create subdirectories
