@@ -193,13 +193,23 @@ async function collectSqlFiles(
 }
 
 export async function generateSchemaFingerprint(): Promise<string> {
-  const schemaFiles = await getSchemaFiles();
+  const config = getDbConfig();
+  const schemaPath = config.schemaPath;
+
+  if (!existsSync(schemaPath)) {
+    return createHash("sha256").digest("hex");
+  }
+
+  const sections = await discoverSchemaSections(schemaPath);
+  const sortedSections = sections.sort((a, b) => a.order - b.order);
   const hash = createHash("sha256");
 
-  for (const filePath of schemaFiles) {
-    const content = await fs.readFile(filePath, "utf-8");
-    hash.update(filePath);
-    hash.update(content);
+  for (const section of sortedSections) {
+    const sectionContent = await loadSectionFiles(section.path);
+    if (sectionContent) {
+      hash.update(section.path);
+      hash.update(sectionContent);
+    }
   }
 
   return hash.digest("hex");
