@@ -53,8 +53,10 @@ export async function runPgschemaplan(
       rawPlan.trim().length > 0 && !rawPlan.includes("-- No changes");
 
     if (hasChanges) {
-      // Use raw plan output directly without wrappers
-      planOutput = rawPlan.trim();
+      // Sanitize plan SQL to remove transaction-incompatible constructs
+      const sanitized = sanitizePlanSQL(rawPlan);
+      await fs.writeFile(planFile, sanitized, "utf-8");
+      planOutput = sanitized.trim();
     } else {
       planOutput = rawPlan;
     }
@@ -121,6 +123,63 @@ export async function runPgschemaDiff(
   }
 
   return result.stdout || result.stderr || "No differences found";
+}
+
+/**
+ * Sanitize pgschema plan SQL to be compatible with dbmate's transaction-wrapped migrations.
+ *
+ * 1. Strip CONCURRENTLY from CREATE/DROP INDEX (cannot run inside a transaction)
+ * 2. Remove -- pgschema:wait blocks (progress-monitoring SELECTs appended after CONCURRENT indexes)
+ */
+function sanitizePlanSQL(sql: string): string {
+  // Remove -- pgschema:wait blocks: everything from the comment line to the next
+  // DDL statement boundary (CREATE/ALTER/DROP/SET/SELECT at start of line) or EOF.
+  const lines = sql.split("\n");
+  const result: string[] = [];
+  let inWaitBlock = false;
+
+  for (const line of lines) {
+    if (/^--\s*pgschema:wait\b/i.test(line.trim())) {
+      inWaitBlock = true;
+      continue;
+    }
+
+    if (inWaitBlock) {
+      // End the wait block when we hit a DDL/SET statement or a blank line
+      // followed by a non-wait comment or DDL
+      const trimmed = line.trim();
+      if (
+        /^(CREATE|ALTER|DROP|SET|DO|INSERT|UPDATE|DELETE|GRANT|REVOKE)\s/i.test(trimmed) ||
+        trimmed === "" ||
+        /^--\s*(?!pgschema:wait)/i.test(trimmed)
+      ) {
+        inWaitBlock = false;
+        // Don't skip this line — it's the start of the next real statement
+        if (trimmed === "") continue; // skip blank separator lines between blocks
+        result.push(line);
+      }
+      // else: still inside wait block, skip line
+      continue;
+    }
+
+    result.push(line);
+  }
+
+  let cleaned = result.join("\n");
+
+  // Strip CONCURRENTLY from CREATE [UNIQUE] INDEX CONCURRENTLY
+  cleaned = cleaned.replace(
+    /(CREATE\s+(?:UNIQUE\s+)?INDEX\s+)CONCURRENTLY\s+/gi,
+    "$1",
+  );
+
+  // Strip CONCURRENTLY from DROP INDEX CONCURRENTLY
+  cleaned = cleaned.replace(
+    /(DROP\s+INDEX\s+)CONCURRENTLY\s+/gi,
+    "$1",
+  );
+
+  return cleaned;
 }
 
 export async function getPlanFileContent(): Promise<string | null> {
