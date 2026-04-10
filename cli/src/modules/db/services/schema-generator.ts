@@ -31,6 +31,8 @@ const SCHEMA_ORDER: Record<string, number> = {
   constraints: 11,
   rls: 12, // RLS policies
   policies: 12,
+  grant: 13, // Grant statements — after all objects are created
+  grants: 13,
 };
 
 export async function generateSchemaSQL(): Promise<string> {

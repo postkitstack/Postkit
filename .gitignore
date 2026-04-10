@@ -12,3 +12,5 @@ issue.md
 analyze.md
 import-feature.md
 dump_schema.sh
+
+test-import/

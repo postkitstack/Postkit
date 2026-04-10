@@ -191,7 +191,6 @@ export async function fetchInfraFromDatabase(
               rolcanlogin, rolreplication, rolconnlimit
        FROM pg_catalog.pg_roles
        WHERE rolname NOT LIKE 'pg_%'
-         AND rolname != 'postgres'
        ORDER BY rolname`,
     );
 
@@ -338,13 +337,39 @@ export async function normalizeDumpForPostkit(
 }
 
 /**
+ * Apply all SQL files from infra/ to a database.
+ * This ensures roles and schemas exist before pgschema validates the schema SQL.
+ */
+async function applyInfraToDatabase(databaseUrl: string, schemaPath: string): Promise<void> {
+  const infraDir = path.join(schemaPath, "infra");
+  if (!existsSync(infraDir)) return;
+
+  const client = new Client({connectionString: databaseUrl});
+  try {
+    await client.connect();
+
+    const entries = (await fs.readdir(infraDir)).sort();
+    for (const entry of entries) {
+      if (!entry.endsWith(".sql")) continue;
+      const sql = await fs.readFile(path.join(infraDir, entry), "utf-8");
+      if (sql.trim()) {
+        await client.query(sql);
+      }
+    }
+  } finally {
+    await client.end();
+  }
+}
+
+/**
  * Generate baseline DDL by running pgschema plan against an empty temporary database.
  *
  * 1. Creates an empty temp database
- * 2. Generates schema.sql from the normalized files
- * 3. Runs pgschema plan (schema files vs empty DB = full CREATE DDL)
- * 4. Drops the temp database
- * 5. Returns the DDL string
+ * 2. Applies infra SQL (roles, schemas) so role references resolve during pgschema validation
+ * 3. Generates schema.sql from the normalized files
+ * 4. Runs pgschema plan (schema files vs empty DB = full CREATE DDL)
+ * 5. Drops the temp database
+ * 6. Returns the DDL string
  */
 export async function generateBaselineDDL(
   schemaPath: string,
@@ -360,6 +385,10 @@ export async function generateBaselineDDL(
   try {
     // Create empty temp database
     await createDatabase(tmpDbUrl);
+
+    // Apply infra SQL (roles, schemas) so pgschema can resolve role references
+    // in the schema SQL it validates internally (e.g. AUTHORIZATION, OWNER TO)
+    await applyInfraToDatabase(tmpDbUrl, schemaPath);
 
     // Generate schema.sql from the normalized schema files
     const {schemaFile} = await generateSchemaSQLAndFingerprint();
