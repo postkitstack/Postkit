@@ -174,3 +174,7 @@ export function getCommittedMigrationsPath(): string {
 export function getCommittedFilePath(): string {
   return path.join(getPostkitDbDir(), "committed.json");
 }
+
+export function getTmpImportDir(): string {
+  return path.join(getPostkitDbDir(), "tmp-import");
+}

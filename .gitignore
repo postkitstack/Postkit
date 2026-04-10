@@ -10,3 +10,5 @@ test-proj/
 .claude/
 issue.md
 analyze.md
+import-feature.md
+dump_schema.sh
