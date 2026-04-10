@@ -351,6 +351,36 @@ postkit db abort -f          # Skip confirmation
 
 ---
 
+### `postkit db import [--url <url>] [--schema <schema>] [--name <name>]`
+
+Import an existing database into PostKit as a baseline migration. Use when onboarding a database not previously managed by PostKit.
+
+```bash
+postkit db import                                          # Import from localDbUrl in config
+postkit db import --url "postgres://user:pass@host/myapp" # Import from specific URL
+postkit db import --schema myschema --name initial_baseline
+```
+
+**What it does:**
+1. Checks prerequisites (pgschema, dbmate, no active session)
+2. Connects to target database, reports table count
+3. Warns about existing schema/migration files, prompts confirmation
+4. Runs `pgschema dump --multi-file` into a temp directory
+5. Normalizes dump into PostKit schema directory structure:
+   - Roles queried directly from `pg_roles` → `infra/roles.sql` (idempotent `DO $$ IF NOT EXISTS $$`)
+   - Schemas queried directly from `pg_namespace` → `infra/schemas.sql` (`CREATE SCHEMA IF NOT EXISTS`)
+   - Extensions parsed from `schema.sql` → `extensions/imported_extensions.sql`
+   - Privileges consolidated into `grants/<schema>.sql`
+6. Generates baseline DDL via `pgschema plan` against an empty temp database
+7. Inserts baseline version into `schema_migrations` on the source database
+8. Creates local database and applies baseline migration via `dbmate`
+9. Cleans up temp directory
+
+**Why roles/schemas are queried from DB directly:**
+`pgschema dump` does not emit `CREATE SCHEMA` or `CREATE ROLE` statements. PostKit queries `pg_catalog.pg_namespace` and `pg_catalog.pg_roles` instead to reliably capture infra.
+
+---
+
 ### `postkit db infra [--apply] [--target <local|remote>]`
 
 Manage infrastructure SQL (roles, schemas, extensions) from `db/schema/infra/`.
@@ -464,3 +494,5 @@ Session migrations are staged in `.postkit/db/session/` and committed migrations
 | `Schema files have changed since the plan was generated` | Schema files were modified after running `plan`. Run `postkit db plan` again |
 | `Grants/seeds failed during apply` | Re-run `postkit db apply` — it resumes from where it left off |
 | `Deploy failed during dry run` | No changes were made to the target. Fix the issue and retry. |
+| `Import: pgschema plan produced no output` | Schema directory may be empty after normalization. Check that the source DB has objects in the target schema. |
+| `Import: Could not insert migration tracking record` | Non-fatal. Manually insert the version into `schema_migrations` on the source DB. |

@@ -189,7 +189,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       spinner.info("Dry run — skipping normalization");
     } else {
       spinner.start("Normalizing schema files...");
-      const normalizeResult = await normalizeDumpForPostkit(tmpDir, config.schemaPath, schemaName);
+      const normalizeResult = await normalizeDumpForPostkit(tmpDir, config.schemaPath, schemaName, targetUrl);
       spinner.succeed(`Normalized into ${normalizeResult.filesCreated.length} file(s)`);
 
       for (const f of normalizeResult.filesCreated) {
@@ -268,12 +268,12 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     logger.success("Database import complete!");
     logger.blank();
     logger.info("What was created:");
-    logger.info("  - Schema files in db/schema/ (normalized from database dump)");
-    logger.info(`  - Baseline migration in .postkit/db/migrations/`);
+    logger.info(`  - Schema files in ${config.schemaPath} (normalized from database dump)`);
+    logger.info(`  - Baseline migration in ${getCommittedMigrationsPath()}`);
     logger.info("  - Local database set up with imported schema");
     logger.blank();
     logger.info("Next steps:");
-    logger.info("  1. Review the schema files in db/schema/");
+    logger.info(`  1. Review the schema files in ${config.schemaPath}`);
     logger.info('  2. Add a remote: postkit db remote add <name> <url>');
     logger.info('  3. Start working: modify schema files, then "postkit db plan" to see changes');
   } catch (error) {

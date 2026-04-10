@@ -77,6 +77,7 @@ The `db` module provides a **session-based database migration workflow** for saf
 | [`infra`](/docs/modules/db/commands/infra) | Manage infrastructure SQL |
 | [`grants`](/docs/modules/db/commands/grants) | Manage grant statements |
 | [`seed`](/docs/modules/db/commands/seed) | Manage seed data |
+| [`import`](/docs/modules/db/commands/import) | Import existing database as baseline |
 
 ## Important Notes
 

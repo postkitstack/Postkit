@@ -149,12 +149,82 @@ function flushStatement(
 }
 
 /**
+ * Query the database directly for schemas and roles.
+ * pgschema dump does not reliably emit CREATE SCHEMA or CREATE ROLE statements.
+ */
+export async function fetchInfraFromDatabase(
+  databaseUrl: string,
+  schemaName: string,
+): Promise<{roles: string[]; schemas: string[]}> {
+  const client = new Client({connectionString: databaseUrl});
+  const roles: string[] = [];
+  const schemas: string[] = [];
+
+  try {
+    await client.connect();
+
+    // Fetch non-system schemas
+    const schemaRows = await client.query<{nspname: string; owner: string}>(
+      `SELECT nspname, pg_catalog.pg_get_userbyid(nspowner) AS owner
+       FROM pg_catalog.pg_namespace
+       WHERE nspname NOT LIKE 'pg_%'
+         AND nspname != 'information_schema'
+       ORDER BY nspname`,
+    );
+
+    for (const row of schemaRows.rows) {
+      schemas.push(`CREATE SCHEMA IF NOT EXISTS ${row.nspname} AUTHORIZATION ${row.owner};`);
+    }
+
+    // Fetch non-system roles
+    const roleRows = await client.query<{
+      rolname: string;
+      rolsuper: boolean;
+      rolinherit: boolean;
+      rolcreaterole: boolean;
+      rolcreatedb: boolean;
+      rolcanlogin: boolean;
+      rolreplication: boolean;
+      rolconnlimit: number;
+    }>(
+      `SELECT rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb,
+              rolcanlogin, rolreplication, rolconnlimit
+       FROM pg_catalog.pg_roles
+       WHERE rolname NOT LIKE 'pg_%'
+         AND rolname != 'postgres'
+       ORDER BY rolname`,
+    );
+
+    for (const row of roleRows.rows) {
+      const attrs = [
+        row.rolcanlogin ? "LOGIN" : "NOLOGIN",
+        row.rolsuper ? "SUPERUSER" : "NOSUPERUSER",
+        row.rolinherit ? "INHERIT" : "NOINHERIT",
+        row.rolcreatedb ? "CREATEDB" : "NOCREATEDB",
+        row.rolcreaterole ? "CREATEROLE" : "NOCREATEROLE",
+        row.rolreplication ? "REPLICATION" : "NOREPLICATION",
+        ...(row.rolconnlimit !== -1 ? [`CONNECTION LIMIT ${row.rolconnlimit}`] : []),
+      ].join(" ");
+
+      roles.push(
+        `DO $$\nBEGIN\n    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${row.rolname}') THEN\n        CREATE ROLE ${row.rolname} ${attrs};\n    END IF;\nEND\n$$;`,
+      );
+    }
+  } finally {
+    await client.end();
+  }
+
+  return {roles, schemas};
+}
+
+/**
  * Normalize a pgschema multi-file dump into PostKit's schema directory structure.
  */
 export async function normalizeDumpForPostkit(
   dumpDir: string,
   schemaPath: string,
   schemaName: string,
+  databaseUrl: string,
 ): Promise<{filesCreated: string[]}> {
   const filesCreated: string[] = [];
 
@@ -194,29 +264,31 @@ export async function normalizeDumpForPostkit(
     }
   }
 
-  // Parse schema.sql for infrastructure statements
+  // Fetch schemas and roles directly from the database —
+  // pgschema dump does not reliably emit CREATE SCHEMA / CREATE ROLE statements.
+  const {roles, schemas} = await fetchInfraFromDatabase(databaseUrl, schemaName);
+
+  const infraDir = path.join(schemaPath, "infra");
+  await fs.mkdir(infraDir, {recursive: true});
+
+  if (roles.length > 0) {
+    const rolesPath = path.join(infraDir, "roles.sql");
+    await fs.writeFile(rolesPath, roles.join("\n\n") + "\n", "utf-8");
+    filesCreated.push("infra/roles.sql");
+  }
+
+  if (schemas.length > 0) {
+    const schemasPath = path.join(infraDir, "schemas.sql");
+    await fs.writeFile(schemasPath, schemas.join("\n\n") + "\n", "utf-8");
+    filesCreated.push("infra/schemas.sql");
+  }
+
+  // Parse schema.sql for extensions only (no change to this behaviour)
   const schemaSQLPath = path.join(dumpDir, "schema.sql");
   if (existsSync(schemaSQLPath)) {
     const schemaSQL = await fs.readFile(schemaSQLPath, "utf-8");
-    const {roles, schemas, extensions, remainder} = extractInfraStatements(schemaSQL);
+    const {extensions} = extractInfraStatements(schemaSQL);
 
-    // Write infra files
-    const infraDir = path.join(schemaPath, "infra");
-    await fs.mkdir(infraDir, {recursive: true});
-
-    if (roles.length > 0) {
-      const rolesPath = path.join(infraDir, "roles.sql");
-      await fs.writeFile(rolesPath, roles.join("\n\n") + "\n", "utf-8");
-      filesCreated.push("infra/roles.sql");
-    }
-
-    if (schemas.length > 0) {
-      const schemasPath = path.join(infraDir, "schemas.sql");
-      await fs.writeFile(schemasPath, schemas.join("\n\n") + "\n", "utf-8");
-      filesCreated.push("infra/schemas.sql");
-    }
-
-    // If extensions weren't in a directory but in schema.sql, write them
     if (extensions.length > 0) {
       const extDir = path.join(schemaPath, "extensions");
       await fs.mkdir(extDir, {recursive: true});
