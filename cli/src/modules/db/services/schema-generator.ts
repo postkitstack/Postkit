@@ -25,14 +25,16 @@ const SCHEMA_ORDER: Record<string, number> = {
   tables: 7,
   view: 8,
   views: 8,
-  trigger: 9,
-  triggers: 9,
-  indexes: 10,
-  constraints: 11,
-  rls: 12, // RLS policies
-  policies: 12,
-  grant: 13, // Grant statements — after all objects are created
-  grants: 13,
+  materialized_view: 9,
+  materialized_views: 9,
+  trigger: 10,
+  triggers: 10,
+  indexes: 11,
+  constraints: 12,
+  rls: 13, // RLS policies
+  policies: 13,
+  grant: 14, // Grant statements — after all objects are created
+  grants: 14,
 };
 
 export async function generateSchemaSQL(): Promise<string> {

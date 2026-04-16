@@ -154,6 +154,8 @@ db/schema/
 │   └── comments.sql
 ├── views/
 │   └── user_stats.sql
+├── materialized_views/
+│   └── dashboard_summary.sql
 ├── functions/
 │   └── helpers.sql
 ├── triggers/
@@ -166,7 +168,7 @@ db/schema/
     └── default_roles.sql
 ```
 
-**Execution ordering:** infra (pre-migration) → pgschema-managed schema (extensions → types → enums → domains → sequences → tables → views → functions → triggers → indexes → constraints → policies) → grants (post-migration) → seeds (post-migration)
+**Execution ordering:** infra (pre-migration) → pgschema-managed schema (extensions → types → enums → domains → sequences → tables → views → materialized_views → functions → triggers → indexes → constraints → policies) → grants (post-migration) → seeds (post-migration)
 
 **Note:** `infra/`, `grants/`, and `seeds/` directories are excluded from pgschema processing and handled as separate steps.
 
@@ -364,20 +366,25 @@ postkit db import --schema myschema --name initial_baseline
 **What it does:**
 1. Checks prerequisites (pgschema, dbmate, no active session)
 2. Connects to target database, reports table count
-3. Warns about existing schema/migration files, prompts confirmation
+3. Warns about existing schema/migration files (both directories will be **cleared and replaced**), prompts confirmation
 4. Runs `pgschema dump --multi-file` into a temp directory
-5. Normalizes dump into PostKit schema directory structure:
+5. Clears existing schema directory and normalizes dump into PostKit schema directory structure:
    - Roles queried directly from `pg_roles` → `infra/roles.sql` (idempotent `DO $$ IF NOT EXISTS $$`)
    - Schemas queried directly from `pg_namespace` → `infra/schemas.sql` (`CREATE SCHEMA IF NOT EXISTS`)
    - Extensions parsed from `schema.sql` → `extensions/imported_extensions.sql`
    - Privileges consolidated into `grants/<schema>.sql`
-6. Generates baseline DDL via `pgschema plan` against an empty temp database
-7. Inserts baseline version into `schema_migrations` on the source database
-8. Creates local database and applies baseline migration via `dbmate`
-9. Cleans up temp directory
+   - All SQL files are prefixed with numeric ordering (`001_filename.sql`) based on `schema.sql` `\i` directives
+6. Clears existing migrations directory and generates baseline DDL via `pgschema plan` against an empty temp database
+7. Creates local database, applies infrastructure SQL (roles, schemas), then applies baseline migration via `dbmate`
+8. After successful local apply, inserts baseline version into `schema_migrations` on the source database
+9. Updates `committed.json` to track the baseline migration
+10. Cleans up temp directory, plan file, and generated schema file
 
 **Why roles/schemas are queried from DB directly:**
 `pgschema dump` does not emit `CREATE SCHEMA` or `CREATE ROLE` statements. PostKit queries `pg_catalog.pg_namespace` and `pg_catalog.pg_roles` instead to reliably capture infra.
+
+**Why infra SQL is applied before dbmate:**
+The baseline migration contains `ALTER DEFAULT PRIVILEGES` and other statements that reference roles. These roles must exist in the local database before dbmate runs the migration. The infra SQL (from `schema/infra/`) is applied to the local database first to create those roles.
 
 ---
 
@@ -495,4 +502,6 @@ Session migrations are staged in `.postkit/db/session/` and committed migrations
 | `Grants/seeds failed during apply` | Re-run `postkit db apply` — it resumes from where it left off |
 | `Deploy failed during dry run` | No changes were made to the target. Fix the issue and retry. |
 | `Import: pgschema plan produced no output` | Schema directory may be empty after normalization. Check that the source DB has objects in the target schema. |
-| `Import: Could not insert migration tracking record` | Non-fatal. Manually insert the version into `schema_migrations` on the source DB. |
+| `Import: Could not insert migration tracking record` | Non-fatal. The local DB migration succeeded but the source DB tracking record failed. Manually insert the version into `schema_migrations` on the source DB. |
+| `Import: column does not exist during local apply` | Infrastructure SQL (roles, schemas) may not have been applied to the local database before dbmate. Ensure `schema/infra/` files exist and are valid. |
+| `Import: relation does not exist during pgschema plan` | The `pgschema dump` ordering may not account for foreign key or policy dependencies. This is handled by pgschema internally. |

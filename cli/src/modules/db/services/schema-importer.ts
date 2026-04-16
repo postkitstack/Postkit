@@ -305,6 +305,7 @@ export async function normalizeDumpForPostkit(
     domains: "domains",
     sequences: "sequences",
     views: "views",
+    materialized_views: "materialized_views",
     triggers: "triggers",
     indexes: "indexes",
     constraints: "constraints",
