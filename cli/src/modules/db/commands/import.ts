@@ -8,8 +8,9 @@ import {PostkitError} from "../../../common/errors";
 import {getDbConfig, getTmpImportDir, getCommittedMigrationsPath} from "../utils/db-config";
 import {hasActiveSession} from "../utils/session";
 import {testConnection, getTableCount, createDatabase} from "../services/database";
-import {checkPgschemaInstalled} from "../services/pgschema";
+import {checkPgschemaInstalled, deletePlanFile} from "../services/pgschema";
 import {checkDbmateInstalled, createMigrationFile, runCommittedMigrate} from "../services/dbmate";
+import {deleteGeneratedSchema} from "../services/schema-generator";
 import {
   runPgschemaDump,
   normalizeDumpForPostkit,
@@ -271,6 +272,8 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       if (existsSync(tmpImportDir)) {
         await fs.rm(tmpImportDir, {recursive: true, force: true});
       }
+      await deletePlanFile();
+      await deleteGeneratedSchema();
     }
 
     // Summary
