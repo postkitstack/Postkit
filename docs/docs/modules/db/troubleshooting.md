@@ -42,6 +42,24 @@ sidebar_position: 100
 
 **Solution:** No changes were made to the target. Fix the issue and retry.
 
+## Import Issues
+
+### `Import: pgschema plan produced no output`
+
+**Solution:** Schema directory may be empty after normalization. Check that the source DB has objects in the target schema.
+
+### `Import: column does not exist during local apply`
+
+**Solution:** Infrastructure SQL (roles, schemas) must be applied to the local database before dbmate runs the baseline migration. Ensure `schema/infra/` files exist and are valid. The import command applies infra automatically — if this fails, check the role/schema SQL for syntax errors.
+
+### `Import: relation does not exist during pgschema plan`
+
+**Solution:** The pgschema dump ordering may not account for foreign key or policy dependencies between tables. This is handled internally by pgschema. Ensure you are using the latest version of pgschema.
+
+### `Import: Could not insert migration tracking record`
+
+**Solution:** Non-fatal. The local database migration succeeded but the source database tracking record failed. Manually insert the version into `schema_migrations` on the source DB.
+
 ## Getting Help
 
 If you're still stuck, please open an issue on [GitHub](https://github.com/appritechnologies/postkit/issues).

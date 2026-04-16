@@ -11,12 +11,20 @@ my-project/
 ├── db/                       # User's database code (git tracked)
 │   └── schema/               # Schema definitions
 │       ├── infra/            # Roles, schemas, extensions
+│       │   ├── roles.sql
+│       │   └── schemas.sql
 │       ├── extensions/
 │       ├── types/
 │       ├── enums/
 │       ├── tables/
+│       │   ├── 001_app_config.sql    # Numeric prefix (from import)
+│       │   ├── 002_app_user.sql
+│       │   └── ...
 │       ├── views/
+│       ├── materialized_views/
 │       ├── functions/
+│       │   ├── 001_get_current_user.sql
+│       │   └── ...
 │       ├── triggers/
 │       ├── indexes/
 │       ├── grants/           # Grant statements

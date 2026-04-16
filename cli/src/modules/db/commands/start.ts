@@ -96,6 +96,16 @@ export async function startCommand(options: StartOptions): Promise<void> {
       options.verbose,
     );
 
+    // Clean schema directory contents before starting fresh session
+    if (existsSync(config.schemaPath)) {
+      const entries = await fs.readdir(config.schemaPath, {withFileTypes: true});
+      for (const entry of entries) {
+        const fullPath = path.join(config.schemaPath, entry.name);
+        if (entry.name === ".pgschemaignore") continue;
+        await fs.rm(fullPath, {recursive: true, force: true});
+      }
+    }
+
     // Ensure .pgschemaignore exists in schema directory
     await ensurePgschemaIgnore(config.schemaPath);
 

@@ -11,6 +11,7 @@ import {infraCommand} from "./commands/infra";
 import {grantsCommand} from "./commands/grants";
 import {seedCommand} from "./commands/seed";
 import {deployCommand} from "./commands/deploy";
+import {importCommand} from "./commands/import";
 import {
   remoteListCommand,
   remoteAddCommand,
@@ -146,6 +147,19 @@ export function registerDbModule(program: Command): void {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};
         await deployCommand(options);
+      });
+    });
+
+  // Import command
+  db.command("import")
+    .description("Import an existing database into PostKit as a baseline migration")
+    .option("--url <string>", "Database URL to import from (default: localDbUrl from config)")
+    .option("--schema <string>", "PostgreSQL schema to import", "public")
+    .option("--name <string>", "Label for the baseline migration", "imported_baseline")
+    .action(async (cmdOptions) => {
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await importCommand(options);
       });
     });
 

@@ -77,6 +77,7 @@ The `db` module provides a **session-based database migration workflow** for saf
 | [`infra`](/docs/modules/db/commands/infra) | Manage infrastructure SQL |
 | [`grants`](/docs/modules/db/commands/grants) | Manage grant statements |
 | [`seed`](/docs/modules/db/commands/seed) | Manage seed data |
+| [`import`](/docs/modules/db/commands/import) | Import existing database as baseline |
 
 ## Important Notes
 
@@ -108,12 +109,15 @@ db/schema/
 ├── types/              # Custom types
 ├── enums/              # ENUM types
 ├── tables/             # CREATE TABLE, ALTER TABLE
-├── views/              # CREATE VIEW, CREATE MATERIALIZED VIEW
+├── views/              # CREATE VIEW
+├── materialized_views/ # CREATE MATERIALIZED VIEW
 ├── functions/          # CREATE FUNCTION
 ├── triggers/           # CREATE TRIGGER
 ├── indexes/             # CREATE INDEX
 └── constraints/        # PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK
 ```
+
+**File naming:** When importing via `postkit db import`, files are automatically prefixed with numeric ordering (e.g. `001_users.sql`, `002_posts.sql`) based on the pgschema dump order. For manually created files, any naming convention works — files are sorted alphabetically within each directory.
 
 **Supported:** Tables, views, functions, triggers, indexes, constraints, enums, domains, sequences
 
@@ -130,7 +134,7 @@ db/schema/
 ### Execution Order
 
 1. **Pre-migration:** `infra/` (roles, schemas, extensions)
-2. **Migration:** pgschema processes types → enums → tables → views → functions → triggers → indexes → constraints
+2. **Migration:** pgschema processes types → enums → tables → views → materialized_views → functions → triggers → indexes → constraints
 3. **Post-migration:** `grants/` (permissions) → `seeds/` (data)
 
 ## Prerequisites
