@@ -7,6 +7,7 @@ import {promptConfirm} from "../../../common/prompt";
 import {PostkitError} from "../../../common/errors";
 import {getDbConfig, getTmpImportDir, getCommittedMigrationsPath} from "../utils/db-config";
 import {hasActiveSession} from "../utils/session";
+import {addCommittedMigration} from "../utils/committed";
 import {testConnection, getTableCount, createDatabase} from "../services/database";
 import {checkPgschemaInstalled, deletePlanFile} from "../services/pgschema";
 import {checkDbmateInstalled, createMigrationFile, runCommittedMigrate} from "../services/dbmate";
@@ -117,7 +118,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     if (existsSync(config.schemaPath)) {
       const schemaFiles = await countSqlFiles(config.schemaPath);
       if (schemaFiles > 0) {
-        warnings.push(`Schema directory (${config.schemaPath}) already has ${schemaFiles} SQL file(s) — they will be overwritten.`);
+        warnings.push(`Schema directory (${config.schemaPath}) has ${schemaFiles} SQL file(s) — it will be CLEARED and replaced with imported schema files.`);
       }
     }
 
@@ -126,7 +127,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     if (existsSync(migrationsDir)) {
       const migrationFiles = await countSqlFiles(migrationsDir);
       if (migrationFiles > 0) {
-        warnings.push(`Migrations directory (${migrationsDir}) already has ${migrationFiles} migration file(s) — they will be overwritten.`);
+        warnings.push(`Migrations directory (${migrationsDir}) has ${migrationFiles} migration file(s) — it will be CLEARED and replaced with the baseline migration.`);
       }
     }
 
@@ -190,6 +191,15 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     if (options.dryRun) {
       spinner.info("Dry run — skipping normalization");
     } else {
+      // Clear schema directory before normalizing (keep .pgschemaignore)
+      if (existsSync(config.schemaPath)) {
+        const entries = await fs.readdir(config.schemaPath, {withFileTypes: true});
+        for (const entry of entries) {
+          if (entry.name === ".pgschemaignore") continue;
+          await fs.rm(path.join(config.schemaPath, entry.name), {recursive: true, force: true});
+        }
+      }
+
       spinner.start("Normalizing schema files...");
       const normalizeResult = await normalizeDumpForPostkit(tmpDir, config.schemaPath, schemaName, targetUrl);
       spinner.succeed(`Normalized into ${normalizeResult.filesCreated.length} file(s)`);
@@ -209,6 +219,17 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       const baselineDDL = await generateBaselineDDL(config.schemaPath, schemaName);
       spinner.succeed("Baseline DDL generated");
 
+      // Clear migrations directory before creating baseline migration
+      const migrationsDir = getCommittedMigrationsPath();
+      if (existsSync(migrationsDir)) {
+        const entries = await fs.readdir(migrationsDir);
+        for (const entry of entries) {
+          if (entry.endsWith(".sql")) {
+            await fs.unlink(path.join(migrationsDir, entry));
+          }
+        }
+      }
+
       // Create migration file
       const migrationFile = await createMigrationFile(
         migrationName,
@@ -220,24 +241,21 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       logger.success(`Baseline migration created: ${migrationFile.name}`);
       logger.debug(`  Path: ${migrationFile.path}`, options.verbose);
 
-      // Step 6: Sync migration state with source database
-      logger.step(7, 8, "Syncing migration state...");
-
-      spinner.start("Inserting migration tracking record...");
-      try {
-        await syncMigrationState(targetUrl, migrationFile.timestamp);
-        spinner.succeed("Migration tracking record inserted");
-      } catch (error) {
-        spinner.warn("Could not insert migration tracking record");
-        logger.warn(
-          `  ${error instanceof Error ? error.message : String(error)}`,
-        );
-        logger.warn("  The baseline migration file was created but the source database may not recognize it.");
-        logger.warn("  You may need to manually insert the record into schema_migrations.");
-      }
+      // Track in committed state
+      await addCommittedMigration({
+        migrationFile: {
+          name: migrationFile.name,
+          path: migrationFile.path,
+          timestamp: migrationFile.timestamp,
+        },
+        description: `Baseline import (${schemaName})`,
+        sessionMigrations: [],
+        committedAt: new Date().toISOString(),
+        deployed: false,
+      });
 
       // Step 7: Set up local database
-      logger.step(8, 8, "Setting up local database...");
+      logger.step(7, 8, "Setting up local database...");
 
       spinner.start("Creating local database...");
       try {
@@ -263,6 +281,22 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       } else {
         spinner.warn("Could not apply baseline migration to local database");
         logger.warn(`  ${migrateResult.output}`);
+      }
+
+      // Step 8: Sync migration state with source database (only after successful local apply)
+      logger.step(8, 8, "Syncing migration state...");
+
+      spinner.start("Inserting migration tracking record...");
+      try {
+        await syncMigrationState(targetUrl, migrationFile.timestamp);
+        spinner.succeed("Migration tracking record inserted");
+      } catch (error) {
+        spinner.warn("Could not insert migration tracking record");
+        logger.warn(
+          `  ${error instanceof Error ? error.message : String(error)}`,
+        );
+        logger.warn("  The baseline migration file was created but the source database may not recognize it.");
+        logger.warn("  You may need to manually insert the record into schema_migrations.");
       }
     }
 
