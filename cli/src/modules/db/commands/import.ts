@@ -15,6 +15,7 @@ import {
   normalizeDumpForPostkit,
   generateBaselineDDL,
   syncMigrationState,
+  applyInfraToDatabase,
 } from "../services/schema-importer";
 import type {CommandOptions} from "../../../common/types";
 
@@ -243,6 +244,15 @@ export async function importCommand(options: ImportOptions): Promise<void> {
         spinner.succeed("Local database created");
       } catch {
         spinner.warn("Local database may already exist — continuing");
+      }
+
+      // Apply infra SQL (roles, schemas) before running migration
+      spinner.start("Applying infrastructure SQL to local database...");
+      try {
+        await applyInfraToDatabase(config.localDbUrl, config.schemaPath);
+        spinner.succeed("Infrastructure SQL applied");
+      } catch {
+        spinner.warn("Could not apply infrastructure SQL — continuing");
       }
 
       spinner.start("Applying baseline migration to local database...");

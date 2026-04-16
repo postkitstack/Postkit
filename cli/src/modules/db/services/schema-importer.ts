@@ -11,6 +11,67 @@ import {generateSchemaSQLAndFingerprint} from "./schema-generator";
 const {Client} = pg;
 
 /**
+ * Parse schema.sql \i include directives to determine file ordering per directory.
+ * Returns a Map where key = directory name (e.g. "tables") and value = ordered filenames.
+ */
+async function parseSchemaIncludes(
+  dumpDir: string,
+): Promise<Map<string, string[]>> {
+  const orderMap = new Map<string, string[]>();
+  const schemaSQLPath = path.join(dumpDir, "schema.sql");
+
+  if (!existsSync(schemaSQLPath)) {
+    return orderMap;
+  }
+
+  const content = await fs.readFile(schemaSQLPath, "utf-8");
+  const includeRegex = /^\\i\s+(.+?\/([^/]+\.sql))$/gm;
+  let match: RegExpExecArray | null;
+
+  while ((match = includeRegex.exec(content)) !== null) {
+    const dirName = path.dirname(match[1]!);
+    const fileName = match[2]!;
+
+    if (!orderMap.has(dirName)) {
+      orderMap.set(dirName, []);
+    }
+    orderMap.get(dirName)!.push(fileName);
+  }
+
+  return orderMap;
+}
+
+/**
+ * Rename SQL files in each directory with zero-padded numeric prefixes
+ * based on the order determined from schema.sql.
+ */
+async function addNumericPrefixes(
+  dumpDir: string,
+  orderMap: Map<string, string[]>,
+): Promise<void> {
+  for (const [dirName, files] of orderMap) {
+    const dirPath = path.join(dumpDir, dirName);
+    if (!existsSync(dirPath)) continue;
+
+    const width = String(files.length).length;
+    const padWidth = Math.max(width, 3); // minimum 3 digits
+
+    for (let i = 0; i < files.length; i++) {
+      const originalName = files[i]!;
+      const originalPath = path.join(dirPath, originalName);
+
+      if (!existsSync(originalPath)) continue;
+
+      const prefix = String(i + 1).padStart(padWidth, "0");
+      const newName = `${prefix}_${originalName}`;
+      const newPath = path.join(dirPath, newName);
+
+      await fs.rename(originalPath, newPath);
+    }
+  }
+}
+
+/**
  * Run pgschema dump --multi-file to dump a database schema into a temp directory.
  */
 export async function runPgschemaDump(
@@ -51,7 +112,14 @@ export async function runPgschemaDump(
   // List all produced files
   const files = await listFilesRecursive(outputDir);
 
-  return {dumpDir: outputDir, files};
+  // Rename files with numeric prefixes based on \i order in schema.sql
+  const orderMap = await parseSchemaIncludes(outputDir);
+  await addNumericPrefixes(outputDir, orderMap);
+
+  // Re-list files after renaming
+  const renamedFiles = await listFilesRecursive(outputDir);
+
+  return {dumpDir: outputDir, files: renamedFiles};
 }
 
 /**
@@ -340,7 +408,7 @@ export async function normalizeDumpForPostkit(
  * Apply all SQL files from infra/ to a database.
  * This ensures roles and schemas exist before pgschema validates the schema SQL.
  */
-async function applyInfraToDatabase(databaseUrl: string, schemaPath: string): Promise<void> {
+export async function applyInfraToDatabase(databaseUrl: string, schemaPath: string): Promise<void> {
   const infraDir = path.join(schemaPath, "infra");
   if (!existsSync(infraDir)) return;
 
