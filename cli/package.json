@@ -21,7 +21,10 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "postkit": "tsx src/index.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "postkit",
@@ -54,8 +57,10 @@
     "@types/inquirer": "^9.0.0",
     "@types/node": "^20.0.0",
     "@types/pg": "^8.11.0",
+    "@vitest/coverage-v8": "^4.1.4",
     "tsup": "^8.5.1",
     "tsx": "^4.7.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.4"
   }
 }
