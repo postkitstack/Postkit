@@ -22,7 +22,7 @@ export async function startPostgres(imageTag = "16-alpine"): Promise<TestDatabas
       POSTGRES_PASSWORD: "postkit",
     })
     .withExposedPorts(5432)
-    .withStartupTimeout(60_000)
+    .withStartupTimeout(30_000)
     .start();
 
   const host = container.getHost();
