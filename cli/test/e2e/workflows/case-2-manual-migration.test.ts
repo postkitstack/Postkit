@@ -12,22 +12,18 @@ import {
   type TestDatabase,
 } from "../helpers/test-database";
 import {tableExists, queryDatabase} from "../helpers/db-query";
-import {
-  installFixtureSections,
-  writeTableSchema,
-  writeRlsFile,
-  writeTriggerFile,
-} from "../helpers/schema-builder";
+import {installFixtureSchema, FIXTURE_TABLES} from "../helpers/schema-builder";
 
 /**
  * Case 2: Initial Empty DB with Manual Migration
  *
- * Start with empty DBs. Install partial fixture schema (category only).
- * Run the plan/apply cycle, then add a manual migration for the product table.
+ * Both local and remote start empty.
+ * Install the FULL fixture schema and plan/apply it first.
+ * Then create an additional manual migration on top using the `migration` command.
  *
- * Flow: start → plan → apply → create manual migration → apply → commit → deploy
+ * Flow: start → plan → apply → migration <name> → apply → commit → deploy
  */
-describe("Case 2: Empty DB with manual migration — start → plan → apply → manual migration → apply → commit → deploy", () => {
+describe("Case 2: Empty DB with manual migration — start → plan → apply → migration → apply → commit → deploy", () => {
   let localDb: TestDatabase;
   let remoteDb: TestDatabase;
   let project: TestProject;
@@ -43,20 +39,8 @@ describe("Case 2: Empty DB with manual migration — start → plan → apply �
       remoteName: "dev",
     });
 
-    // Install only core + category table (not product — that comes via manual migration)
-    await installFixtureSections(project, ["infra", "core"]);
-    await writeTableSchema(project, "01_category", `CREATE TABLE public.category (
-    id UUID PRIMARY KEY DEFAULT public.gen_random_uuid(),
-    name CHARACTER VARYING(100) NOT NULL,
-    description TEXT,
-    is_deleted BOOLEAN DEFAULT false NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT category_name_check CHECK ((length(TRIM(BOTH FROM name)) > 0))
-);
-CREATE INDEX idx_category_name ON public.category(name);
-CREATE INDEX idx_category_is_deleted ON public.category(is_deleted);
-`);
+    // Install the FULL fixture schema (category + product + RLS + triggers + functions + views)
+    await installFixtureSchema(project);
   });
 
   afterAll(async () => {
@@ -75,17 +59,18 @@ CREATE INDEX idx_category_is_deleted ON public.category(is_deleted);
     expect(result.stdout).toContain("Migration session started");
   });
 
-  // ── Step 2: Plan (category table) ───────────────────────────────────
+  // ── Step 2: Plan (full fixture schema) ──────────────────────────────
 
-  it("generates a plan for category table", async () => {
+  it("generates a plan for the full fixture schema", async () => {
     const result = await runCli(["db", "plan"], {cwd: project.rootDir});
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("category");
+    expect(result.stdout).toContain("product");
   });
 
-  // ── Step 3: Apply (category table) ──────────────────────────────────
+  // ── Step 3: Apply (full fixture schema) ─────────────────────────────
 
-  it("applies the plan — creates category table in local DB", async () => {
+  it("applies the fixture schema to local DB", async () => {
     const result = await runCli(["db", "apply", "--force"], {
       cwd: project.rootDir,
     });
@@ -93,22 +78,45 @@ CREATE INDEX idx_category_is_deleted ON public.category(is_deleted);
     expect(result.stdout).toContain("applied");
   });
 
-  it("verifies category table exists in local DB", async () => {
-    const exists = await tableExists(localDb.url, "category");
-    expect(exists).toBe(true);
+  it("verifies all fixture tables exist in local DB", async () => {
+    for (const table of FIXTURE_TABLES) {
+      const exists = await tableExists(localDb.url, table);
+      expect(exists, `Table '${table}' should exist in local DB`).toBe(true);
+    }
   });
 
-  // ── Step 4: Create manual migration (product table) ─────────────────
+  it("verifies RLS is enabled on fixture tables", async () => {
+    const rows = await queryDatabase(
+      localDb.url,
+      `SELECT tablename, rowsecurity FROM pg_tables
+       WHERE schemaname = 'public' AND tablename = ANY($1)`,
+      [FIXTURE_TABLES as unknown as string[]],
+    );
+    for (const row of rows) {
+      const {tablename, rowsecurity} = row as {
+        tablename: string;
+        rowsecurity: boolean;
+      };
+      expect(
+        rowsecurity,
+        `Table '${tablename}' should have RLS enabled`,
+      ).toBe(true);
+    }
+  });
 
-  it("creates a manual migration file", async () => {
+  // ── Step 4: Create manual migration (additional change on top) ──────
+
+  it("creates a manual migration using the migration command", async () => {
     const result = await runCli(
-      ["db", "migration", "add_product_table", "--force"],
+      ["db", "migration", "add_product_tags", "--force"],
       {cwd: project.rootDir},
     );
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Manual migration created");
 
-    // Overwrite the template with full product SQL (table + RLS + trigger)
+    // Inject SQL into the template placeholder created by the migration command.
+    // Template has: "-- Add your SQL migration here\n-- Examples:\n..."
+    // We replace only that placeholder, keeping SET search_path and -- migrate:down intact.
     const fs = await import("fs/promises");
     const path = await import("path");
     const sessionDir = path.join(project.dbDir, "session");
@@ -116,49 +124,33 @@ CREATE INDEX idx_category_is_deleted ON public.category(is_deleted);
     const sqlFiles = files.filter((f) => f.endsWith(".sql"));
     expect(sqlFiles.length).toBeGreaterThan(0);
 
-    // Find the manual migration file (most recently created)
-    const migrationPath = path.join(
-      sessionDir,
-      sqlFiles[sqlFiles.length - 1]!,
-    );
-    await fs.writeFile(
-      migrationPath,
-      `-- migrate:up
-CREATE TABLE public.product (
-    id UUID PRIMARY KEY DEFAULT public.gen_random_uuid(),
-    name CHARACTER VARYING(200) NOT NULL,
-    sku CHARACTER VARYING(50) NOT NULL,
-    category_id UUID NOT NULL REFERENCES public.category(id) ON DELETE RESTRICT,
-    price DOUBLE PRECISION NOT NULL CHECK (price >= 0),
-    status VARCHAR(15) NOT NULL DEFAULT 'draft'
-        CHECK ((status)::text = ANY (ARRAY['draft', 'published', 'archived'])),
+    const migrationPath = path.join(sessionDir, sqlFiles[sqlFiles.length - 1]!);
+    let content = await fs.readFile(migrationPath, "utf-8");
+
+    // Replace the placeholder comment block with actual SQL
+    content = content.replace(
+      /-- Add your SQL migration here[\s\S]*?(?=\n-- migrate:down)/,
+      `-- Tag table for categorizing products
+CREATE TABLE tag (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name CHARACTER VARYING(50) NOT NULL,
     is_deleted BOOLEAN DEFAULT false NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT product_name_check CHECK ((length(TRIM(BOTH FROM name)) > 0))
+    CONSTRAINT tag_name_check CHECK ((length(TRIM(BOTH FROM name)) > 0))
 );
-CREATE INDEX idx_product_sku ON public.product(sku);
-CREATE INDEX idx_product_category_id ON public.product(category_id);
-CREATE INDEX idx_product_status ON public.product(status);
-CREATE INDEX idx_product_is_deleted ON public.product(is_deleted);
+CREATE INDEX idx_tag_name ON tag(name);
+CREATE INDEX idx_tag_is_deleted ON tag(is_deleted);
 
-ALTER TABLE public.product ENABLE ROW LEVEL SECURITY;
-CREATE POLICY product_readonly_select ON public.product
-    FOR SELECT TO readonly
-    USING (is_deleted = false AND status = 'published');
-CREATE POLICY product_editor_select ON public.product
-    FOR SELECT TO editor
-    USING (is_deleted = false);
-
-CREATE TRIGGER update_product_timestamp
-    BEFORE UPDATE ON public.product FOR EACH ROW
-    EXECUTE FUNCTION public.update_updated_at();
-
--- migrate:down
-DROP TABLE IF EXISTS public.product;
-`,
-      "utf-8",
+-- Many-to-many relationship between products and tags
+CREATE TABLE product_tag (
+    product_id UUID NOT NULL REFERENCES product(id) ON DELETE CASCADE,
+    tag_id UUID NOT NULL REFERENCES tag(id) ON DELETE CASCADE,
+    PRIMARY KEY (product_id, tag_id)
+);`,
     );
+
+    await fs.writeFile(migrationPath, content, "utf-8");
   });
 
   // ── Step 5: Apply manual migration ──────────────────────────────────
@@ -171,58 +163,37 @@ DROP TABLE IF EXISTS public.product;
     expect(result.stdout).toContain("applied");
   });
 
-  it("verifies product table was created in local DB", async () => {
-    const exists = await tableExists(localDb.url, "product");
-    expect(exists).toBe(true);
+  it("verifies manual migration tables exist in local DB", async () => {
+    expect(await tableExists(localDb.url, "tag")).toBe(true);
+    expect(await tableExists(localDb.url, "product_tag")).toBe(true);
   });
 
-  it("verifies product table has CHECK constraints", async () => {
+  it("verifies tag table has CHECK constraint", async () => {
     const checks = await queryDatabase(
       localDb.url,
       `SELECT constraint_name FROM information_schema.table_constraints
-       WHERE table_name = 'product' AND constraint_type = 'CHECK'`,
+       WHERE table_name = 'tag' AND constraint_type = 'CHECK'`,
     );
     expect(checks.length).toBeGreaterThan(0);
   });
 
-  it("verifies RLS is enabled on product table", async () => {
-    const rows = await queryDatabase(
+  it("verifies product_tag FK references are correct", async () => {
+    const fks = await queryDatabase(
       localDb.url,
-      `SELECT rowsecurity FROM pg_tables
-       WHERE schemaname = 'public' AND tablename = 'product'`,
+      `SELECT tc.table_name, kcu.column_name, ccu.table_name AS foreign_table
+       FROM information_schema.table_constraints tc
+       JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+       JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name
+       WHERE tc.table_name = 'product_tag' AND tc.constraint_type = 'FOREIGN KEY'`,
     );
-    expect(rows[0]?.rowsecurity).toBe(true);
-  });
-
-  it("verifies indexes on product table", async () => {
-    const indexes = await queryDatabase(
-      localDb.url,
-      `SELECT indexname FROM pg_indexes WHERE tablename = 'product' AND schemaname = 'public'`,
-    );
-    const indexNames = indexes.map(
-      (r) => (r as {indexname: string}).indexname,
-    );
-    expect(indexNames).toContain("idx_product_sku");
-    expect(indexNames).toContain("idx_product_category_id");
-  });
-
-  it("verifies trigger on product table", async () => {
-    const triggers = await queryDatabase(
-      localDb.url,
-      `SELECT trigger_name FROM information_schema.triggers
-       WHERE event_object_table = 'product' AND trigger_schema = 'public'`,
-    );
-    const names = triggers.map(
-      (r) => (r as {trigger_name: string}).trigger_name,
-    );
-    expect(names).toContain("update_product_timestamp");
+    expect(fks.length).toBe(2);
   });
 
   // ── Step 6: Commit ──────────────────────────────────────────────────
 
   it("commits all migrations", async () => {
     const result = await runCli(
-      ["db", "commit", "--force", "--message", "add_category_and_product"],
+      ["db", "commit", "--force", "--message", "fixture_schema_plus_tags"],
       {cwd: project.rootDir},
     );
     expect(result.exitCode).toBe(0);
@@ -241,29 +212,41 @@ DROP TABLE IF EXISTS public.product;
     expect(result.stdout).toContain("completed");
   });
 
-  it("verifies both tables exist in remote DB", async () => {
-    expect(await tableExists(remoteDb.url, "category")).toBe(true);
-    expect(await tableExists(remoteDb.url, "product")).toBe(true);
+  it("verifies fixture tables exist in remote DB", async () => {
+    for (const table of FIXTURE_TABLES) {
+      const exists = await tableExists(remoteDb.url, table);
+      expect(exists, `Fixture table '${table}' should exist in remote`).toBe(
+        true,
+      );
+    }
   });
 
-  it("verifies RLS on product in remote DB", async () => {
+  it("verifies manual migration tables exist in remote DB", async () => {
+    expect(await tableExists(remoteDb.url, "tag")).toBe(true);
+    expect(await tableExists(remoteDb.url, "product_tag")).toBe(true);
+  });
+
+  it("verifies RLS on fixture tables in remote DB", async () => {
     const rows = await queryDatabase(
       remoteDb.url,
-      `SELECT rowsecurity FROM pg_tables
-       WHERE schemaname = 'public' AND tablename = 'product'`,
+      `SELECT tablename FROM pg_tables
+       WHERE schemaname = 'public' AND rowsecurity = true AND tablename = ANY($1)`,
+      [FIXTURE_TABLES as unknown as string[]],
     );
-    expect(rows[0]?.rowsecurity).toBe(true);
+    expect(rows.length).toBe(FIXTURE_TABLES.length);
   });
 
-  it("verifies trigger on product in remote DB", async () => {
+  it("verifies triggers exist in remote DB", async () => {
     const triggers = await queryDatabase(
       remoteDb.url,
       `SELECT trigger_name FROM information_schema.triggers
-       WHERE event_object_table = 'product' AND trigger_schema = 'public'`,
+       WHERE trigger_schema = 'public'
+       ORDER BY trigger_name`,
     );
     const names = triggers.map(
       (r) => (r as {trigger_name: string}).trigger_name,
     );
+    expect(names).toContain("update_category_timestamp");
     expect(names).toContain("update_product_timestamp");
   });
 });
