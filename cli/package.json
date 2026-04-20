@@ -24,7 +24,15 @@
     "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "npm run build && vitest run --config vitest.e2e.config.ts",
+    "test:e2e:watch": "npm run build && vitest --config vitest.e2e.config.ts",
+    "test:e2e:file": "npm run build && vitest run --config vitest.e2e.config.ts",
+    "test:e2e:smoke": "npm run build && vitest run --config vitest.e2e.config.ts test/e2e/smoke/",
+    "test:e2e:errors": "npm run build && vitest run --config vitest.e2e.config.ts test/e2e/error-handling/",
+    "test:e2e:workflows": "npm run build && vitest run --config vitest.e2e.config.ts test/e2e/workflows/",
+    "test:e2e:fast": "npm run build && vitest run --config vitest.e2e.config.ts test/e2e/smoke/ test/e2e/error-handling/ test/e2e/workflows/remote-management.test.ts",
+    "test:all": "npm run test && npm run test:e2e"
   },
   "keywords": [
     "postkit",
@@ -58,6 +66,8 @@
     "@types/node": "^20.0.0",
     "@types/pg": "^8.11.0",
     "@vitest/coverage-v8": "^4.1.4",
+    "execa": "^9.6.1",
+    "testcontainers": "^11.14.0",
     "tsup": "^8.5.1",
     "tsx": "^4.7.0",
     "typescript": "^5.4.0",
