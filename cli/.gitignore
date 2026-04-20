@@ -25,3 +25,8 @@ dist/
 .postkit/plan
 .postkit/schema
 postkit.config.json
+
+# Test Coverage
+coverage/
+
+
