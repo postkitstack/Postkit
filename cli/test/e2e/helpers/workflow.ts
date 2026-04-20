@@ -79,20 +79,28 @@ export async function createManualMigration(
   name: string,
   sql: string,
 ): Promise<void> {
+  // List existing files before creating the new one
+  const sessionDir = path.join(project.dbDir, "session");
+  const filesBefore = await fs.readdir(sessionDir);
+  const sqlBefore = new Set(filesBefore.filter((f) => f.endsWith(".sql")));
+
+  // Wait 1 second to ensure dbmate timestamp is unique (dbmate uses second-precision)
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+
   const result = await runCli(["db", "migration", name, "--force"], {
     cwd: project.rootDir,
   });
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("Manual migration created");
 
-  // Find the created migration file by name (the migration name is sanitized to snake_case)
-  const safeName = name.replace(/[^a-z0-9]/gi, "_").toLowerCase();
-  const sessionDir = path.join(project.dbDir, "session");
-  const files = await fs.readdir(sessionDir);
-  const match = files.find((f) => f.endsWith(`_${safeName}.sql`));
-  expect(match, `Migration file matching "*_${safeName}.sql" should exist in session/`).toBeDefined();
+  // Find the NEW file (not present before the command)
+  const filesAfter = await fs.readdir(sessionDir);
+  const newFiles = filesAfter.filter(
+    (f) => f.endsWith(".sql") && !sqlBefore.has(f),
+  );
+  expect(newFiles.length, "Expected exactly 1 new migration file").toBe(1);
 
-  const migrationPath = path.join(sessionDir, match!);
+  const migrationPath = path.join(sessionDir, newFiles[0]!);
   let content = await fs.readFile(migrationPath, "utf-8");
 
   // Replace the placeholder "-- Add your SQL migration here..." with actual SQL
