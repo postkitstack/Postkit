@@ -13,10 +13,49 @@ Test Runner (vitest)
 ## Quick Start
 
 ```bash
-# Prerequisites: Docker must be running
-npm run test:e2e              # Build + run all E2E tests
+# Prerequisites: Docker must be running (only for Docker-based tests)
+npm run test:e2e              # Build + run ALL 54 E2E tests
+npm run test:e2e:fast         # Build + run only non-Docker tests (~2s)
 npm run test:e2e:watch        # Build + watch mode
 npm run test:all              # Unit tests + E2E tests
+```
+
+## Running Individual Tests
+
+### NPM Scripts (recommended)
+
+| Script | What It Runs | Docker | Time |
+|--------|-------------|--------|------|
+| `npm run test:e2e` | All 12 files, 54 tests | Yes | ~35s |
+| `npm run test:e2e:fast` | Smoke + errors + remotes (20 tests) | No | ~2s |
+| `npm run test:e2e:smoke` | Smoke tests only (7 tests) | No | ~1s |
+| `npm run test:e2e:errors` | All error handling (8 tests) | No* | ~2s |
+| `npm run test:e2e:workflows` | All workflows (26 tests) | Yes | ~30s |
+| `npm run test:e2e:watch` | Watch mode (rerun on changes) | Yes | — |
+
+*\* `test:e2e:errors` includes `conflict-detection` which needs Docker. The other 3 error files don't.*
+
+### Run a Single File
+
+```bash
+# Pass any file path after the config flag
+npm run test:e2e:file -- test/e2e/workflows/happy-path.test.ts
+npm run test:e2e:file -- test/e2e/workflows/deploy-workflow.test.ts
+npm run test:e2e:file -- test/e2e/error-handling/no-session.test.ts
+```
+
+### Run a Single Test Case by Name
+
+```bash
+# Match test name with -t flag
+npm run test:e2e:file -- -t "starts a migration session" test/e2e/workflows/happy-path.test.ts
+```
+
+### Skip the Build (if already built)
+
+```bash
+# All npm scripts build first. To skip the build:
+npx vitest run --config vitest.e2e.config.ts test/e2e/workflows/happy-path.test.ts
 ```
 
 ## Test Categories
@@ -38,202 +77,171 @@ npm run test:all              # Unit tests + E2E tests
 
 ---
 
-## E2E Workflows
-
-### 1. Smoke Tests
-
-**File:** `test/e2e/smoke/basic-commands.test.ts`
-**Docker:** Not required
-
-Tests basic CLI behavior without any database or project setup.
-
-| Test Case | Command | Verifies |
-|-----------|---------|----------|
-| Version | `postkit --version` | Prints semver, exit 0 |
-| Help | `postkit --help` | Shows "PostKit" and "db" |
-| DB help | `postkit db --help` | Lists all subcommands |
-| Status without init | `postkit db status` | Non-zero exit, error message |
-| Status JSON without init | `postkit db status --json` | Non-zero exit |
-| Init | `postkit init --force` | Creates config, `.postkit/`, `.gitignore` |
-| Re-init | `postkit init --force` | Re-initialization succeeds |
-
-### 2. Remote Management
-
-**File:** `test/e2e/workflows/remote-management.test.ts`
-**Docker:** Not required
-
-Tests the `db remote` subcommand group for managing named database remotes.
-
-| Test Case | Commands | Verifies |
-|-----------|----------|----------|
-| List remotes | `db remote list` | Shows configured remote name |
-| Add remote | `db remote add staging <url>` | Config file updated with new remote |
-| Add with default | `db remote add prod <url> --default` | Remote marked as default |
-| Set default | `db remote use staging` | Default flag switches |
-| Remove remote | `db remote remove staging --force` | Remote removed from config |
-
-### 3. Happy Path Workflow
-
-**File:** `test/e2e/workflows/happy-path.test.ts`
-**Docker:** Required (1 container)
-
-The core migration workflow — the most important E2E test.
-
-```
-┌─────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌─────────┐
-│  Seed    │───▶│  Start   │───▶│Migration │───▶│  Apply   │───▶│ Commit  │
-│Remote DB │    │ Session  │    │  Create  │    │  Local   │    │Session  │
-└─────────┘    └──────────┘    └──────────┘    └──────────┘    └─────────┘
-```
-
-| Step | Command | Verification |
-|------|---------|--------------|
-| 1 | `db start --force` | Session started, `session.json` created |
-| 2 | `db status --json` | `sessionActive: true` |
-| 3 | `db migration add_posts_table --force` | Migration file created in `.postkit/db/session/` |
-| 4 | `db apply --force` | Migration applied, output contains "applied" |
-| 5 | Direct DB query | `posts` table exists in database |
-| 6 | `db commit --force --message "add_posts_table"` | Session cleaned up, committed migration exists |
-| 7 | `db status --json` | `sessionActive: false`, `pendingCommittedMigrations >= 1` |
-
-### 4. Abort Workflow
-
-**File:** `test/e2e/workflows/abort-workflow.test.ts`
-**Docker:** Required (1 container)
-
-Verifies that aborting a session cleans up all state properly.
-
-```
-┌─────────┐    ┌──────────┐    ┌─────────┐    ┌──────────────┐
-│  Start  │───▶│  Abort   │───▶│ Verify  │───▶│ Start Again  │
-│ Session │    │ --force  │    │ Cleanup │    │  (optional)  │
-└─────────┘    └──────────┘    └─────────┘    └──────────────┘
-```
-
-| Step | Command | Verification |
-|------|---------|--------------|
-| 1 | `db start --force` | Session active |
-| 2 | `db abort --force` | Output contains "aborted" |
-| 3 | Filesystem check | `session.json` deleted |
-| 4 | `db status --json` | `sessionActive: false` |
-| 5 | `db start --force` | New session can start after abort |
-
-### 5. Manual Migration Workflow
-
-**File:** `test/e2e/workflows/manual-migration.test.ts`
-**Docker:** Required (1 container)
-
-Tests creating a migration by hand (not via schema diff), applying it, and committing.
-
-| Step | Command | Verification |
-|------|---------|--------------|
-| 1 | `db start --force` | Session started |
-| 2 | `db migration add_categories --force` | Migration file created |
-| 3 | Overwrite with real SQL | File contains CREATE TABLE |
-| 4 | `db apply --force` | Migration applied |
-| 5 | Direct DB query | `categories` table exists |
-| 6 | `db commit --force --message "add_categories"` | Committed, session cleaned up |
-
-### 6. Deploy Workflow
-
-**File:** `test/e2e/workflows/deploy-workflow.test.ts`
-**Docker:** Required (2 containers — local + remote)
-
-The most complex test. Verifies the full migration lifecycle including deployment to a separate remote database. The `deploy` command requires `localDbUrl !== remoteUrl`, hence two containers.
-
-```
-┌─────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌─────────┐
-│  Start  │───▶│Migration │───▶│  Apply   │───▶│  Commit  │───▶│  Deploy  │───▶│ Verify  │
-│Session  │    │  Create  │    │  Local   │    │  Session │    │  Remote  │    │ Remote  │
-└─────────┘    └──────────┘    └──────────┘    └──────────┘    └──────────┘    └─────────┘
-```
-
-| Step | Command | Verification |
-|------|---------|--------------|
-| 1 | `db start --force` | Session started from remote DB |
-| 2 | `db migration <name> --force` | Migration file created |
-| 3 | `db apply --force` | Migration applied to local DB |
-| 4 | `db commit --force --message <msg>` | Migration committed |
-| 5 | `db deploy --force` | Deployed to remote (includes dry-run) |
-| 6 | Direct query on remote | `deploy_test` table exists in remote DB |
-
-### 7. Import Workflow
-
-**File:** `test/e2e/workflows/import-workflow.test.ts`
-**Docker:** Required (1 container)
-
-Tests importing an existing database into PostKit as a baseline migration.
-
-| Step | Command | Verification |
-|------|---------|--------------|
-| 1 | Seed DB with tables | `categories` and `products` created |
-| 2 | `db import --force --name "initial_baseline"` | Import completes |
-| 3 | Check `schema/tables/` | SQL files generated from DB dump |
-| 4 | Check `.postkit/db/migrations/` | Baseline migration file created |
-
-### 8. Infra & Seeds Workflow
-
-**File:** `test/e2e/workflows/infra-grants-seeds.test.ts`
-**Docker:** Required (1 container)
-
-Tests infrastructure SQL (extensions, roles) and seed data management.
-
-| Step | Command | Verification |
-|------|---------|--------------|
-| 1 | `db infra` | "No infra files found" (empty initially) |
-| 2 | `db seed` | "No seed files found" (empty initially) |
-| 3 | Write infra file | `schema/infra/extensions.sql` created |
-| 4 | `db infra` | Output shows `uuid-ossp` extension |
-| 5 | `db infra --apply` | Extension installed in database |
-| 6 | Write seed file | `schema/seeds/initial_data.sql` created |
-| 7 | `db seed` | Output shows seed data |
-| 8 | `db seed --apply` | Seeds applied to database |
-
 ---
 
-## Error Handling Tests
+## Test Details — What Each Test Verifies
 
-### Invalid Configuration
+### 1. Smoke Tests (`test/e2e/smoke/basic-commands.test.ts`)
 
-**File:** `test/e2e/error-handling/invalid-config.test.ts`
-**Docker:** Not required
+**Docker: Not required | Tests: 7 | Run: ~1s**
 
-| Test | Setup | Expected |
-|------|-------|----------|
-| Missing config | Empty directory | Error: "not initialized" |
-| No remotes | Config with empty remotes | Error mentions "remote" |
-| Invalid DB URL | Config with bad URL | Non-zero exit code |
+Tests basic CLI behavior without any database. Verifies the binary works, help/flags are correct, and init scaffolds the right files.
 
-### No Active Session
+| Test | What It Tests | Why It Matters |
+|------|---------------|----------------|
+| `prints version` | `--version` outputs semver and exits 0 | Binary is built correctly, package.json version is accessible |
+| `prints help` | `--help` shows "PostKit" and "db" module | Commander.js registration works, user can discover commands |
+| `prints db subcommand help` | `db --help` lists start, plan, apply, commit, deploy, status, abort | All db subcommands are registered and discoverable |
+| `db status fails without config file` | `db status` in empty dir exits non-zero with "not initialized" | CLI prevents running commands before `postkit init` |
+| `db status --json fails without config file` | `db status --json` in empty dir exits non-zero | JSON mode also guards against uninitialized projects |
+| `init creates project structure` | `init --force` creates `postkit.config.json`, `.postkit/db/`, `.postkit/auth/`, `.gitignore` | Project scaffold is complete and config file has correct structure (db + auth sections) |
+| `init --force re-initializes existing project` | `init --force` overwrites existing config | Force flag allows CI/automation to re-initialize without prompts |
 
-**File:** `test/e2e/error-handling/no-session.test.ts`
-**Docker:** Not required
+### 2. Remote Management (`test/e2e/workflows/remote-management.test.ts`)
 
-| Test | Command | Expected |
-|------|---------|----------|
-| Plan without session | `db plan` | Error: "No active migration session" |
-| Apply without session | `db apply --force` | Error: "No active migration session" |
-| Commit without session | `db commit --force -m "x"` | Error: "No active migration session" |
-| Abort without session | `db abort --force` | Graceful: "No active migration session" |
+**Docker: Not required | Tests: 5 | Run: ~1s**
 
-### Connection Failures
+Tests the `db remote` subcommand group. Each test creates a fresh project to avoid state leakage.
 
-**File:** `test/e2e/error-handling/connection-failure.test.ts`
-**Docker:** Not required
+| Test | What It Tests | Why It Matters |
+|------|---------------|----------------|
+| `lists remotes` | `db remote list` shows configured remote name | Users can verify their remotes are set up correctly |
+| `adds a new remote` | `db remote add staging <url>` writes to `postkit.config.json` | Remotes persist across commands — config file is the source of truth |
+| `adds a remote with --default flag` | `db remote add prod <url> --default` sets `default: true` | Default remote is auto-selected by `db start` and `db deploy` when no `--remote` flag given |
+| `sets default remote with 'use'` | `db remote use staging` switches default flag | Users can change the default without removing/re-adding |
+| `removes a remote with --force` | `db remote remove staging --force` deletes from config | Cleanup of stale remotes; `--force` skips confirmation prompt |
 
-| Test | Setup | Expected |
-|------|-------|----------|
-| Unreachable remote | Config pointing to invalid host | Non-zero exit, connection error |
+### 3. Happy Path Workflow (`test/e2e/workflows/happy-path.test.ts`)
 
-### Conflict Detection
+**Docker: Required (1 container) | Tests: 7 | Run: ~4s**
 
-**File:** `test/e2e/error-handling/conflict-detection.test.ts`
-**Docker:** Required (1 container)
+The most important E2E test. Validates the complete migration session lifecycle — the primary user workflow.
 
-| Test | Scenario | Expected |
-|------|----------|----------|
-| Duplicate session | `db start` when session already active | Error: "active migration session already exists" |
-| Unapplied changes | `db commit` without `db apply` first | Error: "not been applied" |
+```
+Seed DB → Start Session → Create Migration → Apply → Commit → Verify
+```
+
+| Test | What It Tests | Why It Matters |
+|------|---------------|----------------|
+| `starts a migration session` | `db start --force` clones remote DB to local, creates `session.json` | Core session creation — all subsequent commands depend on this |
+| `shows active session in status --json` | `db status --json` returns `{sessionActive: true}` | Machine-readable status for CI/automation integration |
+| `creates a migration file manually` | `db migration add_posts_table --force` creates SQL file in `.postkit/db/session/` | Users can write custom SQL migrations without schema diff |
+| `applies migration to local database` | Overwrites template with real `CREATE TABLE` SQL, then `db apply --force` runs dbmate | dbmate executes the SQL against local DB; migration tracking works |
+| `verifies table was created in database` | Direct `pg` query confirms `posts` table exists | The migration actually modified the database — not just file operations |
+| `commits the session migration` | `db commit --force --message "add_posts_table"` merges session files, cleans up session | Committed migrations are ready for deploy; session state is reset |
+| `shows no active session after commit` | `db status --json` returns `sessionActive: false`, `pendingCommittedMigrations >= 1` | Commit properly resets session and tracks pending deployments |
+
+### 4. Abort Workflow (`test/e2e/workflows/abort-workflow.test.ts`)
+
+**Docker: Required (1 container) | Tests: 5 | Run: ~3s**
+
+Verifies that aborting a session fully cleans up all artifacts — session files, plan, local database clone.
+
+| Test | What It Tests | Why It Matters |
+|------|---------------|----------------|
+| `starts a session` | `db start --force` creates session | Precondition for abort test |
+| `aborts the session` | `db abort --force` outputs "aborted" | Abort command completes without error |
+| `verifies cleanup after abort` | `session.json` no longer exists on disk | No orphaned session state left behind |
+| `shows no active session after abort` | `db status --json` returns `sessionActive: false` | Status reflects the aborted state correctly |
+| `can start a new session after abort` | `db start --force` succeeds after abort (re-creates DB) | Abort doesn't permanently break the project — users can recover |
+
+### 5. Manual Migration Workflow (`test/e2e/workflows/manual-migration.test.ts`)
+
+**Docker: Required (1 container) | Tests: 5 | Run: ~3s**
+
+Tests the manual migration path (user writes SQL by hand) as opposed to schema-diff-driven migrations.
+
+| Test | What It Tests | Why It Matters |
+|------|---------------|----------------|
+| `starts a session` | `db start --force` creates session | Session required before creating migrations |
+| `creates a manual migration file` | `db migration add_categories --force` creates template file | Template has proper `-- migrate:up/down` markers for dbmate |
+| `applies the manual migration` | Overwrites template with `CREATE TABLE` SQL, runs `db apply --force` | Manual SQL is executed against local DB via dbmate |
+| `verifies table was created in database` | Direct query confirms `categories` table exists | Manual migration SQL actually ran |
+| `commits the manual migration` | `db commit --force --message "add_categories"` merges and cleans up | Manual migrations go through same commit flow as plan-based ones |
+
+### 6. Deploy Workflow (`test/e2e/workflows/deploy-workflow.test.ts`)
+
+**Docker: Required (2 containers) | Tests: 5 | Run: ~8s**
+
+The most complex test. Spins up two separate PostgreSQL containers because `deploy` requires `localDbUrl !== remoteUrl`. Tests the full cycle: develop locally, deploy to remote.
+
+```
+Start Session → Create Migration → Apply Local → Commit → Deploy Remote → Verify Remote
+```
+
+| Test | What It Tests | Why It Matters |
+|------|---------------|----------------|
+| `starts a session from remote` | `db start --force` clones remote DB | Remote cloning works across different hosts |
+| `creates and applies a manual migration` | Migration created, SQL written, `db apply --force` runs | Local development cycle works |
+| `commits the migration` | `db commit --force --message` merges session files | Migration is packaged for deployment |
+| `deploys to remote database` | `db deploy --force` runs dry-run on local clone, then applies to remote | Deploy includes safety dry-run; remote DB receives changes |
+| `verifies table exists in remote database` | Direct query on **remote** container confirms `deploy_test` table | Changes actually reached the remote database, not just local |
+
+### 7. Import Workflow (`test/e2e/workflows/import-workflow.test.ts`)
+
+**Docker: Required (1 container) | Tests: 3 | Run: ~20s**
+
+Tests importing an existing database into PostKit. This is typically the first command users run on an existing project — it creates baseline schema files and a baseline migration.
+
+| Test | What It Tests | Why It Matters |
+|------|---------------|----------------|
+| `imports an existing database` | Seeds DB with `categories` + `products` tables, runs `db import --force` | pgschema dump + normalize works; baseline migration is created |
+| `creates schema files from imported database` | `schema/tables/` contains SQL files after import | Database schema is decomposed into PostKit's file structure |
+| `creates baseline migration in committed migrations` | `.postkit/db/migrations/` has a baseline SQL file | Baseline migration tracks the imported state for future diffs |
+
+### 8. Infra & Seeds Workflow (`test/e2e/workflows/infra-grants-seeds.test.ts`)
+
+**Docker: Required (1 container) | Tests: 7 | Run: ~3s**
+
+Tests infrastructure SQL (extensions, roles, schemas) and seed data management. These run outside the plan/apply cycle.
+
+| Test | What It Tests | Why It Matters |
+|------|---------------|----------------|
+| `shows no infra files initially` | `db infra` reports no files found | Handles empty state gracefully |
+| `shows no seed files initially` | `db seed` reports no files found | Handles empty state gracefully |
+| `creates infra file and shows generated SQL` | Writes `uuid-ossp` extension to `schema/infra/`, `db infra` shows it | Infra SQL is detected and rendered for review |
+| `applies infra to local database` | `db infra --apply` installs `uuid-ossp` extension | Extension is actually created in PostgreSQL |
+| `creates seed file and shows generated SQL` | Writes INSERT SQL to `schema/seeds/`, `db seed` shows it | Seed SQL is detected and rendered for review |
+| `applies seeds to local database` | `db seed --apply` executes INSERT statements | Seed data is inserted into the table |
+| `verifies seed data in database` | Direct query confirms 2 seeded rows exist | Seeds were actually persisted |
+
+### 9. Invalid Configuration (`test/e2e/error-handling/invalid-config.test.ts`)
+
+**Docker: Not required | Tests: 3 | Run: ~0.5s**
+
+| Test | What It Tests | Why It Matters |
+|------|---------------|----------------|
+| `fails when config file is missing` | `db status` in empty directory | CLI guards against running before `postkit init` |
+| `fails when no remotes configured` | Config with empty `remotes` object | `db start` requires at least one remote to clone from |
+| `fails when localDbUrl is invalid` | Config with unreachable host:port | Connection errors surface clearly, not as unhandled exceptions |
+
+### 10. No Active Session (`test/e2e/error-handling/no-session.test.ts`)
+
+**Docker: Not required | Tests: 4 | Run: ~0.5s**
+
+| Test | What It Tests | Why It Matters |
+|------|---------------|----------------|
+| `plan fails without active session` | `db plan` → "No active migration session" | Plan requires a session with a local DB clone |
+| `apply fails without active session` | `db apply --force` → "No active migration session" | Apply can't run without a local target database |
+| `commit fails without active session` | `db commit --force -m "x"` → "No active migration session" | Commit requires an active session with applied changes |
+| `abort gracefully handles no session` | `db abort --force` → succeeds, shows "No active migration session" | Abort is idempotent — safe to run even without a session |
+
+### 11. Connection Failure (`test/e2e/error-handling/connection-failure.test.ts`)
+
+**Docker: Not required | Tests: 1 | Run: ~0.1s**
+
+| Test | What It Tests | Why It Matters |
+|------|---------------|----------------|
+| `start fails when remote is unreachable` | Config pointing to `nonexistent-host-99999` | Network errors are caught and reported, not crashed |
+
+### 12. Conflict Detection (`test/e2e/error-handling/conflict-detection.test.ts`)
+
+**Docker: Required (1 container) | Tests: 2 | Run: ~3s**
+
+| Test | What It Tests | Why It Matters |
+|------|---------------|----------------|
+| `start fails when session already active` | Second `db start` → "active migration session already exists" | Prevents accidental session overwrite |
+| `commit fails when changes not applied` | `db commit` without `db apply` → "not been applied" | Prevents committing untested changes |
 
 ---
 
@@ -250,7 +258,7 @@ const result = await runCli(["db", "start", "--force"], {cwd: project.rootDir});
 // result.stdout, result.stderr, result.exitCode, result.failed
 ```
 
-Spawns `node dist/index.js` via `execa`. Disables color output (`FORCE_COLOR=0`) for reliable assertions. Captures stdout, stderr, and exit code.
+Spawns `node dist/index.js` via `execa`. Disables color (`FORCE_COLOR=0`), unsets `EDITOR`/`VISUAL` (prevents editor spawn hang), captures stdout/stderr/exit code.
 
 #### `test-project.ts` — Temp Project Manager
 
@@ -263,26 +271,28 @@ const project = await createTestProject({
 // project.rootDir, project.configPath, project.dbDir, project.schemaPath
 ```
 
-Creates an isolated temp directory with `postkit.config.json`, `.postkit/db/` structure, and schema directories. Auto-cleaned in `afterAll`.
+Creates an isolated temp directory with `postkit.config.json`, `.postkit/db/` structure, and schema directories. Auto-cleaned in `afterAll`. Also provides `fileExists()`, `readFile()`, `readJson()`, `writeFile()` for verification.
 
 #### `test-database.ts` — Docker PostgreSQL
 
 ```typescript
-const db = await startPostgres();           // Single container
-const {local, remote} = await startPostgresPair();  // Two containers
+const db = await startPostgres();                      // Single container
+const {local, remote} = await startPostgresPair();     // Two containers (for deploy)
 ```
 
-Uses testcontainers to spin up `postgres:16-alpine` containers. Each test suite gets a fresh, isolated database.
+Uses testcontainers to spin up `postgres:16-alpine` containers. Waits for PostgreSQL readiness log before returning. Each test suite gets a fresh, isolated database.
 
 #### `db-query.ts` — Database Verification
 
 ```typescript
-await tableExists(db.url, "posts");        // boolean
-await getTableRowCount(db.url, "posts");   // number
-await executeSql(db.url, "CREATE TABLE…"); // void
+await tableExists(db.url, "posts");           // boolean
+await getTableRowCount(db.url, "posts");      // number
+await getTableCount(db.url);                  // number
+await executeSql(db.url, "CREATE TABLE…");    // void
+await ensureDatabaseExists(db.url);           // re-create after abort drops it
 ```
 
-Direct `pg` queries for verifying database state after CLI commands. Uses fresh connections per query.
+Direct `pg` queries for verifying database state after CLI commands. Uses fresh connections per query. `ensureDatabaseExists()` connects to the default `postgres` DB to re-create the test database (needed after `abort` drops it).
 
 #### `schema-builder.ts` — Schema File Scaffolding
 
@@ -292,7 +302,7 @@ await writeInfraFile(project, "extensions", SIMPLE_INFRA_SQL);
 await writeSeedFile(project, "initial_data", SIMPLE_SEED_SQL);
 ```
 
-Creates SQL files in the correct schema subdirectories. Provides DDL templates (`SIMPLE_TABLE_DDL`, `SECOND_TABLE_DDL`, etc.).
+Creates SQL files in the correct schema subdirectories (`tables/`, `infra/`, `grants/`, `seeds/`). Provides ready-made DDL templates.
 
 ### Vitest Configuration
 
@@ -336,34 +346,6 @@ test/e2e/
 
 ---
 
-## Running Tests
-
-### Non-Docker Tests (fast, ~2s)
-
-```bash
-npx vitest run --config vitest.e2e.config.ts \
-  test/e2e/smoke/ \
-  test/e2e/error-handling/invalid-config.test.ts \
-  test/e2e/error-handling/no-session.test.ts \
-  test/e2e/workflows/remote-management.test.ts
-```
-
-### Docker Tests (requires Docker, ~30-60s)
-
-```bash
-# Make sure Docker is running first
-npm run test:e2e
-```
-
-### Individual Workflows
-
-```bash
-npx vitest run --config vitest.e2e.config.ts test/e2e/workflows/happy-path.test.ts
-npx vitest run --config vitest.e2e.config.ts test/e2e/workflows/deploy-workflow.test.ts
-```
-
----
-
 ## CI/CD Integration
 
 ```yaml
@@ -400,12 +382,14 @@ GitHub Actions runners have Docker pre-installed, so testcontainers works withou
    import {runCli} from "../helpers/cli-runner";
    import {createTestProject, cleanupTestProject} from "../helpers/test-project";
    import {startPostgres, stopPostgres} from "../helpers/test-database";
-   import {executeSql, tableExists} from "../helpers/db-query";
+   import {executeSql, tableExists, ensureDatabaseExists} from "../helpers/db-query";
    ```
 
-3. Use `--force` flag on commands that have interactive prompts (`apply`, `commit`, `abort`, `migration`, `deploy`, `remote remove`). Note: `start` does not have `--force`.
+3. Use `--force` flag on commands that support it (`start`, `apply`, `commit`, `abort`, `migration`, `deploy`, `import`, `remote remove`).
 
-4. Always clean up in `afterAll`:
+4. After `db abort` drops the database, call `ensureDatabaseExists(db.url)` before re-seeding.
+
+5. Always clean up in `afterAll`:
    ```typescript
    afterAll(async () => {
      if (project) await cleanupTestProject(project);
@@ -413,4 +397,4 @@ GitHub Actions runners have Docker pre-installed, so testcontainers works withou
    });
    ```
 
-5. Run: `npm run test:e2e`
+6. Run: `npx vitest run --config vitest.e2e.config.ts test/e2e/your-new-test.test.ts`
