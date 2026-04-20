@@ -1,4 +1,4 @@
-import {GenericContainer, type StartedTestContainer} from "testcontainers";
+import {GenericContainer, type StartedTestContainer, Wait} from "testcontainers";
 
 export interface TestDatabase {
   container: StartedTestContainer;
@@ -12,7 +12,8 @@ export interface TestDatabase {
 
 /**
  * Start an isolated PostgreSQL container for E2E testing.
- * Uses GenericContainer from testcontainers v11 (PostgreSqlContainer is a separate package).
+ * Uses GenericContainer from testcontainers v11 with a health check
+ * to ensure PostgreSQL is ready before returning.
  */
 export async function startPostgres(imageTag = "16-alpine"): Promise<TestDatabase> {
   const container = await new GenericContainer(`postgres:${imageTag}`)
@@ -22,7 +23,10 @@ export async function startPostgres(imageTag = "16-alpine"): Promise<TestDatabas
       POSTGRES_PASSWORD: "postkit",
     })
     .withExposedPorts(5432)
-    .withStartupTimeout(30_000)
+    .withWaitStrategy(
+      Wait.forLogMessage("database system is ready to accept connections", 2),
+    )
+    .withStartupTimeout(60_000)
     .start();
 
   const host = container.getHost();

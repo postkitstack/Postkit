@@ -28,6 +28,7 @@ export function registerDbModule(program: Command): void {
   db.command("start")
     .description("Clone remote database to local and start a migration session")
     .option("--remote <name>", "Target remote name")
+    .option("-f, --force", "Skip confirmation prompts")
     .action(async (cmdOptions) => {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};
@@ -156,6 +157,7 @@ export function registerDbModule(program: Command): void {
     .option("--url <string>", "Database URL to import from (default: localDbUrl from config)")
     .option("--schema <string>", "PostgreSQL schema to import", "public")
     .option("--name <string>", "Label for the baseline migration", "imported_baseline")
+    .option("-f, --force", "Skip confirmation prompts")
     .action(async (cmdOptions) => {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};

@@ -1,4 +1,6 @@
 import {describe, it, expect, beforeAll, afterAll} from "vitest";
+import fs from "fs";
+import path from "path";
 import {runCli} from "../helpers/cli-runner";
 import {createTestProject, cleanupTestProject, type TestProject, fileExists} from "../helpers/test-project";
 import {startPostgres, stopPostgres, type TestDatabase} from "../helpers/test-database";
@@ -50,25 +52,18 @@ describe("Import workflow — import existing database", () => {
   });
 
   it("creates schema files from imported database", async () => {
-    // The import should create normalized schema files in schema/tables/
-    const fs = await import("fs/promises");
-    const path = await import("path");
     const tablesDir = path.join(project.schemaPath, "tables");
 
     if (fs.existsSync(tablesDir)) {
-      const files = await fs.readdir(tablesDir);
+      const files = fs.readdirSync(tablesDir);
       const sqlFiles = files.filter((f) => f.endsWith(".sql"));
-      // Should have files for categories and products tables
       expect(sqlFiles.length).toBeGreaterThan(0);
     }
   });
 
   it("creates baseline migration in committed migrations", async () => {
-    const fs = await import("fs/promises");
-    const path = await import("path");
     const migrationsDir = path.join(project.dbDir, "migrations");
-
-    const files = await fs.readdir(migrationsDir);
+    const files = fs.readdirSync(migrationsDir);
     const sqlFiles = files.filter((f) => f.endsWith(".sql"));
     expect(sqlFiles.length).toBeGreaterThan(0);
   });

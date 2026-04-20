@@ -20,6 +20,27 @@ export async function queryDatabase<T = Record<string, unknown>>(
 }
 
 /**
+ * Ensure a database exists. Connects to the default `postgres` DB
+ * and creates the target database if missing.
+ * Useful after abort which may drop the database.
+ */
+export async function ensureDatabaseExists(url: string): Promise<void> {
+  const parsed = new URL(url);
+  const dbName = parsed.pathname.slice(1); // remove leading /
+  parsed.pathname = "/postgres"; // connect to default DB
+
+  const client = new pg.Client({connectionString: parsed.toString()});
+  try {
+    await client.connect();
+    await client.query(`CREATE DATABASE "${dbName}"`);
+  } catch {
+    // Database already exists — that's fine
+  } finally {
+    await client.end();
+  }
+}
+
+/**
  * Execute a SQL statement (no return value).
  */
 export async function executeSql(url: string, sql: string): Promise<void> {

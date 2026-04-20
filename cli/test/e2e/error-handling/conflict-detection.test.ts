@@ -2,7 +2,7 @@ import {describe, it, expect, beforeAll, afterAll} from "vitest";
 import {runCli} from "../helpers/cli-runner";
 import {createTestProject, cleanupTestProject, type TestProject} from "../helpers/test-project";
 import {startPostgres, stopPostgres, type TestDatabase} from "../helpers/test-database";
-import {executeSql} from "../helpers/db-query";
+import {executeSql, ensureDatabaseExists} from "../helpers/db-query";
 
 describe("Error handling — conflict detection", () => {
   let db: TestDatabase;
@@ -34,15 +34,20 @@ describe("Error handling — conflict detection", () => {
     expect(result2.exitCode).not.toBe(0);
     expect(result2.stdout + result2.stderr).toContain("active migration session already exists");
 
-    // Clean up
+    // Clean up — abort the active session
     await runCli(["db", "abort", "--force"], {cwd: project.rootDir});
   });
 
   it("commit fails when changes not applied", async () => {
-    // Start a session without applying anything
-    await runCli(["db", "start", "--force"], {cwd: project.rootDir});
+    // Re-create the database and table since abort may have dropped it
+    await ensureDatabaseExists(db.url);
+    await executeSql(db.url, `CREATE TABLE IF NOT EXISTS conflict_base (id SERIAL PRIMARY KEY);`);
 
-    // Try committing directly — should fail
+    // Start a fresh session
+    const startResult = await runCli(["db", "start", "--force"], {cwd: project.rootDir});
+    expect(startResult.exitCode).toBe(0);
+
+    // Try committing directly — should fail because nothing was applied
     const result = await runCli(
       ["db", "commit", "--force", "--message", "should_fail"],
       {cwd: project.rootDir},

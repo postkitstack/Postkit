@@ -2,7 +2,7 @@ import {describe, it, expect, beforeAll, afterAll} from "vitest";
 import {runCli} from "../helpers/cli-runner";
 import {createTestProject, cleanupTestProject, type TestProject, fileExists} from "../helpers/test-project";
 import {startPostgres, stopPostgres, type TestDatabase} from "../helpers/test-database";
-import {executeSql} from "../helpers/db-query";
+import {executeSql, ensureDatabaseExists} from "../helpers/db-query";
 
 describe("Abort workflow — start → abort → verify cleanup", () => {
   let db: TestDatabase;
@@ -56,6 +56,13 @@ describe("Abort workflow — start → abort → verify cleanup", () => {
   });
 
   it("can start a new session after abort", async () => {
+    // Re-create database and re-seed since abort drops the local (=remote) database
+    await ensureDatabaseExists(db.url);
+    await executeSql(
+      db.url,
+      `CREATE TABLE IF NOT EXISTS abort_test_table (id SERIAL PRIMARY KEY, val TEXT);`,
+    );
+
     const result = await runCli(["db", "start", "--force"], {cwd: project.rootDir});
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Migration session started");

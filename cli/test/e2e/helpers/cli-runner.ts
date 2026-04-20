@@ -40,6 +40,8 @@ export async function runCli(
         ...options.env,
         FORCE_COLOR: "0",
         NO_COLOR: "1",
+        EDITOR: "",
+        VISUAL: "",
       },
       timeout,
       reject: false,
