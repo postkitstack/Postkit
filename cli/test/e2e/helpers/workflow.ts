@@ -85,13 +85,14 @@ export async function createManualMigration(
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("Manual migration created");
 
-  // Find the created migration file
+  // Find the created migration file by name (the migration name is sanitized to snake_case)
+  const safeName = name.replace(/[^a-z0-9]/gi, "_").toLowerCase();
   const sessionDir = path.join(project.dbDir, "session");
   const files = await fs.readdir(sessionDir);
-  const sqlFiles = files.filter((f) => f.endsWith(".sql"));
-  expect(sqlFiles.length).toBeGreaterThan(0);
+  const match = files.find((f) => f.endsWith(`_${safeName}.sql`));
+  expect(match, `Migration file matching "*_${safeName}.sql" should exist in session/`).toBeDefined();
 
-  const migrationPath = path.join(sessionDir, sqlFiles[sqlFiles.length - 1]!);
+  const migrationPath = path.join(sessionDir, match!);
   let content = await fs.readFile(migrationPath, "utf-8");
 
   // Replace the placeholder "-- Add your SQL migration here..." with actual SQL
