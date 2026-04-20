@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
 import os from "os";
+import {runCli} from "./cli-runner";
 
 export interface TestProject {
   rootDir: string;
@@ -19,61 +20,50 @@ export interface CreateTestProjectOptions {
 }
 
 /**
- * Create an isolated temp project directory with all PostKit scaffolding.
- * The CLI resolves `projectRoot` from `process.cwd()`, so tests must
- * pass `cwd: project.rootDir` when spawning CLI commands.
+ * Create an isolated temp project by running `postkit init --force`,
+ * then patching the generated config with test-specific DB URLs and remotes.
+ *
+ * This tests the real init command instead of manually scaffolding files.
  */
 export async function createTestProject(
   config: CreateTestProjectOptions,
 ): Promise<TestProject> {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "postkit-e2e-"));
+
+  // Run the real init command
+  const result = await runCli(["init", "--force"], {cwd: rootDir});
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `postkit init failed (exit ${result.exitCode}): ${result.stderr || result.stdout}`,
+    );
+  }
+
   const postkitDir = path.join(rootDir, ".postkit");
   const dbDir = path.join(postkitDir, "db");
   const schemaPath = path.join(rootDir, config.schemaPath ?? "schema");
+  const configPath = path.join(rootDir, "postkit.config.json");
 
-  // Create directory structure
-  await fs.mkdir(dbDir, {recursive: true});
-  await fs.mkdir(path.join(dbDir, "session"), {recursive: true});
-  await fs.mkdir(path.join(dbDir, "migrations"), {recursive: true});
+  // Ensure schema directory exists (init doesn't create it)
   await fs.mkdir(schemaPath, {recursive: true});
 
-  // Write runtime files (matching what `postkit init` creates)
-  await fs.writeFile(
-    path.join(dbDir, "committed.json"),
-    JSON.stringify({migrations: []}, null, 2),
-  );
-  await fs.writeFile(path.join(dbDir, "plan.sql"), "");
-  await fs.writeFile(path.join(dbDir, "schema.sql"), "");
-
-  // Write postkit.config.json
+  // Read the generated config and merge in test-specific values
+  const existingConfig = JSON.parse(await fs.readFile(configPath, "utf-8"));
   const remoteName = config.remoteName ?? "test-remote";
-  const postkitConfig = {
-    db: {
-      localDbUrl: config.localDbUrl,
-      schemaPath: config.schemaPath ?? "schema",
-      schema: "public",
-      remotes: config.remoteDbUrl
-        ? {
-            [remoteName]: {
-              url: config.remoteDbUrl,
-              default: true,
-              addedAt: new Date().toISOString(),
-            },
-          }
-        : {},
-    },
-    auth: {
-      source: {url: "", adminUser: "", adminPass: "", realm: ""},
-      target: {url: "", adminUser: "", adminPass: ""},
-    },
-  };
 
-  await fs.writeFile(
-    path.join(rootDir, "postkit.config.json"),
-    JSON.stringify(postkitConfig, null, 2),
-  );
+  existingConfig.db.localDbUrl = config.localDbUrl;
+  if (config.remoteDbUrl) {
+    existingConfig.db.remotes = {
+      [remoteName]: {
+        url: config.remoteDbUrl,
+        default: true,
+        addedAt: new Date().toISOString(),
+      },
+    };
+  }
 
-  return {rootDir, configPath: path.join(rootDir, "postkit.config.json"), postkitDir, dbDir, schemaPath};
+  await fs.writeFile(configPath, JSON.stringify(existingConfig, null, 2));
+
+  return {rootDir, configPath, postkitDir, dbDir, schemaPath};
 }
 
 /**
