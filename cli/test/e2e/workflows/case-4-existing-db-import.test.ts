@@ -13,7 +13,15 @@ import {
   stopPostgresPair,
   type TestDatabase,
 } from "../helpers/test-database";
-import {executeSql, tableExists, queryDatabase} from "../helpers/db-query";
+import {executeSql, queryDatabase} from "../helpers/db-query";
+import {
+  startSession,
+  runPlan,
+  runApply,
+  runCommit,
+  runDeploy,
+  verifyViewsExist,
+} from "../helpers/workflow";
 
 /**
  * Case 4: Existing Database
@@ -22,7 +30,7 @@ import {executeSql, tableExists, queryDatabase} from "../helpers/db-query";
  * Import the schema, verify generated files, then make a change and
  * run the full plan → apply → commit → deploy cycle.
  *
- * Flow: import → verify schema files → plan → apply → commit → deploy
+ * Flow: import → verify schema files → start → plan → apply → commit → deploy
  */
 describe("Case 4: Existing DB — import → verify → plan → apply → commit → deploy", () => {
   let localDb: TestDatabase;
@@ -38,13 +46,11 @@ describe("Case 4: Existing DB — import → verify → plan → apply → commi
     await executeSql(
       remoteDb.url,
       `
-      -- Core utility function
       CREATE FUNCTION public.update_updated_at() RETURNS trigger
           LANGUAGE plpgsql AS $$
       BEGIN NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW; END;
       $$;
 
-      -- Category table (UUID PK, CHECK constraint, indexes, is_deleted)
       CREATE TABLE public.category (
           id UUID PRIMARY KEY DEFAULT public.gen_random_uuid(),
           name CHARACTER VARYING(100) NOT NULL,
@@ -57,7 +63,6 @@ describe("Case 4: Existing DB — import → verify → plan → apply → commi
       CREATE INDEX idx_category_name ON public.category(name);
       CREATE INDEX idx_category_is_deleted ON public.category(is_deleted);
 
-      -- Product table (FK, price CHECK, status CHECK, indexes)
       CREATE TABLE public.product (
           id UUID PRIMARY KEY DEFAULT public.gen_random_uuid(),
           name CHARACTER VARYING(200) NOT NULL,
@@ -76,7 +81,6 @@ describe("Case 4: Existing DB — import → verify → plan → apply → commi
       CREATE INDEX idx_product_status ON public.product(status);
       CREATE INDEX idx_product_is_deleted ON public.product(is_deleted);
 
-      -- Triggers
       CREATE TRIGGER update_category_timestamp
           BEFORE UPDATE ON public.category FOR EACH ROW
           EXECUTE FUNCTION public.update_updated_at();
@@ -84,7 +88,6 @@ describe("Case 4: Existing DB — import → verify → plan → apply → commi
           BEFORE UPDATE ON public.product FOR EACH ROW
           EXECUTE FUNCTION public.update_updated_at();
 
-      -- Seed data
       INSERT INTO public.category (id, name, description) VALUES
           ('a0000000-0000-0000-0000-000000000001'::UUID, 'Electronics', 'Electronic devices'),
           ('a0000000-0000-0000-0000-000000000002'::UUID, 'Furniture', 'Office furniture');
@@ -118,52 +121,32 @@ describe("Case 4: Existing DB — import → verify → plan → apply → commi
     expect(result.stdout).toContain("import complete");
   });
 
-  it("creates table schema files from import", async () => {
-    const tablesDir = path.join(project.schemaPath, "tables");
-    if (fs.existsSync(tablesDir)) {
-      const files = fs.readdirSync(tablesDir);
-      const sqlFiles = files.filter((f) => f.endsWith(".sql"));
-      expect(sqlFiles.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("creates function schema files from import", async () => {
-    const functionsDir = path.join(project.schemaPath, "functions");
-    if (fs.existsSync(functionsDir)) {
-      const files = fs.readdirSync(functionsDir);
-      const sqlFiles = files.filter((f) => f.endsWith(".sql"));
-      expect(sqlFiles.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("creates trigger schema files from import", async () => {
-    const triggersDir = path.join(project.schemaPath, "triggers");
-    if (fs.existsSync(triggersDir)) {
-      const files = fs.readdirSync(triggersDir);
-      const sqlFiles = files.filter((f) => f.endsWith(".sql"));
-      expect(sqlFiles.length).toBeGreaterThan(0);
-    }
+  it("creates schema files from import (tables, functions, triggers)", async () => {
+    const checkDir = (subdir: string) => {
+      const dir = path.join(project.schemaPath, subdir);
+      if (fs.existsSync(dir)) {
+        const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
+        expect(files.length, `${subdir}/ should have SQL files`).toBeGreaterThan(0);
+      }
+    };
+    checkDir("tables");
+    checkDir("functions");
+    checkDir("triggers");
   });
 
   it("creates baseline migration in committed migrations", async () => {
     const migrationsDir = path.join(project.dbDir, "migrations");
-    const files = fs.readdirSync(migrationsDir);
-    const sqlFiles = files.filter((f) => f.endsWith(".sql"));
-    expect(sqlFiles.length).toBeGreaterThan(0);
+    const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith(".sql"));
+    expect(files.length).toBeGreaterThan(0);
   });
 
-  // ── Step 2: Start session and make a schema change ──────────────────
+  // ── Step 2: Start session and add a new schema change ───────────────
 
   it("starts a session after import", async () => {
-    const result = await runCli(["db", "start", "--force"], {
-      cwd: project.rootDir,
-    });
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Migration session started");
+    await startSession(project);
   });
 
-  it("adds a new schema file (view) to trigger a diff", async () => {
-    // Add a view that doesn't exist in the remote DB yet
+  it("adds a new view schema file to trigger a diff", async () => {
     const viewDir = path.join(project.schemaPath, "view");
     fs.mkdirSync(viewDir, {recursive: true});
     fs.writeFileSync(
@@ -181,63 +164,34 @@ WHERE p.is_deleted = false AND c.is_deleted = false;
     );
   });
 
-  // ── Step 3: Plan the diff ───────────────────────────────────────────
+  // ── Step 3: Plan → Apply ────────────────────────────────────────────
 
   it("generates a plan for the new view", async () => {
-    const result = await runCli(["db", "plan"], {cwd: project.rootDir});
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("products_with_category");
+    const output = await runPlan(project);
+    expect(output).toContain("products_with_category");
   });
 
-  // ── Step 4: Apply ───────────────────────────────────────────────────
-
   it("applies the migration to local DB", async () => {
-    const result = await runCli(["db", "apply", "--force"], {
-      cwd: project.rootDir,
-    });
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("applied");
+    await runApply(project);
   });
 
   it("verifies view was created in local DB", async () => {
-    const rows = await queryDatabase(
-      localDb.url,
-      `SELECT table_name FROM information_schema.views
-       WHERE table_schema = 'public' AND table_name = 'products_with_category'`,
-    );
-    expect(rows.length).toBeGreaterThan(0);
+    await verifyViewsExist(localDb.url, ["products_with_category"], "local DB");
   });
 
-  // ── Step 5: Commit ──────────────────────────────────────────────────
+  // ── Step 4: Commit → Deploy ─────────────────────────────────────────
 
   it("commits the migration", async () => {
-    const result = await runCli(
-      ["db", "commit", "--force", "--message", "add_products_view"],
-      {cwd: project.rootDir},
-    );
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("committed");
+    await runCommit(project, "add_products_view");
     expect(fileExists(project, ".postkit/db/session.json")).toBe(false);
   });
 
-  // ── Step 6: Deploy to remote ────────────────────────────────────────
-
   it("deploys to remote database", async () => {
-    const result = await runCli(["db", "deploy", "--force"], {
-      cwd: project.rootDir,
-      timeout: 120_000,
-    });
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("completed");
+    await runDeploy(project);
   });
 
   it("verifies view exists in remote DB after deploy", async () => {
-    const rows = await queryDatabase(
-      remoteDb.url,
-      `SELECT table_name FROM information_schema.views
-       WHERE table_schema = 'public' AND table_name = 'products_with_category'`,
-    );
-    expect(rows.length).toBeGreaterThan(0);
+    await verifyViewsExist(remoteDb.url, ["products_with_category"], "remote DB");
   });
 
   it("verifies seed data is intact in remote DB", async () => {

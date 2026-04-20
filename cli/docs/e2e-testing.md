@@ -345,6 +345,32 @@ await writeSeedFile(project, "initial_data", seedSql);
 
 Copies the predefined fixture schema into the test project's schema directory, or writes individual SQL files. Provides constants: `FIXTURE_TABLES`, `FIXTURE_ROLES`, `FIXTURE_SEED_CATEGORY_IDS`.
 
+#### `workflow.ts` — Workflow Actions & DB Verification
+
+Reusable functions for common CLI operations and database verification. Used by all Case 1-4 workflow tests.
+
+**CLI Actions:**
+```typescript
+await startSession(project);                    // db start --force
+const output = await runPlan(project);          // db plan → returns stdout
+await runApply(project);                        // db apply --force
+await runCommit(project, "message");            // db commit --force --message
+await runDeploy(project);                       // db deploy --force
+const status = await getStatus(project);        // db status --json → parsed object
+await createManualMigration(project, "name", sql); // db migration + inject SQL into template
+```
+
+**Database Verification:**
+```typescript
+await verifyTablesExist(dbUrl, ["category", "product"], "label");
+await verifyRlsEnabled(dbUrl, ["category", "product"], "label");
+await verifyTriggersExist(dbUrl, ["update_category_timestamp"], "label");
+await verifyFunctionsExist(dbUrl, ["update_updated_at"], "label");
+await verifyViewsExist(dbUrl, ["products_with_category"], "label");
+await verifyIndexesExist(dbUrl, "product", ["idx_product_sku", "idx_product_category_id"]);
+await verifyFixtureSchema(dbUrl, "label");       // All of the above in one call
+```
+
 ### Vitest Configuration
 
 Two separate configs keep unit and E2E tests isolated:
@@ -378,7 +404,8 @@ test/e2e/
 │   ├── test-project.ts             # Temp project directories
 │   ├── test-database.ts            # Docker PostgreSQL containers
 │   ├── db-query.ts                 # Direct DB queries for verification
-│   └── schema-builder.ts           # Fixture schema install + schema file writers
+│   ├── schema-builder.ts           # Fixture schema install + schema file writers
+│   └── workflow.ts                 # Workflow actions + DB verification helpers
 ├── smoke/
 │   └── basic-commands.test.ts      # Version, help, init, status (no Docker)
 ├── workflows/
