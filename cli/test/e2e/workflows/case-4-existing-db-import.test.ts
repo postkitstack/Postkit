@@ -13,6 +13,7 @@ import {
   stopPostgresPair,
   type TestDatabase,
 } from "../helpers/test-database";
+import {installFixtureSections} from "../helpers/schema-builder";
 import {executeSql, queryDatabase} from "../helpers/db-query";
 import {
   startSession,
@@ -21,6 +22,7 @@ import {
   runCommit,
   runDeploy,
   verifyViewsExist,
+  getStatus,
 } from "../helpers/workflow";
 
 /**
@@ -140,10 +142,21 @@ describe("Case 4: Existing DB — import → verify → plan → apply → commi
     expect(files.length).toBeGreaterThan(0);
   });
 
-  // ── Step 2: Start session and add a new schema change ───────────────
+  // ── Step 2: Deploy baseline then start session ─────────────────────
+
+  it("deploys the baseline migration to register it as deployed", async () => {
+    // Import creates a baseline migration tracked in committed.json but not deployed.
+    // db start blocks when pending committed migrations exist, so deploy first.
+    await runDeploy(project);
+  });
 
   it("starts a session after import", async () => {
     await startSession(project);
+    // db start cleans the schema dir, so reinstall fixture schema (matches remote)
+    // Install everything except grants/seeds (not in the remote DB we seeded)
+    await installFixtureSections(project, [
+      "infra", "core", "tables", "rls", "trigger", "function",
+    ]);
   });
 
   it("adds a new view schema file to trigger a diff", async () => {
