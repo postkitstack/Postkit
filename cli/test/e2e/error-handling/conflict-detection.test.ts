@@ -10,7 +10,19 @@ describe("Error handling — conflict detection", () => {
 
   beforeAll(async () => {
     db = await startPostgres();
-    await executeSql(db.url, `CREATE TABLE conflict_base (id SERIAL PRIMARY KEY);`);
+    // Use fixture-style table (UUID PK, is_deleted pattern)
+    await executeSql(
+      db.url,
+      `
+      CREATE TABLE category (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name VARCHAR(100) NOT NULL,
+          is_deleted BOOLEAN DEFAULT false NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+      `,
+    );
 
     project = await createTestProject({
       localDbUrl: db.url,
@@ -41,7 +53,18 @@ describe("Error handling — conflict detection", () => {
   it("commit fails when changes not applied", async () => {
     // Re-create the database and table since abort may have dropped it
     await ensureDatabaseExists(db.url);
-    await executeSql(db.url, `CREATE TABLE IF NOT EXISTS conflict_base (id SERIAL PRIMARY KEY);`);
+    await executeSql(
+      db.url,
+      `
+      CREATE TABLE IF NOT EXISTS category (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name VARCHAR(100) NOT NULL,
+          is_deleted BOOLEAN DEFAULT false NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+      `,
+    );
 
     // Start a fresh session
     const startResult = await runCli(["db", "start", "--force"], {cwd: project.rootDir});

@@ -2,7 +2,8 @@ import {describe, it, expect, beforeAll, afterAll} from "vitest";
 import {runCli} from "../helpers/cli-runner";
 import {createTestProject, cleanupTestProject, type TestProject, fileExists} from "../helpers/test-project";
 import {startPostgres, stopPostgres, type TestDatabase} from "../helpers/test-database";
-import {executeSql, ensureDatabaseExists} from "../helpers/db-query";
+import {executeSql, ensureDatabaseExists, queryDatabase} from "../helpers/db-query";
+import {installFixtureSections} from "../helpers/schema-builder";
 
 describe("Abort workflow — start → abort → verify cleanup", () => {
   let db: TestDatabase;
@@ -11,10 +12,18 @@ describe("Abort workflow — start → abort → verify cleanup", () => {
   beforeAll(async () => {
     db = await startPostgres();
 
-    // Seed the remote DB so start has something to clone
+    // Seed the remote DB with a table that mirrors fixture schema patterns
     await executeSql(
       db.url,
-      `CREATE TABLE abort_test_table (id SERIAL PRIMARY KEY, val TEXT);`,
+      `
+      CREATE TABLE category (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(100) NOT NULL,
+        is_deleted BOOLEAN DEFAULT false NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+      `,
     );
 
     project = await createTestProject({
@@ -22,6 +31,9 @@ describe("Abort workflow — start → abort → verify cleanup", () => {
       remoteDbUrl: db.url,
       remoteName: "dev",
     });
+
+    // Install fixture schema sections for plan testing
+    await installFixtureSections(project, ["core", "tables", "rls", "trigger", "function", "view"]);
   });
 
   afterAll(async () => {
@@ -60,7 +72,15 @@ describe("Abort workflow — start → abort → verify cleanup", () => {
     await ensureDatabaseExists(db.url);
     await executeSql(
       db.url,
-      `CREATE TABLE IF NOT EXISTS abort_test_table (id SERIAL PRIMARY KEY, val TEXT);`,
+      `
+      CREATE TABLE category (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(100) NOT NULL,
+        is_deleted BOOLEAN DEFAULT false NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+      `,
     );
 
     const result = await runCli(["db", "start", "--force"], {cwd: project.rootDir});
