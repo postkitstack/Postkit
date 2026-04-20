@@ -30,7 +30,7 @@ describe("Infra, grants, and seeds workflow", () => {
       "core",
       "tables",
       "rls",
-      "grant-permissions",
+      "grants",
       "seed",
       "trigger",
       "function",

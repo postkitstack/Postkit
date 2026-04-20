@@ -30,7 +30,6 @@ import {
   verifyFunctionsExist,
   verifyViewsExist,
   verifyIndexesExist,
-  verifyFixtureSchema,
 } from "../helpers/workflow";
 
 /**
@@ -58,25 +57,6 @@ describe("Case 3: Double plan — start → plan → apply → add schema → pl
       remoteDbUrl: remoteDb.url,
       remoteName: "dev",
     });
-
-    // Start with only core + category table (partial schema)
-    await installFixtureSections(project, ["infra", "core"]);
-    await writeTableSchema(
-      project,
-      "01_category",
-      `CREATE TABLE public.category (
-    id UUID PRIMARY KEY DEFAULT public.gen_random_uuid(),
-    name CHARACTER VARYING(100) NOT NULL,
-    description TEXT,
-    is_deleted BOOLEAN DEFAULT false NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT category_name_check CHECK ((length(TRIM(BOTH FROM name)) > 0))
-);
-CREATE INDEX idx_category_name ON public.category(name);
-CREATE INDEX idx_category_is_deleted ON public.category(is_deleted);
-`,
-    );
   });
 
   afterAll(async () => {
@@ -89,6 +69,26 @@ CREATE INDEX idx_category_is_deleted ON public.category(is_deleted);
 
   it("starts a migration session from empty remote", async () => {
     await startSession(project);
+
+    // Install partial schema AFTER start — db start cleans the schema directory
+    // Start with only core + category table
+    await installFixtureSections(project, ["infra", "core"]);
+    await writeTableSchema(
+      project,
+      "01_category",
+      `CREATE TABLE public.category (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name CHARACTER VARYING(100) NOT NULL,
+    description TEXT,
+    is_deleted BOOLEAN DEFAULT false NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT category_name_check CHECK ((length(TRIM(BOTH FROM name)) > 0))
+);
+CREATE INDEX idx_category_name ON public.category(name);
+CREATE INDEX idx_category_is_deleted ON public.category(is_deleted);
+`,
+    );
   });
 
   // ── Step 2: First plan (category only) ──────────────────────────────
@@ -123,7 +123,7 @@ CREATE INDEX idx_category_is_deleted ON public.category(is_deleted);
       project,
       "02_product",
       `CREATE TABLE public.product (
-    id UUID PRIMARY KEY DEFAULT public.gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name CHARACTER VARYING(200) NOT NULL,
     sku CHARACTER VARYING(50) NOT NULL,
     category_id UUID NOT NULL REFERENCES public.category(id) ON DELETE RESTRICT,
@@ -246,7 +246,11 @@ WHERE p.is_deleted = false AND c.is_deleted = false;
     await runDeploy(project);
   });
 
-  it("verifies full fixture schema in remote DB", async () => {
-    await verifyFixtureSchema(remoteDb.url, "remote DB");
+  it("verifies deployed schema in remote DB", async () => {
+    await verifyTablesExist(remoteDb.url, ["category", "product"], "remote DB");
+    await verifyRlsEnabled(remoteDb.url, ["product"], "remote DB");
+    await verifyTriggersExist(remoteDb.url, ["update_product_timestamp"], "remote DB");
+    await verifyFunctionsExist(remoteDb.url, ["get_products_by_category"], "remote DB");
+    await verifyViewsExist(remoteDb.url, ["products_with_category"], "remote DB");
   });
 });

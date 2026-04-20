@@ -1,5 +1,5 @@
 CREATE TABLE public.product (
-    id UUID PRIMARY KEY DEFAULT public.gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name CHARACTER VARYING(200) NOT NULL,
     sku CHARACTER VARYING(50) NOT NULL,
     category_id UUID NOT NULL REFERENCES public.category(id) ON DELETE RESTRICT,

@@ -17,7 +17,7 @@ const FIXTURE_SCHEMA_DIR = path.resolve(__dirname, "..", "fixtures", "schema");
 /**
  * Copy the entire predefined fixture schema into the test project's schema dir.
  * This mirrors the real test-proj/schema structure with:
- *   infra/, core/, tables/, rls/, grant-permissions/, seed/, trigger/, function/, view/
+ *   infra/, core/, tables/, rls/, grants/, seed/, trigger/, function/, view/
  *
  * Use this for workflow tests that need a realistic schema.
  */
@@ -27,7 +27,7 @@ export async function installFixtureSchema(project: TestProject): Promise<void> 
 
 /**
  * Copy a subset of the fixture schema (only the named sections).
- * Sections: 'infra', 'core', 'tables', 'rls', 'grant-permissions', 'seed', 'trigger', 'function', 'view'
+ * Sections: 'infra', 'core', 'tables', 'rls', 'grants', 'seed', 'trigger', 'function', 'view'
  */
 export async function installFixtureSections(
   project: TestProject,
@@ -77,7 +77,7 @@ export async function writeInfraFile(
 }
 
 /**
- * Write a grant SQL file into schema/grants/ (or schema/grant-permissions/).
+ * Write a grant SQL file into schema/grants/ (or schema/grants/).
  */
 export async function writeGrantFile(
   project: TestProject,

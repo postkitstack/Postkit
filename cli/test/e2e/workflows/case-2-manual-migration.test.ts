@@ -47,8 +47,6 @@ describe("Case 2: Empty DB with manual migration — start → plan → apply �
       remoteDbUrl: remoteDb.url,
       remoteName: "dev",
     });
-
-    await installFixtureSchema(project);
   });
 
   afterAll(async () => {
@@ -61,6 +59,8 @@ describe("Case 2: Empty DB with manual migration — start → plan → apply �
 
   it("starts a migration session from empty remote", async () => {
     await startSession(project);
+    // Install fixture schema AFTER start — db start cleans the schema directory
+    await installFixtureSchema(project);
   });
 
   // ── Step 2: Plan (full fixture schema) ──────────────────────────────

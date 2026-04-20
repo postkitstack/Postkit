@@ -1,5 +1,5 @@
 CREATE TABLE public.category (
-    id UUID PRIMARY KEY DEFAULT public.gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name CHARACTER VARYING(100) NOT NULL,
     description TEXT,
     is_deleted BOOLEAN DEFAULT false NOT NULL,

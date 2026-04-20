@@ -44,8 +44,6 @@ describe("Case 1: Empty DB — start → plan → apply → commit → deploy", 
       remoteDbUrl: remoteDb.url,
       remoteName: "dev",
     });
-
-    await installFixtureSchema(project);
   });
 
   afterAll(async () => {
@@ -59,6 +57,9 @@ describe("Case 1: Empty DB — start → plan → apply → commit → deploy", 
   it("starts a migration session from empty remote", async () => {
     await startSession(project);
     expect(fileExists(project, ".postkit/db/session.json")).toBe(true);
+
+    // Install fixture schema AFTER start — db start cleans the schema directory
+    await installFixtureSchema(project);
   });
 
   it("shows active session in status --json", async () => {
