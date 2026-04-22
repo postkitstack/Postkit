@@ -22,7 +22,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Modular CLI Toolkit',
-    Svg: require('@site/static/img/undraw_uploading_nu4x.svg').default,
+    Svg: require('@site/static/img/undraw_ai-code-assistant_5xop.svg').default,
     description: (
       <>
         Each feature is a pluggable module. Use only what you need — database

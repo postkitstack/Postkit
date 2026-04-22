@@ -23,6 +23,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'modules/db/overview',
+        'modules/db/migrating-existing-database',
         {
           type: 'category',
           label: 'Commands',
