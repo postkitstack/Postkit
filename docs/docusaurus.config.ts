@@ -78,7 +78,8 @@ const config: Config = {
       title: 'PostKit',
       logo: {
         alt: 'PostKit Logo',
-        src: 'img/logo.svg',
+        src: 'img/logo_light.svg',
+        srcDark: 'img/logo_dark.svg',
       },
       items: [
         {
