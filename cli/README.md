@@ -61,6 +61,8 @@ postkit db deploy
 
 Session-based database migration workflow for PostgreSQL.
 
+Full documentation: [DB Module](https://docs.postkitstack.com/docs/modules/db/overview)
+
 | Command | Description |
 |---------|-------------|
 | `postkit db start` | Clone remote DB to local, start session |
@@ -79,6 +81,8 @@ Session-based database migration workflow for PostgreSQL.
 ### Auth Module (`auth`)
 
 Keycloak realm configuration management.
+
+Full documentation: [Auth Module](https://docs.postkitstack.com/docs/modules/auth/overview)
 
 | Command | Description |
 |---------|-------------|
