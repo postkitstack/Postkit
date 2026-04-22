@@ -129,7 +129,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} AppriTeam. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} AppriTeam. Built with PostKit.`,
     },
     prism: {
       theme: prismThemes.github,
