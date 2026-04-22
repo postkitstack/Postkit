@@ -101,15 +101,9 @@ Output is stored in `.postkit/auth/`:
 
 ## 📖 Documentation
 
-Full documentation available at: **[https://postkit.appri.dev](https://postkit.appri.dev)**
+Full documentation available at: **[https://docs.postkitstack.com/](https://docs.postkitstack.com/)**
 
 **Note:** This tool is under active development. APIs and commands may change between versions. We recommend pinning to a specific version in production.
-
-- [Installation Guide](https://postkit.appri.dev/docs/getting-started/installation)
-- [Quick Start](https://postkit.appri.dev/docs/getting-started/quick-start)
-- [DB Module](https://postkit.appri.dev/docs/modules/db/overview)
-- [Auth Module](https://postkit.appri.dev/docs/modules/auth/overview)
-- [Configuration](https://postkit.appri.dev/docs/getting-started/configuration)
 
 ## 🔧 Configuration
 
@@ -198,17 +192,7 @@ postkit db commit
 postkit db deploy --remote staging
 ```
 
-## 🐛 Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| `pgschema is not installed` | Bundled with CLI - verify vendor/ directory exists |
-| `dbmate is not installed` | Should be auto-installed - run `npm install` |
-| `No remotes configured` | Add a remote with `postkit db remote add <name> <url>` |
-| `No active migration session` | Run `postkit db start` first |
-| `Deploy failed during dry run` | No changes were made to the target. Fix the issue and retry. |
-
-For more help, see [Troubleshooting](https://postkit.appri.dev/docs/modules/db/troubleshooting) or open an issue on [GitHub](https://github.com/appritechnologies/postkit/issues).
+For more help, see [Troubleshooting](https://docs.postkitstack.com/docs/modules/db/troubleshooting) or open an issue on [GitHub](https://github.com/appritechnologies/postkit/issues).
 
 ## 🔗 Links
 
