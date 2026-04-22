@@ -12,7 +12,7 @@ type FeatureItem = {
 const FeatureList: FeatureItem[] = [
   {
     title: 'Safe Database Migrations',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    Svg: require('@site/static/img/undraw_code-contribution_8k0x.svg').default,
     description: (
       <>
         Clone remote databases locally, develop and test changes safely, then
@@ -22,7 +22,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Modular CLI Toolkit',
-    Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
+    Svg: require('@site/static/img/undraw_ai-code-assistant_5xop.svg').default,
     description: (
       <>
         Each feature is a pluggable module. Use only what you need — database
@@ -32,7 +32,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Production Ready',
-    Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
+    Svg: require('@site/static/img/undraw_secure-server_lz9x.svg').default,
     description: (
       <>
         Dry-run verification ensures your migrations work before touching

@@ -23,6 +23,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'modules/db/overview',
+        'modules/db/migrating-existing-database',
         {
           type: 'category',
           label: 'Commands',
@@ -41,6 +42,7 @@ const sidebars: SidebarsConfig = {
             'modules/db/commands/infra',
             'modules/db/commands/grants',
             'modules/db/commands/seed',
+            'modules/db/commands/import',
           ],
         },
         'modules/db/troubleshooting',
