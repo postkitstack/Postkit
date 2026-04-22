@@ -75,7 +75,7 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'PostKit',
+      title: '',
       logo: {
         alt: 'PostKit Logo',
         src: 'img/logo_light.svg',
