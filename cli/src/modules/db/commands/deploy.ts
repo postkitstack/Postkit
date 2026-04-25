@@ -15,7 +15,7 @@ import {runCommittedMigrate, runDbmateStatus} from "../services/dbmate";
 import {loadInfra, applyInfra} from "../services/infra-generator";
 import {loadGrants, applyGrants} from "../services/grant-generator";
 import {loadSeeds, applySeeds} from "../services/seed-generator";
-import {getPendingCommittedMigrations, markMigrationDeployed} from "../utils/committed";
+import {getPendingCommittedMigrations} from "../utils/committed";
 import {resolveRemote, maskRemoteUrl, normalizeUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
 import {PostkitError} from "../../../common/errors";
@@ -149,8 +149,8 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     logger.info(`Target: ${targetLabel}`);
     logger.blank();
 
-    // Step 2: Check for pending committed migrations
-    const pendingMigrations = await getPendingCommittedMigrations();
+    // Step 2: Check for pending committed migrations (check target's schema_migrations table)
+    const pendingMigrations = await getPendingCommittedMigrations(targetUrl);
 
     if (pendingMigrations.length === 0) {
       logger.info("No committed migrations pending deployment.");
@@ -178,8 +178,8 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       logger.blank();
     }
 
-    // 3 fixed steps (test, status, clone) + 4 runSteps × 2 passes (dry-run + target) + 2 fixed steps (mark deployed, cleanup)
-    const totalSteps = 3 + 4 * 2 + 2; // = 13
+    // 3 fixed steps (test, status, clone) + 4 runSteps × 2 passes (dry-run + target) + 1 fixed step (cleanup)
+    const totalSteps = 3 + 4 * 2 + 1; // = 12
     const migrationNames = pendingMigrations.map(m => m.migrationFile.name);
 
     // Step 1: Test target DB connection
@@ -306,19 +306,9 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       );
     }
 
-    // Step 12: Mark migrations as deployed
-    logger.step(12, totalSteps, "Marking migrations as deployed...");
-    spinner.start("Updating committed state...");
-
-    for (const migration of pendingMigrations) {
-      await markMigrationDeployed(migration.migrationFile.name);
-    }
-
-    spinner.succeed(`${pendingMigrations.length} migration(s) marked as deployed`);
-
-    // Drop local clone
+    // Step 12: Drop local clone
     logger.blank();
-    logger.step(13, totalSteps, "Cleaning up local clone...");
+    logger.step(12, totalSteps, "Cleaning up local clone...");
     spinner.start("Dropping local clone database...");
 
     try {

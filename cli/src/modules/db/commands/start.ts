@@ -121,8 +121,8 @@ export async function startCommand(options: StartOptions): Promise<void> {
     // Step 4: Verify database state
     logger.step(4, 6, "Verifying database state...");
 
-    // Check 1: Pending committed migrations
-    const pendingCommitted = await getPendingCommittedMigrations();
+    // Check 1: Pending committed migrations (check remote's schema_migrations table)
+    const pendingCommitted = await getPendingCommittedMigrations(targetRemoteUrl);
 
     if (pendingCommitted.length > 0) {
       logger.blank();

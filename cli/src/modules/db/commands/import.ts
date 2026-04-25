@@ -251,7 +251,6 @@ export async function importCommand(options: ImportOptions): Promise<void> {
         description: `Baseline import (${schemaName})`,
         sessionMigrations: [],
         committedAt: new Date().toISOString(),
-        deployed: false,
       });
 
       // Step 7: Set up local database

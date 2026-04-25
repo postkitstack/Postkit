@@ -27,8 +27,6 @@ export interface CommittedMigration {
   description: string;
   sessionMigrations: {name: string; path: string}[];
   committedAt: string;
-  deployed: boolean;
-  deployedAt?: string;
 }
 
 export interface CommittedState {
