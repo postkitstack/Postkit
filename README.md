@@ -37,6 +37,42 @@ postkit db start
 
 See the [CLI README](cli/README.md) for the full command reference.
 
+## AI Agent Skills
+
+PostKit includes Claude Code agent skills that teach AI assistants how to work with PostKit workflows. These are located in `.claude/skills/` and are automatically discovered by Claude Code.
+
+### Available Skills
+
+| Skill | Command | Description |
+|-------|---------|-------------|
+| `postkit-migrate` | `/postkit-migrate` | Full database migration workflow (start, plan, apply, commit, deploy) |
+| `postkit-setup` | `/postkit-setup` | Project initialization, config, and remote management |
+| `postkit-schema` | `/postkit-schema` | Working with schema files, infra, grants, and seeds |
+| `postkit-auth` | `/postkit-auth` | Keycloak realm export, import, and sync |
+
+### Usage
+
+In Claude Code, invoke any skill with `/skill-name`:
+
+```
+/postkit-migrate           # Start the migration workflow
+/postkit-setup             # Configure a new project
+/postkit-schema            # Help with schema file changes
+/postkit-auth              # Sync Keycloak config
+```
+
+Claude also loads skills automatically when relevant — for example, editing files under `db/schema/` triggers the `postkit-schema` skill.
+
+### Adding Skills to Your Workspace
+
+The most convenient way is to copy skills to your personal Claude Code directory — they'll be available in **all** your projects:
+
+```bash
+cp -r .claude/skills/* ~/.claude/skills/
+```
+
+No restart needed — Claude Code picks up changes automatically.
+
 ## Documentation
 
 Full documentation is available at [docs.postkitstack.com](https://docs.postkitstack.com/).
