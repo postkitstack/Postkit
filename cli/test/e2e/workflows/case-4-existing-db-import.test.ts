@@ -144,10 +144,15 @@ describe("Case 4: Existing DB — import → verify → plan → apply → commi
 
   // ── Step 2: Deploy baseline then start session ─────────────────────
 
-  it("deploys the baseline migration to register it as deployed", async () => {
-    // Import creates a baseline migration tracked in committed.json but not deployed.
-    // db start blocks when pending committed migrations exist, so deploy first.
-    await runDeploy(project);
+  it("verifies baseline migration is already tracked on remote", async () => {
+    // Import syncs the baseline version into the source DB's schema_migrations table,
+    // so deploy correctly sees no pending migrations — baseline is already applied.
+    const result = await runCli(["db", "deploy", "--force"], {
+      cwd: project.rootDir,
+      timeout: 120_000,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("No committed migrations pending deployment");
   });
 
   it("starts a session after import", async () => {
