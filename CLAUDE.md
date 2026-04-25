@@ -233,6 +233,33 @@ logger.info(`Using remote: ${name}`);
 logger.debug(`Remote URL: ${maskRemoteUrl(url)}`, options.verbose);
 ```
 
+## Agent Skills
+
+This repo includes Claude Code agent skills in `.claude/skills/`. These teach AI assistants how to work with PostKit workflows. They follow the Agent Skills open standard (SKILL.md files with YAML frontmatter).
+
+### Available Skills
+
+| Skill | Invoke | Auto-triggers |
+|-------|--------|---------------|
+| `postkit-migrate` | `/postkit-migrate` | Migration, deploy, schema change keywords |
+| `postkit-setup` | `/postkit-setup` | Init, config, remotes keywords |
+| `postkit-schema` | `/postkit-schema` | Editing `db/schema/**` files |
+| `postkit-auth` | `/postkit-auth` | Keycloak, auth keywords |
+
+### Adding a New Skill
+
+Create `.claude/skills/<skill-name>/SKILL.md` with:
+
+```yaml
+---
+name: skill-name
+description: When and what this skill does
+allowed-tools: Bash(postkit *)
+---
+```
+
+Skills are auto-discovered by Claude Code. No restart needed for changes.
+
 ## Important Notes
 
 - All paths in `common/config.ts` are resolved relative to either `cliRoot` (the CLI installation) or `projectRoot` (where the user runs commands).
