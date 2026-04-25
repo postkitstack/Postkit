@@ -7,7 +7,7 @@ import {promptConfirm} from "../../../common/prompt";
 import {PostkitError} from "../../../common/errors";
 import {getDbConfig, getTmpImportDir, getCommittedMigrationsPath} from "../utils/db-config";
 import {hasActiveSession} from "../utils/session";
-import {addCommittedMigration} from "../utils/committed";
+import {addCommittedMigration, saveCommittedState} from "../utils/committed";
 import {testConnection, getTableCount, createDatabase} from "../services/database";
 import {checkPgschemaInstalled, deletePlanFile} from "../services/pgschema";
 import {checkDbmateInstalled, createMigrationFile, runCommittedMigrate} from "../services/dbmate";
@@ -219,7 +219,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       const baselineDDL = await generateBaselineDDL(config.schemaPath, schemaName);
       spinner.succeed("Baseline DDL generated");
 
-      // Clear migrations directory before creating baseline migration
+      // Clear migrations directory and reset committed state before creating baseline migration
       const migrationsDir = getCommittedMigrationsPath();
       if (existsSync(migrationsDir)) {
         const entries = await fs.readdir(migrationsDir);
@@ -229,6 +229,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
           }
         }
       }
+      await saveCommittedState({migrations: []});
 
       // Create migration file
       const migrationFile = await createMigrationFile(
