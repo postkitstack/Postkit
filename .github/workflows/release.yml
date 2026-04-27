@@ -25,7 +25,7 @@ jobs:
       - run: npm ci
         working-directory: cli
 
-      - run: npm test
+      - run: npm run test:all
         working-directory: cli
 
   release:
