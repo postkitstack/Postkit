@@ -21,13 +21,15 @@ export async function checkPgschemaInstalled(): Promise<boolean> {
 export async function runPgschemaplan(
   schemaFile: string,
   databaseUrl: string,
+  schemaOverride?: string,
 ): Promise<PlanResult> {
   const config = getDbConfig();
   const planFile = getPlanFilePath();
   const dbInfo = parseConnectionUrl(databaseUrl);
+  const schema = schemaOverride || config.schema;
 
   // Run pgschema plan command (cwd set to schemaPath so .pgschemaignore is picked up)
-  const command = `${config.pgSchemaBin} plan --schema "${config.schema}" --file "${schemaFile}" --output-sql "${planFile}"`;
+  const command = `${config.pgSchemaBin} plan --schema "${schema}" --file "${schemaFile}" --output-sql "${planFile}"`;
   const result = await runCommand(command, {
     cwd: config.schemaPath,
     env: {
