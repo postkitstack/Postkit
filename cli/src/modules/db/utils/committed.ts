@@ -3,6 +3,10 @@ import {existsSync} from "fs";
 import pg from "pg";
 import type {CommittedState, CommittedMigration} from "../types/index";
 import {getCommittedFilePath, MIGRATIONS_TABLE} from "./db-config";
+import {
+  CHECK_MIGRATIONS_TABLE_EXISTS,
+  GET_APPLIED_VERSIONS,
+} from "../config/queries";
 import {logger} from "../../../common/logger";
 
 const {Client} = pg;
@@ -67,15 +71,13 @@ async function getAppliedMigrationVersions(remoteUrl: string): Promise<Set<strin
     await client.connect();
 
     // Check if migrations table exists in postkit schema
-    const tableCheck = await client.query(
-      `SELECT 1 FROM information_schema.tables WHERE table_schema = 'postkit' AND table_name = 'schema_migrations' LIMIT 1`,
-    );
+    const tableCheck = await client.query(CHECK_MIGRATIONS_TABLE_EXISTS);
 
     if (tableCheck.rows.length === 0) {
       return new Set();
     }
 
-    const result = await client.query(`SELECT version FROM ${MIGRATIONS_TABLE}`);
+    const result = await client.query(GET_APPLIED_VERSIONS);
     return new Set(result.rows.map((row: {version: string}) => row.version));
   } catch {
     return new Set();
