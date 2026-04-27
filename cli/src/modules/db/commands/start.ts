@@ -96,16 +96,6 @@ export async function startCommand(options: StartOptions): Promise<void> {
       options.verbose,
     );
 
-    // Clean schema directory contents before starting fresh session
-    if (existsSync(config.schemaPath)) {
-      const entries = await fs.readdir(config.schemaPath, {withFileTypes: true});
-      for (const entry of entries) {
-        const fullPath = path.join(config.schemaPath, entry.name);
-        if (entry.name === ".pgschemaignore") continue;
-        await fs.rm(fullPath, {recursive: true, force: true});
-      }
-    }
-
     // Ensure .pgschemaignore exists in schema directory
     await ensurePgschemaIgnore(config.schemaPath);
 
@@ -131,8 +121,8 @@ export async function startCommand(options: StartOptions): Promise<void> {
     // Step 4: Verify database state
     logger.step(4, 6, "Verifying database state...");
 
-    // Check 1: Pending committed migrations
-    const pendingCommitted = await getPendingCommittedMigrations();
+    // Check 1: Pending committed migrations (check remote's schema_migrations table)
+    const pendingCommitted = await getPendingCommittedMigrations(targetRemoteUrl);
 
     if (pendingCommitted.length > 0) {
       logger.blank();

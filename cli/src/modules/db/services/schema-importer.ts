@@ -340,15 +340,15 @@ export async function normalizeDumpForPostkit(
   await fs.mkdir(infraDir, {recursive: true});
 
   if (roles.length > 0) {
-    const rolesPath = path.join(infraDir, "roles.sql");
+    const rolesPath = path.join(infraDir, "001_roles.sql");
     await fs.writeFile(rolesPath, roles.join("\n\n") + "\n", "utf-8");
-    filesCreated.push("infra/roles.sql");
+    filesCreated.push("infra/001_roles.sql");
   }
 
   if (schemas.length > 0) {
-    const schemasPath = path.join(infraDir, "schemas.sql");
+    const schemasPath = path.join(infraDir, "002_schemas.sql");
     await fs.writeFile(schemasPath, schemas.join("\n\n") + "\n", "utf-8");
-    filesCreated.push("infra/schemas.sql");
+    filesCreated.push("infra/002_schemas.sql");
   }
 
   // Parse schema.sql for extensions only (no change to this behaviour)
