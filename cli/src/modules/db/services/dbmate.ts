@@ -1,7 +1,6 @@
 import type {MigrationFile, ApplyResult} from "../types/index";
 import {runSpawnCommand, commandExists} from "../../../common/shell";
-import {getDbConfig} from "../utils/db-config";
-import {getCommittedMigrationsPath, getSessionMigrationsPath} from "../utils/db-config";
+import {getDbConfig, getCommittedMigrationsPath, getSessionMigrationsPath, MIGRATIONS_TABLE} from "../utils/db-config";
 import {formatTimestamp} from "../utils/session";
 import {getPostkitDir} from "../../../common/config";
 import fs from "fs/promises";
@@ -71,6 +70,7 @@ export async function runSessionMigrate(
     "--env-file", "/dev/null",
     "--url", databaseUrl,
     "--migrations-dir", sessionDir,
+    "--migrations-table", MIGRATIONS_TABLE,
     "up",
   ]);
 
@@ -102,6 +102,7 @@ export async function runCommittedMigrate(
     "--env-file", "/dev/null",
     "--url", databaseUrl,
     "--migrations-dir", targetDir,
+    "--migrations-table", MIGRATIONS_TABLE,
     "up",
   ]);
 
@@ -132,6 +133,7 @@ export async function runDbmateStatus(databaseUrl: string): Promise<string> {
     "--env-file", "/dev/null",
     "--url", databaseUrl,
     "--migrations-dir", getCommittedMigrationsPath(),
+    "--migrations-table", MIGRATIONS_TABLE,
     "status",
   ]);
 

@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
 import {runCommand} from "../../../common/shell";
-import {getDbConfig, getTmpImportDir} from "../utils/db-config";
+import {getDbConfig, getTmpImportDir, MIGRATIONS_TABLE} from "../utils/db-config";
 import {parseConnectionUrl, createDatabase, dropDatabase} from "./database";
 import {runPgschemaplan} from "./pgschema";
 import {generateSchemaSQLAndFingerprint} from "./schema-generator";
@@ -471,7 +471,13 @@ export async function generateBaselineDDL(
       );
     }
 
-    return planResult.planOutput;
+    // Prepend SET search_path for non-public schemas
+    let ddl = planResult.planOutput;
+    if (schemaName !== "public") {
+      ddl = `SET search_path TO "${schemaName}";\n\n${ddl}`;
+    }
+
+    return ddl;
   } finally {
     // Always clean up the temp database
     try {
@@ -484,6 +490,7 @@ export async function generateBaselineDDL(
 
 /**
  * Insert a migration tracking record into the source database's schema_migrations table.
+ * Uses postkit.schema_migrations to keep migration tracking separate from user schemas.
  */
 export async function syncMigrationState(
   databaseUrl: string,
@@ -494,16 +501,19 @@ export async function syncMigrationState(
   try {
     await client.connect();
 
-    // Create schema_migrations table if it doesn't exist (dbmate format)
+    // Ensure postkit schema exists
+    await client.query(`CREATE SCHEMA IF NOT EXISTS postkit`);
+
+    // Create schema_migrations table in postkit schema
     await client.query(`
-      CREATE TABLE IF NOT EXISTS schema_migrations (
+      CREATE TABLE IF NOT EXISTS ${MIGRATIONS_TABLE} (
         version VARCHAR(128) NOT NULL PRIMARY KEY
       )
     `);
 
     // Insert the baseline version
     await client.query(
-      "INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT (version) DO NOTHING",
+      `INSERT INTO ${MIGRATIONS_TABLE} (version) VALUES ($1) ON CONFLICT (version) DO NOTHING`,
       [version],
     );
   } finally {
