@@ -460,7 +460,7 @@ export async function generateBaselineDDL(
     const {schemaFile} = await generateSchemaSQLAndFingerprint();
 
     // Run pgschema plan against empty database — produces full CREATE DDL
-    const planResult = await runPgschemaplan(schemaFile, tmpDbUrl);
+    const planResult = await runPgschemaplan(schemaFile, tmpDbUrl, schemaName);
 
     if (!planResult.hasChanges || !planResult.planOutput) {
       throw new Error(
