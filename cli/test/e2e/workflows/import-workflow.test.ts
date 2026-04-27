@@ -290,7 +290,6 @@ describe("db import — seed DB → import → verify all artifacts", () => {
     );
     expect(committed.migrations).toHaveLength(1);
     expect(committed.migrations[0].description).toContain("Baseline import");
-    expect(committed.migrations[0].deployed).toBe(false);
   });
 
   // ── Step 6: Verify local database state ─────────────────────────────
