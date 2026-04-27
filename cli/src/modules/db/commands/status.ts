@@ -4,11 +4,12 @@ import {getSession, formatSessionDuration} from "../utils/session";
 import {testConnection, getTableCount} from "../services/database";
 import {getPlanFileContent} from "../services/pgschema";
 import {runDbmateStatus} from "../services/dbmate";
-import {getPendingCommittedMigrations} from "../utils/committed";
+import {getPendingCommittedMigrations, getAllCommittedMigrations} from "../utils/committed";
+import {resolveRemote} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
 
-async function showCommittedMigrations(): Promise<void> {
-  const pendingMigrations = await getPendingCommittedMigrations();
+async function showCommittedMigrations(remoteUrl: string): Promise<void> {
+  const pendingMigrations = await getPendingCommittedMigrations(remoteUrl);
 
   if (pendingMigrations.length === 0) {
     return;
@@ -31,7 +32,17 @@ async function showCommittedMigrations(): Promise<void> {
 export async function statusCommand(options: CommandOptions): Promise<void> {
   try {
     const session = await getSession();
-    const pendingCommitted = await getPendingCommittedMigrations();
+
+    // Resolve remote URL for checking pending migrations
+    let remoteUrl: string | undefined;
+    try {
+      const resolved = resolveRemote();
+      remoteUrl = resolved.url;
+    } catch {
+      // No remotes configured
+    }
+
+    const pendingCommitted = remoteUrl ? await getPendingCommittedMigrations(remoteUrl) : [];
 
     if (options.json) {
       const localConnected = session?.active ? await testConnection(session.localDbUrl) : false;
@@ -56,7 +67,9 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
       logger.info('Run "postkit db start" to begin a new session.');
 
       // Show committed migrations even without active session
-      await showCommittedMigrations();
+      if (remoteUrl) {
+        await showCommittedMigrations(remoteUrl);
+      }
 
       // Show dbmate status anyway
       if (options.verbose) {
@@ -170,7 +183,9 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
     logger.blank();
 
     // Show committed migrations
-    await showCommittedMigrations();
+    if (remoteUrl) {
+      await showCommittedMigrations(remoteUrl);
+    }
 
     // Next steps
     logger.info("Next Steps:");

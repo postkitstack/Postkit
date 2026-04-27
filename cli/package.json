@@ -1,6 +1,6 @@
 {
   "name": "@appritech/postkit",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "PostKit - Developer toolkit for database management and more",
   "type": "module",
   "main": "dist/index.js",
