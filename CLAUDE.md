@@ -258,7 +258,7 @@ Skills are invoked via `/<skill-name>` in Claude Code. Agents are sub-processes 
 
 | Skill | Invocation | Purpose | Sub-Agents |
 |-------|-----------|---------|------------|
-| create-pr | `/create-pr` | Create a standardized GitHub PR | pr-agent |
+| create-pr | `/create-pr` | Generate PR description to `temp/pr-description.md` | — |
 | write-test-e2e | `/write-test-e2e` | Write E2E tests using testcontainers | e2e-test-agent |
 | write-test-unit | `/write-test-unit` | Write unit tests with Vitest mocks | unit-test-agent |
 | bugfix | `/bugfix` | Diagnose and fix bugs (asks for info, 4 stages) | bugfixer, tester, reviewer, validator |
@@ -270,7 +270,6 @@ Skills are invoked via `/<skill-name>` in Claude Code. Agents are sub-processes 
 
 | Agent | File | Specialty | Used By |
 |-------|------|-----------|---------|
-| pr-agent | `.claude/agents/pr-agent.md` | PR body generation, change analysis | create-pr |
 | e2e-test-agent | `.claude/agents/e2e-test-agent.md` | E2E test implementation (testcontainers) | write-test-e2e |
 | unit-test-agent | `.claude/agents/unit-test-agent.md` | Unit test implementation (Vitest mocks) | write-test-unit |
 | bugfixer | `.claude/agents/bugfixer.md` | Bug diagnosis and minimal fix | bugfix |

@@ -1,11 +1,11 @@
 ---
 name: create-pr
-description: Create a standardized GitHub pull request with build verification and change analysis.
+description: Generate a PR description and save to temp/pr-description.md.
 ---
 
 # Create PR Skill
 
-Create a standardized GitHub PR for the PostKit project.
+Generate a standardized PR description for the PostKit project and save it to `temp/pr-description.md`.
 
 ## Project Context
 
@@ -14,15 +14,7 @@ Use the PR template at `.github/pull_request_template.md`.
 
 ## Workflow
 
-### Step 1: Pre-PR Verification
-Run build and unit tests to ensure the branch is in a good state:
-```bash
-cd cli && npm run build
-cd cli && npm run test
-```
-If either fails, report the failure and stop.
-
-### Step 2: Analyze Changes
+### Step 1: Analyze Changes
 Gather branch information:
 ```bash
 git log origin/main...HEAD --oneline
@@ -31,23 +23,26 @@ git diff origin/main...HEAD
 ```
 Categorize changes into: features, fixes, refactors, tests, docs, chore.
 
-### Step 3: Generate PR
-Using the `pr-agent` sub-agent approach:
-- Generate a title under 70 characters with conventional commit prefix
-- Populate the PR template sections
-- Create the PR targeting `development` (or `main` for hotfixes):
-```bash
-gh pr create --base development --title "<title>" --body "<body>"
-```
+### Step 2: Generate PR Description
+Using the PR template structure, generate:
 
-### Step 4: Post-Creation
-- Verify the PR was created successfully
-- Report the PR URL to the user
-
-## PR Title Format
+**Title** — under 70 characters with conventional commit prefix:
 - `feat: <description>` for new features
 - `fix: <description>` for bug fixes
 - `refactor: <description>` for code refactoring
 - `test: <description>` for test changes
 - `docs: <description>` for documentation changes
 - `chore: <description>` for build/tooling changes
+
+**Body** — using the template sections:
+- Summary (1-3 bullet points)
+- Changes (specific list)
+- Type of Change (check one)
+- Test Plan (checklist)
+
+### Step 3: Save to File
+Create `temp/` directory if needed and save to `temp/pr-description.md`.
+Use the exact format from `.github/pull_request_template.md` — read that file and follow its structure.
+
+### Step 4: Show to User
+Display the generated PR description and ask for confirmation or edits before saving.
