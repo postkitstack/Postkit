@@ -1,6 +1,12 @@
 import pg from "pg";
 import type {DatabaseConnectionInfo} from "../types/index";
 import {runPipedCommands} from "../../../common/shell";
+import {
+  TEST_CONNECTION,
+  CHECK_DB_EXISTS,
+  TERMINATE_CONNECTIONS,
+  COUNT_TABLES,
+} from "../config/queries";
 
 const {Client} = pg;
 
@@ -26,7 +32,7 @@ export async function testConnection(url: string): Promise<boolean> {
 
   try {
     await client.connect();
-    await client.query("SELECT 1");
+    await client.query(TEST_CONNECTION);
     return true;
   } catch {
     return false;
@@ -48,7 +54,7 @@ export async function createDatabase(url: string): Promise<void> {
 
     // Check if database exists
     const result = await client.query(
-      "SELECT 1 FROM pg_database WHERE datname = $1",
+      CHECK_DB_EXISTS,
       [targetDb],
     );
 
@@ -73,12 +79,7 @@ export async function dropDatabase(url: string): Promise<void> {
 
     // Terminate existing connections
     await client.query(
-      `
-      SELECT pg_terminate_backend(pg_stat_activity.pid)
-      FROM pg_stat_activity
-      WHERE pg_stat_activity.datname = $1
-        AND pid <> pg_backend_pid()
-    `,
+      TERMINATE_CONNECTIONS,
       [targetDb],
     );
 
@@ -149,12 +150,7 @@ export async function getTableCount(url: string): Promise<number> {
 
   try {
     await client.connect();
-    const result = await client.query(`
-      SELECT COUNT(*) as count
-      FROM information_schema.tables
-      WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-        AND table_type = 'BASE TABLE'
-    `);
+    const result = await client.query(COUNT_TABLES);
     return parseInt(result.rows[0].count, 10);
   } finally {
     await client.end();

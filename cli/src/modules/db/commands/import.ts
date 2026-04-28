@@ -306,6 +306,11 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       if (existsSync(tmpImportDir)) {
         await fs.rm(tmpImportDir, {recursive: true, force: true});
       }
+      // Clean up schema.sql artifact from baseline generation step
+      const artifact = path.join(path.dirname(config.schemaPath), "schema.sql");
+      if (existsSync(artifact)) {
+        await fs.unlink(artifact);
+      }
       await deletePlanFile();
       await deleteGeneratedSchema();
     }

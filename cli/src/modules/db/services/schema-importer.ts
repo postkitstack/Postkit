@@ -3,7 +3,14 @@ import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
 import {runCommand} from "../../../common/shell";
-import {getDbConfig, getTmpImportDir} from "../utils/db-config";
+import {getDbConfig, getTmpImportDir, MIGRATIONS_TABLE} from "../utils/db-config";
+import {
+  CREATE_POSTKIT_SCHEMA,
+  CREATE_MIGRATIONS_TABLE,
+  INSERT_MIGRATION_VERSION,
+  FETCH_SCHEMAS,
+  FETCH_ROLES,
+} from "../config/queries";
 import {parseConnectionUrl, createDatabase, dropDatabase} from "./database";
 import {runPgschemaplan} from "./pgschema";
 import {generateSchemaSQLAndFingerprint} from "./schema-generator";
@@ -233,11 +240,7 @@ export async function fetchInfraFromDatabase(
 
     // Fetch non-system schemas
     const schemaRows = await client.query<{nspname: string; owner: string}>(
-      `SELECT nspname, pg_catalog.pg_get_userbyid(nspowner) AS owner
-       FROM pg_catalog.pg_namespace
-       WHERE nspname NOT LIKE 'pg_%'
-         AND nspname != 'information_schema'
-       ORDER BY nspname`,
+      FETCH_SCHEMAS,
     );
 
     for (const row of schemaRows.rows) {
@@ -254,13 +257,7 @@ export async function fetchInfraFromDatabase(
       rolcanlogin: boolean;
       rolreplication: boolean;
       rolconnlimit: number;
-    }>(
-      `SELECT rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb,
-              rolcanlogin, rolreplication, rolconnlimit
-       FROM pg_catalog.pg_roles
-       WHERE rolname NOT LIKE 'pg_%'
-       ORDER BY rolname`,
-    );
+    }>(FETCH_ROLES);
 
     for (const row of roleRows.rows) {
       const attrs = [
@@ -402,6 +399,12 @@ export async function normalizeDumpForPostkit(
     await fs.writeFile(ignorePath, content, "utf-8");
   }
 
+  // Clean up schema.sql artifact that pgschema creates in parent of schemaPath
+  const artifact = path.join(path.dirname(schemaPath), "schema.sql");
+  if (existsSync(artifact)) {
+    await fs.unlink(artifact);
+  }
+
   return {filesCreated};
 }
 
@@ -463,7 +466,7 @@ export async function generateBaselineDDL(
     const {schemaFile} = await generateSchemaSQLAndFingerprint();
 
     // Run pgschema plan against empty database — produces full CREATE DDL
-    const planResult = await runPgschemaplan(schemaFile, tmpDbUrl);
+    const planResult = await runPgschemaplan(schemaFile, tmpDbUrl, schemaName);
 
     if (!planResult.hasChanges || !planResult.planOutput) {
       throw new Error(
@@ -471,7 +474,13 @@ export async function generateBaselineDDL(
       );
     }
 
-    return planResult.planOutput;
+    // Prepend SET search_path for non-public schemas
+    let ddl = planResult.planOutput;
+    if (schemaName !== "public") {
+      ddl = `SET search_path TO "${schemaName}";\n\n${ddl}`;
+    }
+
+    return ddl;
   } finally {
     // Always clean up the temp database
     try {
@@ -484,6 +493,7 @@ export async function generateBaselineDDL(
 
 /**
  * Insert a migration tracking record into the source database's schema_migrations table.
+ * Uses postkit.schema_migrations to keep migration tracking separate from user schemas.
  */
 export async function syncMigrationState(
   databaseUrl: string,
@@ -494,18 +504,14 @@ export async function syncMigrationState(
   try {
     await client.connect();
 
-    // Create schema_migrations table if it doesn't exist (dbmate format)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS schema_migrations (
-        version VARCHAR(128) NOT NULL PRIMARY KEY
-      )
-    `);
+    // Ensure postkit schema exists
+    await client.query(CREATE_POSTKIT_SCHEMA);
+
+    // Create schema_migrations table in postkit schema
+    await client.query(CREATE_MIGRATIONS_TABLE);
 
     // Insert the baseline version
-    await client.query(
-      "INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT (version) DO NOTHING",
-      [version],
-    );
+    await client.query(INSERT_MIGRATION_VERSION, [version]);
   } finally {
     await client.end();
   }

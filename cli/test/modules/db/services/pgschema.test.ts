@@ -111,6 +111,20 @@ describe("pgschema", () => {
         runPgschemaplan("/schema.sql", "postgres://user:pass@host/db"),
       ).rejects.toThrow("pgschema plan failed");
     });
+
+    it("uses schemaOverride instead of config.schema when provided", async () => {
+      const commandSpy = vi.mocked(runCommand).mockResolvedValue({
+        stdout: "Changes found", stderr: "", exitCode: 0,
+      });
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFile).mockResolvedValue("CREATE TABLE foo (id int);");
+      vi.mocked(fs.writeFile).mockResolvedValue();
+      await runPgschemaplan("/schema.sql", "postgres://user:pass@host/db", "myapp");
+      expect(commandSpy).toHaveBeenCalledTimes(1);
+      const calledCommand = commandSpy.mock.calls[0]![0] as string;
+      expect(calledCommand).toContain('--schema "myapp"');
+      expect(calledCommand).not.toContain('--schema "public"');
+    });
   });
 
   describe("wrapPlanSQL()", () => {

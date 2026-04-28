@@ -17,6 +17,7 @@ vi.mock("../../../../src/modules/db/utils/db-config", () => ({
   })),
   getSessionMigrationsPath: vi.fn(() => "/project/.postkit/db/session"),
   getCommittedMigrationsPath: vi.fn(() => "/project/.postkit/db/migrations"),
+  MIGRATIONS_TABLE: "postkit.schema_migrations",
 }));
 
 vi.mock("../../../../src/modules/db/utils/session", () => ({

@@ -15,6 +15,13 @@ import type {DbConfig, RemoteInputConfig} from "../types/config";
 export type {DbConfig, RemoteInputConfig, RemoteConfig, DbInputConfig} from "../types/config";
 
 // ============================================
+// Constants
+// ============================================
+
+/** dbmate migration tracking table (schema-qualified) */
+export const MIGRATIONS_TABLE = "postkit.schema_migrations";
+
+// ============================================
 // Zod Schemas for Validation
 // ============================================
 
