@@ -399,6 +399,12 @@ export async function normalizeDumpForPostkit(
     await fs.writeFile(ignorePath, content, "utf-8");
   }
 
+  // Clean up schema.sql artifact that pgschema creates in parent of schemaPath
+  const artifact = path.join(path.dirname(schemaPath), "schema.sql");
+  if (existsSync(artifact)) {
+    await fs.unlink(artifact);
+  }
+
   return {filesCreated};
 }
 
