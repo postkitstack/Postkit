@@ -74,6 +74,16 @@ const sidebars: SidebarsConfig = {
 
     {
       type: 'category',
+      label: 'Agent Skills',
+      collapsible: true,
+      collapsed: false,
+      items: [
+        'agent-skills/overview',
+      ],
+    },
+
+    {
+      type: 'category',
       label: 'Reference',
       collapsible: true,
       collapsed: true,
