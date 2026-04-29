@@ -235,7 +235,7 @@ logger.debug(`Remote URL: ${maskRemoteUrl(url)}`, options.verbose);
 
 ## Agent Skills
 
-This repo includes Claude Code agent skills in `.claude/skills/`. These teach AI assistants how to work with PostKit workflows. They follow the Agent Skills open standard (SKILL.md files with YAML frontmatter).
+This repo includes Claude Code agent skills in `agent/skills/`. These teach AI assistants how to work with PostKit workflows. They follow the Agent Skills open standard (SKILL.md files with YAML frontmatter).
 
 ### Available Skills
 
@@ -248,7 +248,7 @@ This repo includes Claude Code agent skills in `.claude/skills/`. These teach AI
 
 ### Adding a New Skill
 
-Create `.claude/skills/<skill-name>/SKILL.md` with:
+Create `agent/skills/<skill-name>/SKILL.md` with:
 
 ```yaml
 ---

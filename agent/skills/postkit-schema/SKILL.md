@@ -1,6 +1,6 @@
 ---
 name: postkit-schema
-description: Work with PostKit schema files — understand the directory structure, add or modify tables, types, enums, functions, and manage infra, grants, and seeds. Use when editing files under db/schema/.
+description: Work with PostKit schema files — understand the directory structure, add or modify tables, types, enums, functions, and manage infra, grants, and seeds. Use this skill whenever editing files under db/schema/, creating or modifying SQL table definitions, adding columns, changing indexes, writing PostgreSQL functions or triggers, or managing grants and seed data — even if the user doesn't mention PostKit explicitly.
 paths: db/schema/**
 allowed-tools: Bash(postkit *)
 ---

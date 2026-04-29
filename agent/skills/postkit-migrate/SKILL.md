@@ -1,7 +1,8 @@
 ---
 name: postkit-migrate
-description: Run PostKit database migrations — the session-based workflow of start, plan, apply, commit, and deploy. Use when the user mentions migrating, deploying schema changes, running migrations, or updating the database.
+description: Run PostKit database migrations — the session-based workflow of start, plan, apply, commit, and deploy. Use this skill whenever the user mentions migrating, deploying schema changes, running migrations, updating the database, schema diff, pushing to remote DB, cloning a database, or applying a migration — even if they don't explicitly say "migration" or "postkit".
 argument-hint: [step]
+paths: .postkit/db/**
 allowed-tools: Bash(postkit *)
 ---
 
