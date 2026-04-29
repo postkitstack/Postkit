@@ -1,10 +1,11 @@
 import ora from "ora";
+import path from "path";
 import fs from "fs/promises";
 import {promptConfirm, promptInput} from "../../../common/prompt";
 import {existsSync} from "fs";
 import {logger} from "../../../common/logger";
 import {getSession, updatePendingChanges} from "../utils/session";
-import {getSessionMigrationsPath} from "../utils/db-config";
+import {getSessionMigrationsPath, toRelativePath, resolveProjectPath} from "../utils/db-config";
 import {wrapPlanSQL, getPlanFileContent} from "../services/pgschema";
 import {testConnection} from "../services/database";
 import {
@@ -341,7 +342,7 @@ async function handlePlanApply(
     );
   }
 
-  const wrappedSQL = await wrapPlanSQL(session.pendingChanges.planFile);
+  const wrappedSQL = await wrapPlanSQL(resolveProjectPath(session.pendingChanges.planFile));
 
   if (!wrappedSQL) {
     spinner.succeed("No changes to apply");
@@ -368,7 +369,7 @@ async function handlePlanApply(
 
   if (!migrateResult.success) {
     spinner.fail("Failed to apply migration");
-    await deleteMigrationFile(migrationFile.path);
+    await deleteMigrationFile(resolveProjectPath(migrationFile.path));
     throw new PostkitError(
       `Migration apply failed:\n${migrateResult.output}`,
       'Migration file has been cleaned up. Fix the SQL and run "postkit db apply" again.',
@@ -387,7 +388,7 @@ async function handlePlanApply(
     migrationApplied: true,
     migrationFiles: [
       ...existingFiles,
-      {name: migrationFile.name, path: migrationFile.path},
+      {name: migrationFile.name, path: toRelativePath(migrationFile.path)},
     ],
     description,
   });
@@ -406,8 +407,9 @@ async function handlePlanApply(
 
   // Clean up plan file since migration is now committed to session files
   if (session.pendingChanges.planFile) {
-    if (existsSync(session.pendingChanges.planFile)) {
-      await fs.unlink(session.pendingChanges.planFile);
+    const absolutePlanPath = resolveProjectPath(session.pendingChanges.planFile);
+    if (existsSync(absolutePlanPath)) {
+      await fs.unlink(absolutePlanPath);
     }
   }
 
@@ -506,7 +508,7 @@ async function handleManualApply(
   // Track applied migrations
   const appliedMigrations = migrationFiles.map((name) => ({
     name,
-    path: `${sessionMigrationsDir}/${name}`,
+    path: toRelativePath(path.join(sessionMigrationsDir, name)),
   }));
 
   await updatePendingChanges({

@@ -1,6 +1,7 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
 import {getSession, updatePendingChanges} from "../utils/session";
+import {toRelativePath} from "../utils/db-config";
 import {generateSchemaSQLAndFingerprint} from "../services/schema-generator";
 import {runPgschemaplan} from "../services/pgschema";
 import {testConnection} from "../services/database";
@@ -66,7 +67,7 @@ export async function planCommand(options: CommandOptions): Promise<void> {
     await updatePendingChanges({
       planned: true,
       applied: false,
-      planFile: planResult.planFile,
+      planFile: planResult.planFile ? toRelativePath(planResult.planFile) : null,
       schemaFingerprint,
       migrationApplied: false,
       seedsApplied: false,
