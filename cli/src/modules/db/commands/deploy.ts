@@ -291,7 +291,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       );
     }
 
-    // Step 12: Drop local clone
+    // Step 10: Drop local clone
     logger.blank();
     logger.step(10, totalSteps, "Cleaning up local clone...");
     spinner.start("Dropping local clone database...");
