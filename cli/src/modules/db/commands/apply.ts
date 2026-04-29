@@ -14,7 +14,6 @@ import {
 } from "../services/dbmate";
 import {generateSchemaFingerprint} from "../services/schema-generator";
 import {applyInfra, loadInfra} from "../services/infra-generator";
-import {applyGrants, loadGrants} from "../services/grant-generator";
 import {applySeeds, loadSeeds} from "../services/seed-generator";
 import type {CommandOptions} from "../../../common/types";
 import type {SessionState} from "../types/index";
@@ -32,29 +31,6 @@ async function applyInfraStep(
   spinner.start("Applying infra...");
   await applyInfra(dbUrl);
   spinner.succeed(`Infra applied (${infra.length} file(s))`);
-}
-
-async function applyGrantsStep(
-  spinner: ReturnType<typeof ora>,
-  dbUrl: string,
-  retryHint: string,
-): Promise<void> {
-  const grants = await loadGrants();
-  if (grants.length === 0) {
-    spinner.info("No grant files found - skipping");
-    return;
-  }
-  try {
-    spinner.start("Applying grants...");
-    await applyGrants(dbUrl);
-    spinner.succeed(`Grants applied (${grants.length} file(s))`);
-  } catch (error) {
-    spinner.fail("Failed to apply grants");
-    throw new PostkitError(
-      `Grants failed: ${error instanceof Error ? error.message : String(error)}`,
-      retryHint,
-    );
-  }
 }
 
 async function applySeedsStep(
@@ -195,7 +171,6 @@ export async function applyCommand(options: CommandOptions): Promise<void> {
     if (newFiles.length > 0 && session.pendingChanges.migrationApplied) {
       await updatePendingChanges({
         migrationApplied: false,
-        grantsApplied: false,
         seedsApplied: false,
       });
     }
@@ -225,22 +200,7 @@ async function handleResume(
   logger.blank();
 
   let step = 1;
-  const totalSteps = 3; // grants, seeds, update session
-
-  // Grants
-  if (!pc.grantsApplied) {
-    logger.step(step, totalSteps, "Applying grants...");
-    await applyGrantsStep(
-      spinner,
-      session.localDbUrl,
-      'Run "postkit db apply" again to retry from grants.',
-    );
-    await updatePendingChanges({grantsApplied: true});
-  } else {
-    logger.step(step, totalSteps, "Grants already applied - skipping");
-  }
-
-  step++;
+  const totalSteps = 2; // seeds, update session
 
   // Seeds
   if (!pc.seedsApplied) {
@@ -333,7 +293,7 @@ async function handlePlanApply(
   logger.heading("Applying Migration to Local Database");
 
   // Step 1: Show the plan
-  logger.step(1, 8, "Loading plan...");
+  logger.step(1, 7, "Loading plan...");
   const planContent = await getPlanFileContent();
 
   if (planContent) {
@@ -350,7 +310,7 @@ async function handlePlanApply(
   );
 
   // Step 2: Test local connection
-  logger.step(2, 8, "Testing local database connection...");
+  logger.step(2, 7, "Testing local database connection...");
   spinner.start("Connecting to local database...");
 
   const localConnected = await testConnection(session.localDbUrl);
@@ -366,11 +326,11 @@ async function handlePlanApply(
   spinner.succeed("Connected to local database");
 
   // Step 3: Apply infra (roles, schemas, extensions)
-  logger.step(3, 8, "Applying infrastructure...");
+  logger.step(3, 7, "Applying infrastructure...");
   await applyInfraStep(spinner, session.localDbUrl);
 
   // Step 4: Create migration file in session migrations dir
-  logger.step(4, 8, "Creating migration file...");
+  logger.step(4, 7, "Creating migration file...");
 
   spinner.start("Wrapping plan and creating migration file...");
 
@@ -401,7 +361,7 @@ async function handlePlanApply(
   logger.info(`Path: ${migrationFile.path}`);
 
   // Step 5: Apply migration via dbmate on local
-  logger.step(5, 8, "Applying migration to local database...");
+  logger.step(5, 7, "Applying migration to local database...");
   spinner.start("Running dbmate migrate...");
 
   const migrateResult = await runSessionMigrate(session.localDbUrl);
@@ -432,26 +392,17 @@ async function handlePlanApply(
     description,
   });
 
-  // Step 6: Apply grants
-  logger.step(6, 8, "Applying grants...");
-  await applyGrantsStep(
-    spinner,
-    session.localDbUrl,
-    'Migration is already applied. Run "postkit db apply" again to retry from grants.',
-  );
-  await updatePendingChanges({grantsApplied: true});
-
-  // Step 7: Apply seeds
-  logger.step(7, 8, "Applying seeds...");
+  // Step 6: Apply seeds
+  logger.step(6, 7, "Applying seeds...");
   await applySeedsStep(
     spinner,
     session.localDbUrl,
-    'Migration and grants are already applied. Run "postkit db apply" again to retry from seeds.',
+    'Migration is already applied. Run "postkit db apply" again to retry from seeds.',
   );
   await updatePendingChanges({seedsApplied: true});
 
-  // Step 8: Mark fully applied and clean up plan file
-  logger.step(8, 8, "Updating session state...");
+  // Step 7: Mark fully applied and clean up plan file
+  logger.step(7, 7, "Updating session state...");
 
   // Clean up plan file since migration is now committed to session files
   if (session.pendingChanges.planFile) {
@@ -513,7 +464,7 @@ async function handleManualApply(
   }
 
   // Step 1: Test local connection
-  logger.step(1, 5, "Testing local database connection...");
+  logger.step(1, 4, "Testing local database connection...");
   spinner.start("Connecting to local database...");
 
   const localConnected = await testConnection(session.localDbUrl);
@@ -529,11 +480,11 @@ async function handleManualApply(
   spinner.succeed("Connected to local database");
 
   // Step 2: Apply infra
-  logger.step(2, 5, "Applying infrastructure...");
+  logger.step(2, 4, "Applying infrastructure...");
   await applyInfraStep(spinner, session.localDbUrl);
 
   // Step 3: Apply migrations via dbmate
-  logger.step(3, 5, "Applying migration(s) to local database...");
+  logger.step(3, 4, "Applying migration(s) to local database...");
   spinner.start("Running dbmate migrate...");
 
   const migrateResult = await runSessionMigrate(session.localDbUrl);
@@ -563,21 +514,12 @@ async function handleManualApply(
     migrationFiles: appliedMigrations,
   });
 
-  // Step 4: Apply grants
-  logger.step(4, 5, "Applying grants...");
-  await applyGrantsStep(
-    spinner,
-    session.localDbUrl,
-    'Migration(s) are already applied. Run "postkit db apply" again to retry from grants.',
-  );
-  await updatePendingChanges({grantsApplied: true});
-
-  // Step 5: Apply seeds
-  logger.step(5, 5, "Applying seeds...");
+  // Step 4: Apply seeds
+  logger.step(4, 4, "Applying seeds...");
   await applySeedsStep(
     spinner,
     session.localDbUrl,
-    'Migration(s) and grants are already applied. Run "postkit db apply" again to retry from seeds.',
+    'Migration(s) are already applied. Run "postkit db apply" again to retry from seeds.',
   );
   await updatePendingChanges({seedsApplied: true, applied: true});
 

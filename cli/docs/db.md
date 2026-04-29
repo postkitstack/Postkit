@@ -34,25 +34,24 @@ A session-based database migration workflow for safe schema changes. Clone your 
 │   │ 8. Create dbmate │            │    migration     │                       │
 │   │    migration     │            │ 9. Run dbmate    │                       │
 │   │ 9. Run dbmate    │            │    on local DB   │                       │
-│   │    on local DB   │            │ 10. Apply grants │                       │
-│   │ 10. Apply grants │            │ 11. Apply seeds  │                       │
-│   │ 11. Apply seeds  │            └────────┬─────────┘                       │
+│   │    on local DB   │            │ 10. Apply seeds  │                       │
+│   │ 10. Apply seeds  │            └────────┬─────────┘                       │
 │   └────────┬─────────┘                     │                                 │
 │            │                               ▼                                 │
 │   $ postkit db commit                                                        │
 │   ┌──────────────────┐            ┌──────────────────┐                       │
-│   │ 12. Copy staging │            │ 13. Copy session │                       │
+│   │ 11. Copy staging │            │ 12. Copy session │                       │
 │   │     migrations   │            │     migrations   │                       │
-│   │ 13. Update state │            │     to .postkit  │                       │
-│   │ 14. Track for    │            │     /db/migrations│                      │
-│   │     deploy       │            │ 15. Update state │                       │
+│   │ 12. Update state │            │     to .postkit  │                       │
+│   │ 13. Track for    │            │     /db/migrations│                      │
+│   │     deploy       │            │ 14. Update state │                       │
 │   └──────────────────┘            └──────────────────┘                       │
 │                                                                              │
 │   $ postkit db deploy                                                        │
 │   ┌──────────────────┐            ┌──────────────────┐                       │
-│   │ 15. Dry run on   │            │ 16. Deploy to    │                       │
+│   │ 14. Dry run on   │            │ 15. Deploy to    │                       │
 │   │     local clone  │───────────►│     remote DB    │                       │
-│   │                  │            │ 17. Mark as      │                       │
+│   │                  │            │ 16. Mark as      │                       │
 │   │                  │            │     deployed     │                       │
 │   └──────────────────┘            └──────────────────┘                       │
 │                                                                              │
@@ -162,15 +161,15 @@ db/schema/
 │   └── updated_at.sql
 ├── indexes/
 │   └── performance.sql
-├── grants/                   # Post-migration grant statements
+├── grants/                   # Grant statements (managed by pgschema)
 │   └── app_user.sql
 └── seeds/                    # Post-migration seed data
     └── default_roles.sql
 ```
 
-**Execution ordering:** infra (pre-migration) → pgschema-managed schema (extensions → types → enums → domains → sequences → tables → views → materialized_views → functions → triggers → indexes → constraints → policies) → grants (post-migration) → seeds (post-migration)
+**Execution ordering:** infra (pre-migration) → pgschema-managed schema (extensions → types → enums → domains → sequences → tables → views → materialized_views → functions → triggers → indexes → constraints → policies → grants) → seeds (post-migration)
 
-**Note:** `infra/`, `grants/`, and `seeds/` directories are excluded from pgschema processing and handled as separate steps.
+**Note:** `infra/` and `seeds/` directories are excluded from pgschema processing and handled as separate steps. `grants/` is managed by pgschema.
 
 ### PostKit Directory Structure
 
@@ -222,7 +221,7 @@ postkit db plan
 ```
 
 **What it does:**
-1. Combines all schema files from `db/schema/` into a single SQL file (excluding `infra/`, `grants/`, `seeds/`)
+1. Combines all schema files from `db/schema/` into a single SQL file (excluding `infra/`, `seeds/`)
 2. Runs `pgschema plan` to compare against local database
 3. Saves a schema fingerprint (SHA-256 hash of source files) for validation during apply
 4. Displays the migration plan and saves to `.postkit/db/plan.sql`
@@ -245,10 +244,9 @@ postkit db apply -f          # Skip confirmation
 4. Applies infrastructure SQL from `db/schema/infra/`
 5. Wraps the plan SQL and creates a dbmate migration file (staged in `.postkit/db/session/`)
 6. Runs `dbmate migrate` on the local database
-7. Applies grant statements from `db/schema/grants/`
-8. Applies seed data from `db/schema/seeds/`
+7. Applies seed data from `db/schema/seeds/`
 
-**Resume support:** If grants or seeds fail, re-running `postkit db apply` resumes from where it left off (the migration is not re-applied).
+**Resume support:** If seeds fail, re-running `postkit db apply` resumes from where it left off (the migration is not re-applied).
 
 ---
 
@@ -288,10 +286,10 @@ postkit db deploy --dry-run              # Verify only, don't touch target
 3. If an active session exists, removes it (with confirmation unless `-f`)
 4. Tests the target database connection
 5. Clones the target database to local (using `LOCAL_DATABASE_URL`)
-6. Runs a full dry-run on the local clone: infra, dbmate migrate, grants, seeds
+6. Runs a full dry-run on the local clone: infra, dbmate migrate, seeds
 7. If `--dry-run` is set, stops here and reports results without touching the target
 8. Reports dry-run results and confirms deployment (unless `-f`)
-9. Applies to target: infra, dbmate migrate, grants, seeds
+9. Applies to target: infra, dbmate migrate, seeds
 10. Drops the local clone database
 
 If the dry run fails, deployment is aborted and no changes are made to the target database.
@@ -373,7 +371,7 @@ postkit db import --schema myschema --name initial_baseline
    - Roles queried directly from `pg_roles` → `infra/001_roles.sql` (idempotent `DO $$ IF NOT EXISTS $$`)
    - Schemas queried directly from `pg_namespace` → `infra/002_schemas.sql` (`CREATE SCHEMA IF NOT EXISTS`)
    - Extensions parsed from `schema.sql` → `extensions/imported_extensions.sql`
-   - Privileges consolidated into `grants/<schema>.sql`
+   - Privileges consolidated into `grants/<schema>.sql` (managed by pgschema)
    - All SQL files are prefixed with numeric ordering (`001_filename.sql`) based on `schema.sql` `\i` directives
 6. Clears existing migrations directory and generates baseline DDL via `pgschema plan` against an empty temp database
 7. For non-public schemas, prepends `SET search_path TO "<schema>"` to the baseline migration
@@ -398,18 +396,6 @@ Manage infrastructure SQL (roles, schemas, extensions) from `db/schema/infra/`.
 postkit db infra                          # Show infra statements
 postkit db infra --apply                  # Apply to local
 postkit db infra --apply --target=remote  # Apply to remote
-```
-
----
-
-### `postkit db grants [--apply] [--target <local|remote>]`
-
-Regenerate and display grant statements from `db/schema/grants/`.
-
-```bash
-postkit db grants                         # Show grants
-postkit db grants --apply                 # Apply to local
-postkit db grants --apply --target=remote # Apply to remote
 ```
 
 ---
@@ -480,7 +466,6 @@ Session state is stored in `.postkit/db/session.json`:
     "description": null,
     "schemaFingerprint": null,
     "migrationApplied": false,
-    "grantsApplied": false,
     "seedsApplied": false
   }
 }
@@ -524,7 +509,7 @@ Session migrations are staged in `.postkit/db/session/` and committed migrations
 | `No active migration session` | Run `postkit db start` first |
 | `Plan file is empty` | Schema files match current DB — make changes first |
 | `Schema files have changed since the plan was generated` | Schema files were modified after running `plan`. Run `postkit db plan` again |
-| `Grants/seeds failed during apply` | Re-run `postkit db apply` — it resumes from where it left off |
+| `Seeds failed during apply` | Re-run `postkit db apply` — it resumes from where it left off |
 | `Deploy failed during dry run` | No changes were made to the target. Fix the issue and retry. |
 | `Import: pgschema plan produced no output` | Schema directory may be empty after normalization. Check that the source DB has objects in the target schema. |
 | `Import: Could not insert migration tracking record` | Non-fatal. The local DB migration succeeded but the source DB tracking record failed. Manually insert the version into `postkit.schema_migrations` on the source DB. |

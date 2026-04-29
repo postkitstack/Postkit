@@ -69,7 +69,6 @@ export async function planCommand(options: CommandOptions): Promise<void> {
       planFile: planResult.planFile,
       schemaFingerprint,
       migrationApplied: false,
-      grantsApplied: false,
       seedsApplied: false,
     });
 

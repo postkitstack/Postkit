@@ -21,7 +21,7 @@ postkit db plan
 
 ## What It Does
 
-1. Combines all schema files from `db/schema/` into a single SQL file (excluding `infra/`, `grants/`, `seeds/`)
+1. Combines all schema files from `db/schema/` into a single SQL file (excluding `infra/`, `seeds/`)
 2. Runs `pgschema plan` to compare against local database
 3. Saves a schema fingerprint (SHA-256 hash of source files) for validation during apply
 4. Displays the migration plan and saves to `.postkit/db/plan.sql`

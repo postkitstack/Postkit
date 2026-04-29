@@ -17,7 +17,6 @@ export interface SessionState {
     description: string | null;
     schemaFingerprint: string | null;
     migrationApplied: boolean;
-    grantsApplied: boolean;
     seedsApplied: boolean;
   };
 }

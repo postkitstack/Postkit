@@ -7,7 +7,7 @@ import {startPostgres, stopPostgres, type TestDatabase} from "../helpers/test-da
 import {executeSql, queryDatabase} from "../helpers/db-query";
 import {installFixtureSections} from "../helpers/schema-builder";
 
-describe("Infra, grants, and seeds workflow", () => {
+describe("Infra and seeds workflow", () => {
   let db: TestDatabase;
   let project: TestProject;
 
@@ -74,36 +74,6 @@ describe("Infra, grants, and seeds workflow", () => {
     expect(roleNames).toContain("readonly");
     expect(roleNames).toContain("editor");
     expect(roleNames).toContain("manager");
-  });
-
-  it("shows grants files", async () => {
-    const result = await runCli(["db", "grants"], {cwd: project.rootDir});
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("category");
-    expect(result.stdout).toContain("product");
-  });
-
-  it("applies grants to local database", async () => {
-    const result = await runCli(["db", "grants", "--apply"], {cwd: project.rootDir});
-    expect(result.exitCode).toBe(0);
-
-    // Verify grants were applied — editor should have SELECT on category
-    const grants = await queryDatabase(
-      db.url,
-      `SELECT grantee, table_name, privilege_type
-       FROM information_schema.role_table_grants
-       WHERE grantee IN ('readonly', 'editor', 'manager')
-         AND table_name IN ('category', 'product')
-       ORDER BY grantee, table_name, privilege_type`,
-    );
-    expect(grants.length).toBeGreaterThan(0);
-
-    // Check manager has ALL on product
-    const managerProductGrants = grants.filter(
-      (g) => (g as {grantee: string; table_name: string}).grantee === "manager" &&
-             (g as {grantee: string; table_name: string}).table_name === "product",
-    );
-    expect(managerProductGrants.length).toBeGreaterThan(0);
   });
 
   it("shows seed files", async () => {

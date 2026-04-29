@@ -27,7 +27,6 @@ export type {
 
 // Schema types
 export type {
-  GrantStatement,
   SeedStatement,
   InfraStatement,
 } from "./schema";
