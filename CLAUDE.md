@@ -89,7 +89,6 @@ The `db` module implements a **session-based migration workflow**:
 5. **Schema directory structure** (`db/schema/`):
    - `infra/` - Pre-migration (roles, schemas, extensions) - excluded from pgschema
    - `extensions/`, `types/`, `enums/`, `tables/`, etc. - pgschema-managed
-   - `grants/` - Post-migration grants - excluded from pgschema
    - `seeds/` - Post-migration seed data - excluded from pgschema
 
 ### PostKit Directory Structure
@@ -188,7 +187,6 @@ Remotes are managed via utilities in `modules/db/utils/remotes.ts`:
 | `postkit db remote remove <name>` | Remove a remote |
 | `postkit db remote use <name>` | Set default remote |
 | `postkit db infra [--apply]` | Manage infra SQL (roles, schemas, extensions) |
-| `postkit db grants [--apply]` | Regenerate and apply grants |
 | `postkit db seed [--apply]` | Apply seed data |
 
 ## Common Patterns

@@ -5,7 +5,7 @@ import path from "path";
 import {logger} from "../../../common/logger";
 import {promptConfirm} from "../../../common/prompt";
 import {PostkitError} from "../../../common/errors";
-import {getDbConfig, getTmpImportDir, getCommittedMigrationsPath} from "../utils/db-config";
+import {getDbConfig, getTmpImportDir, getCommittedMigrationsPath, toRelativePath} from "../utils/db-config";
 import {hasActiveSession} from "../utils/session";
 import {addCommittedMigration, saveCommittedState} from "../utils/committed";
 import {testConnection, getTableCount, createDatabase} from "../services/database";
@@ -246,7 +246,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       await addCommittedMigration({
         migrationFile: {
           name: migrationFile.name,
-          path: migrationFile.path,
+          path: toRelativePath(migrationFile.path),
           timestamp: migrationFile.timestamp,
         },
         description: `Baseline import (${schemaName})`,
@@ -305,6 +305,11 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       const tmpImportDir = getTmpImportDir();
       if (existsSync(tmpImportDir)) {
         await fs.rm(tmpImportDir, {recursive: true, force: true});
+      }
+      // Clean up schema.sql artifact from baseline generation step
+      const artifact = path.join(path.dirname(config.schemaPath), "schema.sql");
+      if (existsSync(artifact)) {
+        await fs.unlink(artifact);
       }
       await deletePlanFile();
       await deleteGeneratedSchema();

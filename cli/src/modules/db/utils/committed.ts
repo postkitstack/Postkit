@@ -2,7 +2,11 @@ import fs from "fs/promises";
 import {existsSync} from "fs";
 import pg from "pg";
 import type {CommittedState, CommittedMigration} from "../types/index";
-import {getCommittedFilePath} from "./db-config";
+import {getCommittedFilePath, MIGRATIONS_TABLE} from "./db-config";
+import {
+  CHECK_MIGRATIONS_TABLE_EXISTS,
+  GET_APPLIED_VERSIONS,
+} from "../config/queries";
 import {logger} from "../../../common/logger";
 
 const {Client} = pg;
@@ -57,7 +61,7 @@ export async function getAllCommittedMigrations(): Promise<CommittedMigration[]>
 }
 
 /**
- * Queries the schema_migrations table on a remote database
+ * Queries the postkit.schema_migrations table on a remote database
  * and returns the set of applied migration version timestamps.
  */
 async function getAppliedMigrationVersions(remoteUrl: string): Promise<Set<string>> {
@@ -66,16 +70,14 @@ async function getAppliedMigrationVersions(remoteUrl: string): Promise<Set<strin
   try {
     await client.connect();
 
-    // Check if schema_migrations table exists
-    const tableCheck = await client.query(
-      "SELECT 1 FROM information_schema.tables WHERE table_name = 'schema_migrations' LIMIT 1",
-    );
+    // Check if migrations table exists in postkit schema
+    const tableCheck = await client.query(CHECK_MIGRATIONS_TABLE_EXISTS);
 
     if (tableCheck.rows.length === 0) {
       return new Set();
     }
 
-    const result = await client.query("SELECT version FROM schema_migrations");
+    const result = await client.query(GET_APPLIED_VERSIONS);
     return new Set(result.rows.map((row: {version: string}) => row.version));
   } catch {
     return new Set();

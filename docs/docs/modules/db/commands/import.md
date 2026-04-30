@@ -47,7 +47,7 @@ postkit db import --schema myschema --name initial_baseline
    - Roles queried from `pg_roles` → written to `infra/roles.sql` using idempotent `DO $$ IF NOT EXISTS $$` blocks
    - Schemas queried from `pg_namespace` → written to `infra/schemas.sql` as `CREATE SCHEMA IF NOT EXISTS`
    - Extensions parsed from `schema.sql` → written to `extensions/imported_extensions.sql`
-   - Privileges consolidated into `grants/<schema>.sql`
+   - Privileges consolidated into `grants/<schema>.sql` (managed by pgschema)
 6. **Baseline migration** — Clears existing migrations directory, runs `pgschema plan` against an empty temp database to generate full CREATE DDL, writes it to `.postkit/db/migrations/`, and updates `committed.json`
 7. **Local setup** — Creates the local database, applies infrastructure SQL (roles, schemas), then applies the baseline migration via `dbmate`
 8. **Sync migration state** — After successful local apply, inserts the baseline version into `schema_migrations` on the source database
@@ -110,7 +110,7 @@ db/schema/
 │   └── 001_dashboard_summary.sql
 ├── extensions/
 │   └── imported_extensions.sql
-├── grants/
+├── grants/                                  # Managed by pgschema
 │   └── public.sql                         # Consolidated privileges
 └── .pgschemaignore                         # Excludes schema_migrations table
 ```
