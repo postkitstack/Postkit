@@ -8,7 +8,6 @@ import {statusCommand} from "./commands/status";
 import {abortCommand} from "./commands/abort";
 import {migrationCommand} from "./commands/migration";
 import {infraCommand} from "./commands/infra";
-import {grantsCommand} from "./commands/grants";
 import {seedCommand} from "./commands/seed";
 import {deployCommand} from "./commands/deploy";
 import {importCommand} from "./commands/import";
@@ -111,18 +110,6 @@ export function registerDbModule(program: Command): void {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};
         await infraCommand(options);
-      });
-    });
-
-  // Grants command
-  db.command("grants")
-    .description("Regenerate and show grant statements")
-    .option("--apply", "Apply grants to database")
-    .option("--target <target>", "Target database: local or remote", "local")
-    .action(async (cmdOptions) => {
-      await withInitCheck(async () => {
-        const options = {...program.opts(), ...cmdOptions};
-        await grantsCommand(options);
       });
     });
 

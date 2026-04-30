@@ -43,7 +43,6 @@ export async function createSession(
       description: null,
       schemaFingerprint: null,
       migrationApplied: false,
-      grantsApplied: false,
       seedsApplied: false,
     },
   };

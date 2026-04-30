@@ -10,7 +10,7 @@ Test Runner (vitest)
        └─ PostgreSQL container (Docker)
 ```
 
-All workflow tests use a **predefined fixture schema** (`test/e2e/fixtures/schema/`) that mirrors real project structure — tables with UUID PKs, CHECK constraints, indexes, RLS policies, grants per role, idempotent seeds, triggers, functions, and views.
+All workflow tests use a **predefined fixture schema** (`test/e2e/fixtures/schema/`) that mirrors real project structure — tables with UUID PKs, CHECK constraints, indexes, RLS policies, grant management via pgschema, idempotent seeds, triggers, functions, and views.
 
 ## Quick Start
 
@@ -72,7 +72,7 @@ npx vitest run --config vitest.e2e.config.ts test/e2e/workflows/case-1-empty-db-
 | Case 3: Double Plan | Yes (2 containers) | start → plan → apply → add schema → plan → apply → commit → deploy |
 | Case 4: Existing DB Import | Yes (2 containers) | import → verify → plan → apply → commit → deploy |
 | Abort Workflow | Yes (1 container) | Session abort and cleanup verification |
-| Infra/Grants/Seeds | Yes (1 container) | Infrastructure, grants, seed data, idempotency |
+| Infra/Grants/Seeds | Yes (1 container) | Infrastructure, seed data, idempotency (grants handled by pgschema) |
 
 ---
 
@@ -219,18 +219,16 @@ Verifies that aborting a session fully cleans up all artifacts.
 | Status reflects abort | `db status --json` returns `sessionActive: false` | Status is accurate |
 | Can restart | `db start --force` succeeds after abort | Abort doesn't permanently break the project |
 
-### Infra, Grants & Seeds (`infra-grants-seeds.test.ts`)
+### Infra & Seeds (`infra-grants-seeds.test.ts`)
 
 **Docker: Required (1 container) | Run: ~3s**
 
-Tests infrastructure SQL (roles), grant permissions, and seed data management. Uses the fixture schema's infra, grants, and seed sections.
+Tests infrastructure SQL (roles) and seed data management. Grant permissions are managed internally by pgschema — the fixture schema's `grant-permissions/` section is used to verify pgschema handles grants as part of the schema diff. Uses the fixture schema's infra, grants, and seed sections.
 
 | Test | What It Tests | Why It Matters |
 |------|---------------|----------------|
 | Shows infra | `db infra` displays role creation SQL (api_user, readonly, editor, manager) | Infra SQL is detected and rendered |
 | Applies infra | `db infra --apply` creates roles in PostgreSQL | Roles are created with proper DO$$ guards |
-| Shows grants | `db grants` displays GRANT per role per table | Grant SQL is detected and rendered |
-| Applies grants | `db grants --apply` grants permissions to roles | Role-based access control is set up |
 | Shows seeds | `db seed` displays idempotent seed data | Seed SQL is detected and rendered |
 | Applies seeds | `db seed --apply` inserts seed data | Idempotent inserts work (WHERE NOT EXISTS) |
 | Verifies seed data | Direct query confirms 3 seeded categories | Seeds were persisted |

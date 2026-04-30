@@ -2,7 +2,7 @@ import ora from "ora";
 import {logger} from "../../../common/logger";
 import {promptInput} from "../../../common/prompt";
 import {getSession, deleteSession} from "../utils/session";
-import {getSessionMigrationsPath} from "../utils/db-config";
+import {getSessionMigrationsPath, toRelativePath} from "../utils/db-config";
 import {mergeSessionMigrations, deleteSessionMigrations} from "../services/dbmate";
 import {deletePlanFile} from "../services/pgschema";
 import {deleteGeneratedSchema} from "../services/schema-generator";
@@ -92,11 +92,14 @@ export async function commitCommand(options: CommitOptions): Promise<void> {
     await addCommittedMigration({
       migrationFile: {
         name: mergedMigration.name,
-        path: mergedMigration.path,
+        path: toRelativePath(mergedMigration.path),
         timestamp: mergedMigration.timestamp,
       },
       description,
-      sessionMigrations: migrationFiles,
+      sessionMigrations: migrationFiles.map((mf) => ({
+        name: mf.name,
+        path: mf.path, // already relative from session
+      })),
       committedAt: new Date().toISOString(),
     });
 

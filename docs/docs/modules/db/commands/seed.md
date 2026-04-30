@@ -46,4 +46,3 @@ With `--apply`, executes the seed data SQL on the target database.
 ## Related
 
 - [`infra`](/docs/modules/db/commands/infra) - Manage infrastructure
-- [`grants`](/docs/modules/db/commands/grants) - Manage grants
