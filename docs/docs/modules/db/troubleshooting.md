@@ -34,7 +34,7 @@ sidebar_position: 100
 
 **Solution:** Schema files were modified after running `plan`. Run `postkit db plan` again
 
-### `Grants/seeds failed during apply`
+### `Seeds failed during apply`
 
 **Solution:** Re-run `postkit db apply` — it resumes from where it left off
 

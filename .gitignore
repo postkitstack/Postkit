@@ -7,7 +7,7 @@ node_modules/
 realm-config/
 
 test-proj/
-.claude/
+.claude/settings.local.json
 issue.md
 analyze.md
 import-feature.md
@@ -16,3 +16,4 @@ dump_schema.sh
 test-import/
 cli_testing_strategy.md
 cli/analysis_results.md
+temp/

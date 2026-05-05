@@ -36,9 +36,8 @@ The `db` module provides a **session-based database migration workflow** for saf
 │   │ 8. Create dbmate │            │    migration     │                       │
 │   │    migration     │            │ 9. Run dbmate    │                       │
 │   │ 9. Run dbmate    │            │    on local DB   │                       │
-│   │    on local DB   │            │ 10. Apply grants │                       │
-│   │ 10. Apply grants │            │ 11. Apply seeds  │                       │
-│   │ 11. Apply seeds  │            └────────┬─────────┘                       │
+│   │    on local DB   │            │ 10. Apply seeds  │                       │
+│   │ 10. Apply seeds  │            └────────┬─────────┘                       │
 │   └────────┬─────────┘                     │                                 │
 │            │                               ▼                                 │
 │   $ postkit db commit                                                        │
@@ -75,7 +74,6 @@ The `db` module provides a **session-based database migration workflow** for saf
 | [`migration`](/docs/modules/db/commands/migration) | Create manual migration |
 | [`remote`](/docs/modules/db/commands/remote) | Manage remote databases |
 | [`infra`](/docs/modules/db/commands/infra) | Manage infrastructure SQL |
-| [`grants`](/docs/modules/db/commands/grants) | Manage grant statements |
 | [`seed`](/docs/modules/db/commands/seed) | Manage seed data |
 | [`import`](/docs/modules/db/commands/import) | Import existing database as baseline |
 
@@ -125,7 +123,6 @@ db/schema/
 
 ```
 db/schema/
-├── grants/             # GRANT statements (post-migration)
 └── seeds/              # Seed data (post-migration)
 ```
 
@@ -135,7 +132,7 @@ db/schema/
 
 1. **Pre-migration:** `infra/` (roles, schemas, extensions)
 2. **Migration:** pgschema processes types → enums → tables → views → materialized_views → functions → triggers → indexes → constraints
-3. **Post-migration:** `grants/` (permissions) → `seeds/` (data)
+3. **Post-migration:** `seeds/` (data)
 
 ## Prerequisites
 

@@ -75,7 +75,6 @@ Full documentation: [DB Module](https://docs.postkitstack.com/docs/modules/db/ov
 | `postkit db remote` | Manage remote databases |
 | `postkit db migration` | Create manual SQL migration |
 | `postkit db infra` | Manage infrastructure SQL |
-| `postkit db grants` | Manage grant statements |
 | `postkit db seed` | Manage seed data |
 
 ### Auth Module (`auth`)

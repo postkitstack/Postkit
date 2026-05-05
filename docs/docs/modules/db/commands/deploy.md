@@ -45,10 +45,10 @@ postkit db deploy --remote staging -f
 2. If an active session exists, removes it (with confirmation unless `-f`)
 3. Tests the target database connection
 4. Clones the target database to local (using `LOCAL_DATABASE_URL`)
-5. Runs a full dry-run on the local clone: infra, dbmate migrate, grants, seeds
+5. Runs a full dry-run on the local clone: infra, dbmate migrate, seeds
 6. If `--dry-run` is set, stops here and reports results
 7. Reports dry-run results and confirms deployment (unless `-f`)
-8. Applies to target: infra, dbmate migrate, grants, seeds
+8. Applies to target: infra, dbmate migrate, seeds
 9. Drops the local clone database
 10. Marks migrations as deployed in `.postkit/db/committed.json`
 

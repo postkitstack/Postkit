@@ -24,7 +24,6 @@ The database module uses a session-based workflow. Session state is tracked in `
     "description": null,
     "schemaFingerprint": null,
     "migrationApplied": false,
-    "grantsApplied": false,
     "seedsApplied": false
   }
 }
@@ -53,7 +52,6 @@ The database module uses a session-based workflow. Session state is tracked in `
 | `description` | Migration description |
 | `schemaFingerprint` | SHA-256 hash of schema files |
 | `migrationApplied` | Whether dbmate migration was applied |
-| `grantsApplied` | Whether grants were applied |
 | `seedsApplied` | Whether seeds were applied |
 
 ## Session Lifecycle

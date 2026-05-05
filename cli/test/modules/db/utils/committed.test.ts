@@ -15,6 +15,7 @@ vi.mock("fs", () => ({
 
 vi.mock("../../../../src/modules/db/utils/db-config", () => ({
   getCommittedFilePath: vi.fn(() => "/project/.postkit/db/committed.json"),
+  MIGRATIONS_TABLE: "postkit.schema_migrations",
 }));
 
 vi.mock("../../../../src/common/logger", () => ({

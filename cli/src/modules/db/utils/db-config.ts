@@ -15,6 +15,13 @@ import type {DbConfig, RemoteInputConfig} from "../types/config";
 export type {DbConfig, RemoteInputConfig, RemoteConfig, DbInputConfig} from "../types/config";
 
 // ============================================
+// Constants
+// ============================================
+
+/** dbmate migration tracking table (schema-qualified) */
+export const MIGRATIONS_TABLE = "postkit.schema_migrations";
+
+// ============================================
 // Zod Schemas for Validation
 // ============================================
 
@@ -177,4 +184,23 @@ export function getCommittedFilePath(): string {
 
 export function getTmpImportDir(): string {
   return path.join(getPostkitDbDir(), "tmp-import");
+}
+
+/**
+ * Convert an absolute path to a path relative to the project root.
+ * Used when storing paths in session.json / committed.json for portability.
+ */
+export function toRelativePath(absolutePath: string): string {
+  return path.relative(projectRoot, absolutePath);
+}
+
+/**
+ * Resolve a relative path (from session.json / committed.json) back to absolute.
+ * If the path is already absolute, returns it as-is (backward compatibility).
+ */
+export function resolveProjectPath(filePath: string): string {
+  if (path.isAbsolute(filePath)) {
+    return filePath;
+  }
+  return path.resolve(projectRoot, filePath);
 }
