@@ -25,7 +25,7 @@ postkit db remote list --json
 
 ### add
 
-Add a new remote. The URL is written to `postkit.secrets.json` (gitignored); the remote name and metadata are written to `postkit.config.json` (committed).
+Add a new remote. All remote data (URL, default flag, timestamp) is written to `postkit.secrets.json` (gitignored). Nothing is written to `postkit.config.json` — remotes are user-specific and should not be committed.
 
 ```bash
 postkit db remote add <name> <url> [--default]

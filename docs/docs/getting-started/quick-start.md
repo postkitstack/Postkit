@@ -25,7 +25,7 @@ This creates:
 
 ## 2. Configure Remotes
 
-Add your remote databases (URLs are stored in `postkit.secrets.json`, metadata in `postkit.config.json`):
+Add your remote databases (all remote data is stored in `postkit.secrets.json` — remotes are user-specific and never committed):
 
 ```bash
 # Add development remote (set as default)

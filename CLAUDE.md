@@ -78,11 +78,11 @@ Then import and call the registration function in `cli/src/index.ts`.
 The `db` module implements a **session-based migration workflow**:
 
 1. **Session state**: Tracked in `.postkit/db/session.json`. Includes `remoteName` to track which remote was used, and optional `containerID` for auto Docker containers.
-2. **Named remotes**: Users can configure multiple named remote databases via `db.remotes` in config:
+2. **Named remotes**: Users can configure multiple named remote databases via `db.remotes` in secrets:
    - At least one remote must be configured
    - One remote can be marked as `default: true`
    - Managed via `postkit db remote` commands
-   - Metadata (name, default, addedAt) written to `postkit.config.json`; URL written to `postkit.secrets.json`
+   - All remote data (url, default, addedAt) stored entirely in `postkit.secrets.json` — nothing remote-related in `postkit.config.json`
 3. **Binary resolution**: Both `pgschema` and `dbmate` binaries are auto-resolved:
    - `pgschema`: Bundled in `vendor/pgschema/` for all platforms (darwin-{arm64,amd64}, linux-{arm64,amd64}, windows-{arm64,amd64})
    - `dbmate`: npm-installed via the `dbmate` package
@@ -131,20 +131,15 @@ Config is loaded by `loadPostkitConfig()` from `common/config.ts`, which deep-me
 
 | File | Committed | Purpose |
 |------|-----------|---------|
-| `postkit.config.json` | Yes | Non-sensitive settings (schema paths, remote metadata, flags) |
-| `postkit.secrets.json` | No (gitignored) | Credentials (database URLs, passwords) |
+| `postkit.config.json` | Yes | Non-sensitive project settings (schema paths, flags) |
+| `postkit.secrets.json` | No (gitignored) | Credentials + all remote config (URLs, names, defaults) |
 
 **`postkit.config.json` (committed):**
 ```json
 {
   "db": {
-    "localDbUrl": "",
     "schemaPath": "db/schema",
-    "schema": "public",
-    "remotes": {
-      "dev": { "default": true, "addedAt": "2024-12-31T10:00:00.000Z" },
-      "staging": {}
-    }
+    "schema": "public"
   }
 }
 ```
@@ -155,7 +150,7 @@ Config is loaded by `loadPostkitConfig()` from `common/config.ts`, which deep-me
   "db": {
     "localDbUrl": "postgres://...",
     "remotes": {
-      "dev": { "url": "postgres://..." },
+      "dev": { "url": "postgres://...", "default": true, "addedAt": "2024-12-31T10:00:00.000Z" },
       "staging": { "url": "postgres://..." }
     }
   }

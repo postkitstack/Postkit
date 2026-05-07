@@ -115,23 +115,19 @@ PostKit uses two config files — run `postkit init` to generate both.
 ```json
 {
   "db": {
-    "localDbUrl": "",
     "schemaPath": "db/schema",
-    "schema": "public",
-    "remotes": {
-      "dev": { "default": true }
-    }
+    "schema": "public"
   }
 }
 ```
 
-**`postkit.secrets.json`** (gitignored — contains credentials):
+**`postkit.secrets.json`** (gitignored — contains credentials and all remote config):
 ```json
 {
   "db": {
     "localDbUrl": "postgres://user:pass@localhost:5432/myapp_local",
     "remotes": {
-      "dev": { "url": "postgres://user:pass@dev-host:5432/myapp" }
+      "dev": { "url": "postgres://user:pass@dev-host:5432/myapp", "default": true }
     }
   }
 }

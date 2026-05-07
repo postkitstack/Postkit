@@ -72,7 +72,7 @@ Session-based migration workflow: `start → plan → apply → commit → deplo
 - **pgschema** — Bundled binary for schema diffing (`vendor/pgschema/`)
 - **dbmate** — npm-installed migration runner (`--migrations-table postkit.schema_migrations`)
 - **Session state** — Tracked in `.postkit/db/session.json`; includes optional `containerID` when auto Docker container is active
-- **Named remotes** — Multiple remote DBs via `db.remotes` in config; URLs stored in `postkit.secrets.json`, metadata in `postkit.config.json`
+- **Named remotes** — Multiple remote DBs via `db.remotes`; all remote data (url, default, addedAt) stored entirely in `postkit.secrets.json`
 - **Auto Docker container** — When `localDbUrl` is empty, `container.ts` starts a `postgres:{version}-alpine` container. Version is queried from remote via `SHOW server_version_num`. `pg_dump`/`psql` run inside the container via `docker exec` for version-matched tools.
 - **Schema directory** — User-maintained SQL files (`db/schema/`) with sections: `infra/`, `extensions/`, `types/`, `enums/`, `tables/`, `views/`, `functions/`, `triggers/`, `grants/`, `seeds/`
 
@@ -115,29 +115,24 @@ Loaded via `loadPostkitConfig()`, which deep-merges two files:
 
 | File | Committed | Contains |
 |------|-----------|---------|
-| `postkit.config.json` | Yes | Non-sensitive settings (schema paths, remote metadata, flags) |
-| `postkit.secrets.json` | No (gitignored) | Credentials (database URLs, passwords) |
+| `postkit.config.json` | Yes | Non-sensitive project settings (schema paths, flags) |
+| `postkit.secrets.json` | No (gitignored) | Credentials + all remote config (URLs, names, defaults) |
 
 ```json
-// postkit.config.json (committed)
+// postkit.config.json (committed — no remotes)
 {
   "db": {
-    "localDbUrl": "",
     "schemaPath": "db/schema",
-    "schema": "public",
-    "remotes": {
-      "dev": { "default": true, "addedAt": "2024-12-31T10:00:00.000Z" },
-      "staging": {}
-    }
+    "schema": "public"
   }
 }
 
-// postkit.secrets.json (gitignored)
+// postkit.secrets.json (gitignored — all remote data lives here)
 {
   "db": {
     "localDbUrl": "postgres://user:pass@localhost:5432/myapp_local",
     "remotes": {
-      "dev": { "url": "postgres://user:pass@dev-host:5432/myapp" },
+      "dev": { "url": "postgres://user:pass@dev-host:5432/myapp", "default": true, "addedAt": "2024-12-31T10:00:00.000Z" },
       "staging": { "url": "postgres://user:pass@staging-host:5432/myapp" }
     }
   }
@@ -145,7 +140,6 @@ Loaded via `loadPostkitConfig()`, which deep-merges two files:
 ```
 
 `localDbUrl` can be empty — PostKit will automatically start a Docker container (`postgres:{version}-alpine`) for the session. The container image version is detected from the remote database at runtime via `SHOW server_version_num`.
-```
 
 ---
 

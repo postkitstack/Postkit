@@ -10,33 +10,27 @@ PostKit separates non-sensitive settings from credentials using two config files
 
 | File | Commit to Git | Purpose |
 |------|--------------|---------|
-| `postkit.config.json` | **Yes** | Schema paths, remote names, non-sensitive settings |
-| `postkit.secrets.json` | **No** (gitignored) | Database URLs, passwords, credentials |
+| `postkit.config.json` | **Yes** | Schema paths, non-sensitive project settings |
+| `postkit.secrets.json` | **No** (gitignored) | Database URLs, remotes, passwords, credentials |
 
 Both files are deep-merged at load time. `postkit init` creates all three files: the config, the secrets file, and a `postkit.secrets.example.json` template your team can use as a reference.
 
 ## `postkit.config.json` (committed)
 
+Contains only non-sensitive project settings. Remotes are user/environment-specific and are not stored here.
+
 ```json
 {
   "db": {
-    "localDbUrl": "",
     "schemaPath": "db/schema",
-    "schema": "public",
-    "remotes": {
-      "dev": {
-        "default": true,
-        "addedAt": "2024-12-31T10:00:00.000Z"
-      },
-      "staging": {
-        "addedAt": "2024-12-31T10:00:00.000Z"
-      }
-    }
+    "schema": "public"
   }
 }
 ```
 
 ## `postkit.secrets.json` (gitignored)
+
+Contains all credentials and remote configurations. Each team member has their own copy.
 
 ```json
 {
@@ -44,7 +38,8 @@ Both files are deep-merged at load time. `postkit init` creates all three files:
     "localDbUrl": "postgres://user:pass@localhost:5432/myapp_local",
     "remotes": {
       "dev": {
-        "url": "postgres://user:pass@dev-host:5432/myapp"
+        "url": "postgres://user:pass@dev-host:5432/myapp",
+        "default": true
       },
       "staging": {
         "url": "postgres://user:pass@staging-host:5432/myapp"
@@ -70,15 +65,15 @@ Database schema name. Default: `"public"`.
 
 ### `db.remotes` (required)
 
-Named remote database configurations. At least one remote must be configured. Remote metadata (name, default flag, addedAt) goes in `postkit.config.json`; the URL goes in `postkit.secrets.json`. The `postkit db remote add` command handles this split automatically.
+Named remote database configurations. At least one remote must be configured. All remote data (URL, default flag, addedAt timestamp) lives entirely in `postkit.secrets.json` — remotes are user/environment-specific and should never be committed. Use `postkit db remote add` to add remotes.
 
-#### Remote Properties
+#### Remote Properties (all in `postkit.secrets.json`)
 
-| Property | File | Required | Description |
-|----------|------|----------|-------------|
-| `url` | secrets | Yes | PostgreSQL connection URL |
-| `default` | config | No | Mark as default remote (one must be default) |
-| `addedAt` | config | No | ISO timestamp when remote was added (auto-set) |
+| Property | Required | Description |
+|----------|----------|-------------|
+| `url` | Yes | PostgreSQL connection URL |
+| `default` | No | Mark as default remote (one must be default) |
+| `addedAt` | No | ISO timestamp when remote was added (auto-set) |
 
 ## Auth Module Configuration
 
