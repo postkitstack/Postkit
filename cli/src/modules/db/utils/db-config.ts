@@ -35,7 +35,7 @@ const RemoteConfigInputSchema = z.object({
 });
 
 const DbConfigInputSchema = z.object({
-  localDbUrl: z.string().min(1, "Local database URL is required"),
+  localDbUrl: z.string().default(""),
   schemaPath: z.string().optional(),
   schema: z.string().optional(),
   remotes: z.record(z.string(), RemoteConfigInputSchema).optional(),

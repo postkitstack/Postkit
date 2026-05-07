@@ -6,6 +6,7 @@ import {getSessionMigrationsPath} from "../utils/db-config";
 import {deletePlanFile} from "../services/pgschema";
 import {deleteGeneratedSchema} from "../services/schema-generator";
 import {dropDatabase, parseConnectionUrl} from "../services/database";
+import {stopSessionContainer} from "../services/container";
 import type {CommandOptions} from "../../../common/types";
 
 export async function abortCommand(options: CommandOptions): Promise<void> {
@@ -86,6 +87,21 @@ export async function abortCommand(options: CommandOptions): Promise<void> {
           error instanceof Error ? error.message : String(error),
           options.verbose,
         );
+      }
+
+      // Stop Docker container if the session used one
+      if (session.containerID) {
+        spinner.start("Stopping session container...");
+        try {
+          await stopSessionContainer(session.containerID);
+          spinner.succeed("Session container stopped and removed");
+        } catch (error) {
+          spinner.warn("Could not stop container (may already be removed)");
+          logger.debug(
+            error instanceof Error ? error.message : String(error),
+            options.verbose,
+          );
+        }
       }
     }
 

@@ -26,6 +26,7 @@ export async function createSession(
   remoteDbUrl: string,
   localDbUrl: string,
   remoteName?: string,
+  containerID?: string,
 ): Promise<SessionState> {
   const now = new Date();
   const session: SessionState = {
@@ -35,6 +36,7 @@ export async function createSession(
     remoteName,
     localDbUrl,
     remoteDbUrl,
+    containerID,
     pendingChanges: {
       planned: false,
       applied: false,
