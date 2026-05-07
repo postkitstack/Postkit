@@ -83,7 +83,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     if (!targetUrl) {
       throw new PostkitError(
         "No database URL provided.",
-        "Use --url flag or set localDbUrl in postkit.config.json.",
+        "Use --url flag or set localDbUrl in postkit.secrets.json.",
       );
     }
 

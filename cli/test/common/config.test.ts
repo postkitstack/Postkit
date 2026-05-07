@@ -16,6 +16,7 @@ import {
   checkInitialized,
   invalidateConfig,
   getConfigFilePath,
+  getSecretsFilePath,
   getVendorDir,
 } from "../../src/common/config";
 
@@ -30,6 +31,13 @@ const mockConfig = {
   },
 };
 
+/** Mock existsSync: config exists, secrets does not (single-file / legacy mode). */
+function mockConfigOnly() {
+  vi.mocked(fs.existsSync)
+    .mockReturnValueOnce(true)   // postkit.config.json
+    .mockReturnValueOnce(false); // postkit.secrets.json
+}
+
 describe("config", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -42,33 +50,38 @@ describe("config", () => {
       expect(() => loadPostkitConfig()).toThrow("Config file not found");
     });
 
-    it("returns parsed JSON when config exists", () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+    it("returns parsed JSON when config exists (no secrets file)", () => {
+      mockConfigOnly();
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
       const config = loadPostkitConfig();
       expect(config.db.localDbUrl).toBe("postgres://localhost:5432/test");
     });
 
     it("caches config (same reference on second call)", () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      mockConfigOnly();
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
       const first = loadPostkitConfig();
       const second = loadPostkitConfig();
       expect(first).toBe(second);
+      // readFileSync called once — only for the config file (secrets=false skips second read)
       expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     });
 
     it("invalidateConfig() clears cache", () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      // Two loads, each with config=true / secrets=false
+      vi.mocked(fs.existsSync)
+        .mockReturnValueOnce(true).mockReturnValueOnce(false)
+        .mockReturnValueOnce(true).mockReturnValueOnce(false);
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
       loadPostkitConfig();
       invalidateConfig();
       loadPostkitConfig();
+      // One read per load = 2 total
       expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     });
 
     it("auto-migrates remoteDbUrl to remotes.default", () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      mockConfigOnly();
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
         db: {localDbUrl: "postgres://localhost:5432/test", remoteDbUrl: "postgres://remote:5432/test"},
       }));
@@ -79,7 +92,7 @@ describe("config", () => {
     });
 
     it("auto-migrates environments to named remotes", () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      mockConfigOnly();
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
         db: {localDbUrl: "postgres://localhost:5432/test", environments: {staging: "postgres://staging:5432/test"}},
       }));
@@ -89,10 +102,32 @@ describe("config", () => {
     });
 
     it("does not re-migrate if remotes already exist", () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      mockConfigOnly();
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockConfig));
       loadPostkitConfig();
       expect(fs.writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it("merges secrets file when both files exist", () => {
+      const publicConfig = {
+        db: {schemaPath: "schema", schema: "public", remotes: {dev: {default: true, addedAt: "2024-01-01"}}},
+        auth: {configCliImage: "keycloak:latest"},
+      };
+      const secrets = {
+        db: {localDbUrl: "postgres://localhost:5432/test", remotes: {dev: {url: "postgres://dev:5432/test"}}},
+        auth: {source: {url: "http://kc:8080", adminUser: "admin", adminPass: "pass", realm: "r"}},
+      };
+      vi.mocked(fs.existsSync).mockReturnValue(true); // both files exist
+      vi.mocked(fs.readFileSync)
+        .mockReturnValueOnce(JSON.stringify(publicConfig)) // config file
+        .mockReturnValueOnce(JSON.stringify(secrets));      // secrets file
+      const config = loadPostkitConfig();
+      // Secrets values are merged in
+      expect(config.db.localDbUrl).toBe("postgres://localhost:5432/test");
+      expect(config.db.remotes.dev.url).toBe("postgres://dev:5432/test");
+      // Public config values are preserved
+      expect(config.db.remotes.dev.default).toBe(true);
+      expect((config.auth as any).configCliImage).toBe("keycloak:latest");
     });
   });
 
@@ -111,6 +146,10 @@ describe("config", () => {
   describe("path helpers", () => {
     it("getConfigFilePath() ends with postkit.config.json", () => {
       expect(getConfigFilePath()).toMatch(/postkit\.config\.json$/);
+    });
+
+    it("getSecretsFilePath() ends with postkit.secrets.json", () => {
+      expect(getSecretsFilePath()).toMatch(/postkit\.secrets\.json$/);
     });
 
     it("getVendorDir() ends with vendor", () => {

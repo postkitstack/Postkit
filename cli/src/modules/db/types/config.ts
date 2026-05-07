@@ -13,7 +13,7 @@ export interface RemoteInputConfig {
 }
 
 export interface DbInputConfig {
-  localDbUrl: string;
+  localDbUrl?: string;
   schemaPath?: string;
   schema?: string;
   remotes?: Record<string, RemoteInputConfig>;

@@ -1,6 +1,7 @@
 import fs from "fs/promises";
+import {existsSync} from "fs";
 import {logger} from "../../../common/logger";
-import {loadPostkitConfig, getConfigFilePath, invalidateConfig, projectRoot} from "../../../common/config";
+import {loadPostkitConfig, getConfigFilePath, getSecretsFilePath, invalidateConfig} from "../../../common/config";
 import type {RemoteConfig} from "../../../common/config";
 
 export interface RemoteInfo {
@@ -11,7 +12,7 @@ export interface RemoteInfo {
 }
 
 /**
- * Get all configured remotes from the config
+ * Get all configured remotes from the merged config
  * @throws Error if no remotes are configured
  */
 export function getRemotes(): Record<string, RemoteConfig> {
@@ -61,7 +62,6 @@ export function getDefaultRemote(): string | null {
   const defaultName = Object.keys(remotes).find(name => remotes[name]?.default === true);
 
   if (!defaultName) {
-    // If no default is explicitly set, use the first remote
     const firstRemote = Object.keys(remotes)[0];
     if (firstRemote) {
       return firstRemote;
@@ -72,17 +72,35 @@ export function getDefaultRemote(): string | null {
   return defaultName;
 }
 
+// ─── File read helpers ───────────────────────────────────────────────────────
+
+async function readJsonFile(filePath: string): Promise<Record<string, unknown>> {
+  const raw = await fs.readFile(filePath, "utf-8");
+  return JSON.parse(raw) as Record<string, unknown>;
+}
+
+async function writeJsonFile(filePath: string, data: Record<string, unknown>): Promise<void> {
+  await fs.writeFile(filePath, JSON.stringify(data, null, 2) + "\n", "utf-8");
+}
+
 /**
- * Add a new remote configuration
- * @param name - Name of the remote
- * @param url - Database connection URL
- * @param setAsDefault - Whether to set this as the default remote
+ * Returns true when the project was initialized with the split-config layout
+ * (i.e. postkit.secrets.json exists next to postkit.config.json).
+ */
+function hasSplitConfig(): boolean {
+  return existsSync(getSecretsFilePath());
+}
+
+// ─── Remote management ───────────────────────────────────────────────────────
+
+/**
+ * Add a new remote configuration.
+ *
+ * Split-config projects: metadata (default, addedAt) → postkit.config.json
+ *                        URL → postkit.secrets.json
+ * Legacy projects (no secrets file): everything → postkit.config.json
  */
 export async function addRemote(name: string, url: string, setAsDefault: boolean = false): Promise<void> {
-  const configPath = getConfigFilePath();
-  const raw = await fs.readFile(configPath, "utf-8");
-  const config = JSON.parse(raw);
-
   // Validate name — only letters, numbers, hyphens, underscores
   if (!name || name.trim().length === 0) {
     throw new Error("Remote name cannot be empty");
@@ -94,92 +112,99 @@ export async function addRemote(name: string, url: string, setAsDefault: boolean
     );
   }
 
-  // Check if remote name already exists
-  if (config.db.remotes && config.db.remotes[name]) {
-    throw new Error(`Remote "${name}" already exists`);
-  }
-
-  // Basic URL format validation
   if (!isValidDatabaseUrl(url)) {
     throw new Error(
       "Invalid database URL format. Expected format: postgres://user:pass@host:port/database",
     );
   }
 
-  // Check if URL matches local database URL
-  if (config.db.localDbUrl && normalizeUrl(url) === normalizeUrl(config.db.localDbUrl)) {
+  const configPath = getConfigFilePath();
+  const config = await readJsonFile(configPath);
+  const db = (config.db ?? {}) as Record<string, unknown>;
+  const existingRemotes = (db.remotes ?? {}) as Record<string, Record<string, unknown>>;
+
+  if (existingRemotes[name]) {
+    throw new Error(`Remote "${name}" already exists`);
+  }
+
+  // Check for URL conflicts in the merged (runtime) config
+  const merged = loadPostkitConfig();
+  if (merged.db.localDbUrl && normalizeUrl(url) === normalizeUrl(merged.db.localDbUrl)) {
     throw new Error(
       "Cannot add remote: URL matches local database URL.\n" +
       "The remote URL must be different from your local database."
     );
   }
 
-  // Check if URL already exists in another remote
-  const existingRemote = findRemoteByUrl(config.db.remotes, url);
-  if (existingRemote) {
+  const existingByUrl = findRemoteByUrl(merged.db.remotes, url);
+  if (existingByUrl) {
     throw new Error(
-      `Cannot add remote: URL already used by remote "${existingRemote}".\n` +
+      `Cannot add remote: URL already used by remote "${existingByUrl}".\n` +
       "Each remote must have a unique URL."
     );
   }
 
-  // Initialize remotes object if it doesn't exist
-  if (!config.db.remotes) {
-    config.db.remotes = {};
-  }
+  const remoteCount = Object.keys(existingRemotes).length;
+  const makeDefault = setAsDefault || remoteCount === 0;
 
-  // If this is the first remote or setAsDefault is true, clear other defaults
-  const remoteCount = Object.keys(config.db.remotes).length;
-
-  if (remoteCount === 0 || setAsDefault) {
-    for (const key of Object.keys(config.db.remotes)) {
-      delete config.db.remotes[key].default;
+  if (makeDefault) {
+    for (const key of Object.keys(existingRemotes)) {
+      delete existingRemotes[key].default;
     }
   }
 
-  // Add the new remote
-  config.db.remotes[name] = {
-    url,
-    addedAt: new Date().toISOString(),
-  };
+  const addedAt = new Date().toISOString();
 
-  // Set as default if requested or if it's the first remote
-  if (setAsDefault || remoteCount === 0) {
-    config.db.remotes[name].default = true;
+  if (hasSplitConfig()) {
+    // Write metadata to public config
+    existingRemotes[name] = {addedAt};
+    if (makeDefault) existingRemotes[name].default = true;
+    db.remotes = existingRemotes;
+    config.db = db;
+    await writeJsonFile(configPath, config);
+
+    // Write URL to secrets
+    const secretsPath = getSecretsFilePath();
+    const secrets = await readJsonFile(secretsPath);
+    const secretsDb = (secrets.db ?? {}) as Record<string, unknown>;
+    const secretsRemotes = (secretsDb.remotes ?? {}) as Record<string, unknown>;
+    secretsRemotes[name] = {url};
+    secretsDb.remotes = secretsRemotes;
+    secrets.db = secretsDb;
+    await writeJsonFile(secretsPath, secrets);
+  } else {
+    // Legacy: write everything to postkit.config.json
+    existingRemotes[name] = {url, addedAt};
+    if (makeDefault) existingRemotes[name].default = true;
+    db.remotes = existingRemotes;
+    config.db = db;
+    await writeJsonFile(configPath, config);
   }
 
-  // Save the updated config
-  await fs.writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
   invalidateConfig();
-
   logger.success(`Remote "${name}" added successfully`);
 }
 
 /**
- * Remove a remote configuration
- * @param name - Name of the remote to remove
- * @param force - Skip confirmation (not used here, kept for API consistency)
+ * Remove a remote configuration from both config and secrets files.
  */
 export async function removeRemote(name: string, force: boolean = false): Promise<void> {
-  const configPath = getConfigFilePath();
-  const raw = await fs.readFile(configPath, "utf-8");
-  const config = JSON.parse(raw);
+  // Use merged config to validate existence and count
+  const merged = loadPostkitConfig();
+  const remotes = merged.db.remotes ?? {};
 
-  if (!config.db.remotes || !config.db.remotes[name]) {
+  if (!remotes[name]) {
     throw new Error(`Remote "${name}" not found`);
   }
 
-  const remotes = config.db.remotes;
   const remoteCount = Object.keys(remotes).length;
 
-  // Cannot remove the only remote
   if (remoteCount === 1) {
     throw new Error(
       "Cannot remove the only remaining remote. Add another remote first.",
     );
   }
 
-  // Check if it's the default remote
   const isDefault = remotes[name].default === true;
 
   if (isDefault && !force) {
@@ -190,57 +215,73 @@ export async function removeRemote(name: string, force: boolean = false): Promis
     );
   }
 
-  // Remove the remote
-  delete remotes[name];
+  // Remove from public config
+  const configPath = getConfigFilePath();
+  const config = await readJsonFile(configPath);
+  const db = (config.db ?? {}) as Record<string, unknown>;
+  const configRemotes = (db.remotes ?? {}) as Record<string, Record<string, unknown>>;
+  delete configRemotes[name];
 
-  // If we removed the default, set the first remaining remote as default
   if (isDefault) {
-    const firstKey = Object.keys(remotes)[0];
-    if (firstKey) {
-      remotes[firstKey].default = true;
-    }
+    const firstKey = Object.keys(configRemotes)[0];
+    if (firstKey) configRemotes[firstKey].default = true;
   }
 
-  // Save the updated config
-  await fs.writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
-  invalidateConfig();
+  db.remotes = configRemotes;
+  config.db = db;
+  await writeJsonFile(configPath, config);
 
+  // Remove from secrets if split-config layout is in use
+  if (hasSplitConfig()) {
+    const secretsPath = getSecretsFilePath();
+    const secrets = await readJsonFile(secretsPath);
+    const secretsDb = (secrets.db ?? {}) as Record<string, unknown>;
+    const secretsRemotes = (secretsDb.remotes ?? {}) as Record<string, unknown>;
+    delete secretsRemotes[name];
+    secretsDb.remotes = secretsRemotes;
+    secrets.db = secretsDb;
+    await writeJsonFile(secretsPath, secrets);
+  }
+
+  invalidateConfig();
   logger.success(`Remote "${name}" removed successfully`);
 }
 
 /**
- * Set a remote as the default
- * @param name - Name of the remote to set as default
+ * Set a remote as the default.
+ * Only updates postkit.config.json — the `default` flag is not sensitive.
  */
 export async function setDefaultRemote(name: string): Promise<void> {
-  const configPath = getConfigFilePath();
-  const raw = await fs.readFile(configPath, "utf-8");
-  const config = JSON.parse(raw);
-
-  if (!config.db.remotes || !config.db.remotes[name]) {
+  const merged = loadPostkitConfig();
+  if (!merged.db.remotes || !merged.db.remotes[name]) {
     throw new Error(`Remote "${name}" not found`);
   }
 
-  // Clear default flag from all remotes
-  for (const key of Object.keys(config.db.remotes)) {
-    delete config.db.remotes[key].default;
+  const configPath = getConfigFilePath();
+  const config = await readJsonFile(configPath);
+  const db = (config.db ?? {}) as Record<string, unknown>;
+  const configRemotes = (db.remotes ?? {}) as Record<string, Record<string, unknown>>;
+
+  for (const key of Object.keys(configRemotes)) {
+    delete configRemotes[key].default;
   }
 
-  // Set the new default
-  config.db.remotes[name].default = true;
+  // Ensure the entry exists in config (it may only exist in secrets for legacy remotes)
+  if (!configRemotes[name]) {
+    configRemotes[name] = {};
+  }
+  configRemotes[name].default = true;
 
-  // Save the updated config
-  await fs.writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
+  db.remotes = configRemotes;
+  config.db = db;
+  await writeJsonFile(configPath, config);
+
   invalidateConfig();
-
   logger.success(`Remote "${name}" set as default`);
 }
 
 /**
  * Resolve the URL for a remote by name, or use the default
- * @param remoteName - Optional name of the remote to use
- * @returns The URL of the resolved remote
- * @throws Error if no remotes are configured or named remote not found
  */
 export function resolveRemoteUrl(remoteName?: string): string {
   const remotes = getRemotes();
@@ -256,7 +297,6 @@ export function resolveRemoteUrl(remoteName?: string): string {
     return remote.url;
   }
 
-  // Use default remote
   const defaultName = getDefaultRemote();
   if (!defaultName) {
     throw new Error("No default remote configured.");
@@ -269,9 +309,6 @@ export function resolveRemoteUrl(remoteName?: string): string {
 
 /**
  * Resolve the name and URL for a remote by name, or use the default
- * @param remoteName - Optional name of the remote to use
- * @returns Object with name and url of the resolved remote
- * @throws Error if no remotes are configured or named remote not found
  */
 export function resolveRemote(remoteName?: string): {name: string; url: string} {
   const remotes = getRemotes();
@@ -287,7 +324,6 @@ export function resolveRemote(remoteName?: string): {name: string; url: string} 
     return {name: remoteName, url: remote.url};
   }
 
-  // Use default remote
   const defaultName = getDefaultRemote();
   if (!defaultName) {
     throw new Error("No default remote configured.");
@@ -298,17 +334,12 @@ export function resolveRemote(remoteName?: string): {name: string; url: string} 
   return {name: defaultName, url: remote.url};
 }
 
-/**
- * Validate remote name — only alphanumeric, hyphens, underscores.
- * Prevents shell metacharacter injection and path traversal.
- */
+// ─── Utilities ───────────────────────────────────────────────────────────────
+
 function isValidRemoteName(name: string): boolean {
   return /^[a-zA-Z0-9_-]+$/.test(name);
 }
 
-/**
- * Validate database URL format (basic check)
- */
 function isValidDatabaseUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -321,9 +352,6 @@ function isValidDatabaseUrl(url: string): boolean {
   }
 }
 
-/**
- * Normalize URL for comparison (remove trailing slash, lowercase host)
- */
 export function normalizeUrl(url: string): string {
   try {
     const parsed = new URL(url);
@@ -335,9 +363,6 @@ export function normalizeUrl(url: string): string {
   }
 }
 
-/**
- * Find a remote by URL (returns remote name or null)
- */
 function findRemoteByUrl(
   remotes: Record<string, RemoteConfig> | undefined,
   url: string,
@@ -352,9 +377,6 @@ function findRemoteByUrl(
   return null;
 }
 
-/**
- * Mask sensitive parts of a database URL for logging
- */
 export function maskRemoteUrl(url: string): string {
   try {
     const parsed = new URL(url);

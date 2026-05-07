@@ -7,6 +7,7 @@ vi.mock("../../../../src/common/config", async () => {
     ...actual,
     loadPostkitConfig: vi.fn(),
     getConfigFilePath: vi.fn(() => "/project/postkit.config.json"),
+    getSecretsFilePath: vi.fn(() => "/project/postkit.secrets.json"),
     invalidateConfig: vi.fn(),
   };
 });
@@ -168,9 +169,10 @@ describe("remotes", () => {
     });
 
     it("throws when removing the only remote", async () => {
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({
+      // Validation now uses the merged config, so mock loadPostkitConfig with a single remote
+      vi.mocked(loadPostkitConfig).mockReturnValueOnce({
         db: {localDbUrl: "postgres://localhost/db", remotes: {dev: {url: "postgres://dev/db", default: true}}},
-      }));
+      } as any);
       await expect(removeRemote("dev", true)).rejects.toThrow("only remaining remote");
     });
   });
