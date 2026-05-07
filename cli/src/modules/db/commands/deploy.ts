@@ -11,11 +11,12 @@ import {
   cloneDatabase,
   dropDatabase,
   getTableCount,
+  getRemotePgMajorVersion,
 } from "../services/database";
 import {runCommittedMigrate, runDbmateStatus} from "../services/dbmate";
 import {loadInfra, applyInfra} from "../services/infra-generator";
 import {loadSeeds, applySeeds} from "../services/seed-generator";
-import {checkDockerAvailable, startSessionContainer, stopSessionContainer} from "../services/container";
+import {checkDockerAvailable, startSessionContainer, stopSessionContainer, cloneDatabaseViaContainer} from "../services/container";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import {resolveRemote, maskRemoteUrl, normalizeUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
@@ -44,15 +45,16 @@ function resolveTargetUrl(options: DeployOptions): {url: string; label: string} 
 async function resolveLocalDbUrl(
   config: DbConfig,
   spinner: ReturnType<typeof ora>,
+  remotePgVersion: number,
 ): Promise<{url: string; tempContainerID?: string}> {
   if (config.localDbUrl) {
     return {url: config.localDbUrl};
   }
   spinner.start("Checking Docker availability...");
   await checkDockerAvailable();
-  spinner.text = "Starting temporary Postgres container for dry-run...";
-  const container = await startSessionContainer();
-  spinner.succeed(`Temporary container started on port ${container.port}`);
+  spinner.text = `Starting temporary postgres:${remotePgVersion}-alpine container for dry-run...`;
+  const container = await startSessionContainer(remotePgVersion);
+  spinner.succeed(`Temporary Postgres ${remotePgVersion} container started on port ${container.port}`);
   return {url: container.localDbUrl, tempContainerID: container.containerID};
 }
 
@@ -200,7 +202,8 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     }
 
     const targetTableCount = await getTableCount(targetUrl);
-    spinner.succeed(`Connected to target database (${targetTableCount} tables)`);
+    const remotePgVersion = await getRemotePgMajorVersion(targetUrl);
+    spinner.succeed(`Connected to target database (${targetTableCount} tables, PostgreSQL ${remotePgVersion})`);
 
     // Step 2: Check target migration status
     logger.step(2, totalSteps, "Checking target migration status...");
@@ -225,7 +228,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     }
 
     // Step 3: Resolve local DB URL (spin up a container if localDbUrl is not configured)
-    const {url: localDbUrl, tempContainerID} = await resolveLocalDbUrl(config, spinner);
+    const {url: localDbUrl, tempContainerID} = await resolveLocalDbUrl(config, spinner, remotePgVersion);
 
     const cleanupLocal = async () => {
       try { await dropDatabase(localDbUrl); } catch { /* best effort */ }
@@ -236,7 +239,11 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
 
     logger.step(3, totalSteps, "Cloning target database to local...");
     spinner.start("Cloning target database to local for dry-run verification...");
-    await cloneDatabase(targetUrl, localDbUrl);
+    if (tempContainerID) {
+      await cloneDatabaseViaContainer(tempContainerID, targetUrl, localDbUrl);
+    } else {
+      await cloneDatabase(targetUrl, localDbUrl);
+    }
     const localTableCount = await getTableCount(localDbUrl);
     spinner.succeed(`Target cloned to local (${localTableCount} tables)`);
 

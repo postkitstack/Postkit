@@ -156,3 +156,19 @@ export async function getTableCount(url: string): Promise<number> {
     await client.end();
   }
 }
+
+/**
+ * Returns the major PostgreSQL version of a server (e.g. 14, 15, 16).
+ * Uses SHOW server_version_num which returns a zero-padded integer like "160003".
+ */
+export async function getRemotePgMajorVersion(url: string): Promise<number> {
+  const client = new Client({connectionString: url});
+  try {
+    await client.connect();
+    const result = await client.query("SHOW server_version_num");
+    const num = parseInt(result.rows[0].server_version_num as string, 10);
+    return Math.floor(num / 10000);
+  } finally {
+    await client.end();
+  }
+}

@@ -1,9 +1,9 @@
 import net from "net";
 import {runCommand, runSpawnCommand, commandExists} from "../../../common/shell";
-import {testConnection} from "./database";
+import {testConnection, parseConnectionUrl} from "./database";
+import {runPipedCommands} from "../../../common/shell";
 import {PostkitError} from "../../../common/errors";
 
-const POSTGRES_IMAGE = "postgres:16-alpine";
 const CONTAINER_PREFIX = "postkit-session";
 const DB_NAME = "postkit_local";
 const DB_USER = "postgres";
@@ -13,6 +13,7 @@ export interface ContainerInfo {
   containerID: string;
   localDbUrl: string;
   port: number;
+  pgVersion: number;
 }
 
 export async function checkDockerAvailable(): Promise<void> {
@@ -32,9 +33,14 @@ export async function checkDockerAvailable(): Promise<void> {
   }
 }
 
-export async function startSessionContainer(): Promise<ContainerInfo> {
+/**
+ * Start a Postgres container whose version matches the remote database.
+ * This ensures pg_dump (run inside the container) is always version-compatible.
+ */
+export async function startSessionContainer(pgVersion: number): Promise<ContainerInfo> {
   const port = await findFreePort(15432, 15532);
   const containerName = `${CONTAINER_PREFIX}-${Date.now()}`;
+  const image = `postgres:${pgVersion}-alpine`;
 
   const result = await runSpawnCommand([
     "docker", "run", "-d",
@@ -43,23 +49,73 @@ export async function startSessionContainer(): Promise<ContainerInfo> {
     "-e", `POSTGRES_PASSWORD=${DB_PASSWORD}`,
     "-e", `POSTGRES_DB=${DB_NAME}`,
     "-e", `POSTGRES_USER=${DB_USER}`,
-    POSTGRES_IMAGE,
+    image,
   ]);
 
   if (result.exitCode !== 0) {
-    throw new Error(`Failed to start Postgres container: ${result.stderr}`);
+    throw new Error(`Failed to start postgres:${pgVersion}-alpine container: ${result.stderr}`);
   }
 
   const containerID = result.stdout.trim();
   const localDbUrl = `postgres://${DB_USER}:${DB_PASSWORD}@localhost:${port}/${DB_NAME}`;
 
   await waitForPostgres(localDbUrl);
-  return {containerID, localDbUrl, port};
+  return {containerID, localDbUrl, port, pgVersion};
 }
 
 export async function stopSessionContainer(containerID: string): Promise<void> {
   await runCommand(`docker stop ${containerID}`);
   await runCommand(`docker rm ${containerID}`);
+}
+
+/**
+ * Clone sourceUrl into the container's local database by running pg_dump and psql
+ * *inside* the container. This guarantees the dump tools always match the remote's
+ * PostgreSQL version — no host binary version mismatch possible.
+ *
+ * pg_dump  → runs inside container, connects to remote externally  (version = remote)
+ * psql     → runs inside container, connects to localhost:5432      (version = remote)
+ */
+export async function cloneDatabaseViaContainer(
+  containerID: string,
+  sourceUrl: string,
+  targetUrl: string,
+): Promise<void> {
+  const src = parseConnectionUrl(sourceUrl);
+  const dst = parseConnectionUrl(targetUrl);
+
+  const result = await runPipedCommands(
+    {
+      args: [
+        "docker", "exec",
+        "-e", `PGPASSWORD=${src.password}`,
+        "-i", containerID,
+        "pg_dump",
+        "-h", src.host,
+        "-p", String(src.port),
+        "-U", src.user,
+        "-d", src.database,
+        "--no-owner",
+        "--no-acl",
+      ],
+    },
+    {
+      args: [
+        "docker", "exec",
+        "-e", `PGPASSWORD=${dst.password}`,
+        "-i", containerID,
+        "psql",
+        "-h", "localhost",
+        "-p", "5432",        // internal port — always 5432 inside the container
+        "-U", dst.user,
+        "-d", dst.database,
+      ],
+    },
+  );
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to clone database via container: ${result.stderr}`);
+  }
 }
 
 async function waitForPostgres(url: string, maxAttempts = 30): Promise<void> {

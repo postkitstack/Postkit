@@ -11,10 +11,11 @@ import {
   testConnection,
   cloneDatabase,
   getTableCount,
+  getRemotePgMajorVersion,
 } from "../services/database";
 import {checkPgschemaInstalled} from "../services/pgschema";
 import {checkDbmateInstalled, runDbmateStatus} from "../services/dbmate";
-import {checkDockerAvailable, startSessionContainer} from "../services/container";
+import {checkDockerAvailable, startSessionContainer, cloneDatabaseViaContainer} from "../services/container";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
 import {PostkitError} from "../../../common/errors";
@@ -129,6 +130,9 @@ export async function startCommand(options: StartOptions): Promise<void> {
     const remoteTableCount = await getTableCount(targetRemoteUrl);
     logger.info(`Remote database has ${remoteTableCount} tables`);
 
+    const remotePgVersion = await getRemotePgMajorVersion(targetRemoteUrl);
+    logger.debug(`Remote PostgreSQL version: ${remotePgVersion}`, options.verbose);
+
     // Step 4: Verify database state
     logger.step(4, totalSteps, "Verifying database state...");
 
@@ -202,11 +206,11 @@ export async function startCommand(options: StartOptions): Promise<void> {
       logger.step(5, totalSteps, "Starting local Postgres container...");
       spinner.start("Checking Docker availability...");
       await checkDockerAvailable();
-      spinner.text = "Starting postgres:16-alpine container...";
-      const container = await startSessionContainer();
+      spinner.text = `Starting postgres:${remotePgVersion}-alpine container...`;
+      const container = await startSessionContainer(remotePgVersion);
       containerID = container.containerID;
       localDbUrl = container.localDbUrl;
-      spinner.succeed(`Postgres container started on port ${container.port}`);
+      spinner.succeed(`Postgres ${remotePgVersion} container started on port ${container.port}`);
       logger.debug(`Local DB (container): ${maskConnectionUrl(localDbUrl)}`, options.verbose);
     }
 
@@ -218,7 +222,12 @@ export async function startCommand(options: StartOptions): Promise<void> {
     if (options.dryRun) {
       spinner.info("Dry run - skipping database clone");
     } else {
-      await cloneDatabase(targetRemoteUrl, localDbUrl);
+      if (containerID) {
+        // Run pg_dump/psql inside the container — version-matched with remote
+        await cloneDatabaseViaContainer(containerID, targetRemoteUrl, localDbUrl);
+      } else {
+        await cloneDatabase(targetRemoteUrl, localDbUrl);
+      }
       spinner.succeed("Database cloned successfully");
 
       const localTableCount = await getTableCount(localDbUrl);
