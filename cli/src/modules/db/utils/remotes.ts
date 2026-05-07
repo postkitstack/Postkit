@@ -1,7 +1,6 @@
 import fs from "fs/promises";
-import {existsSync} from "fs";
 import {logger} from "../../../common/logger";
-import {loadPostkitConfig, getConfigFilePath, getSecretsFilePath, invalidateConfig} from "../../../common/config";
+import {loadPostkitConfig, getSecretsFilePath, POSTKIT_SECRETS_FILE, invalidateConfig} from "../../../common/config";
 import type {RemoteConfig} from "../../../common/config";
 
 export interface RemoteInfo {
@@ -83,25 +82,14 @@ async function writeJsonFile(filePath: string, data: Record<string, unknown>): P
   await fs.writeFile(filePath, JSON.stringify(data, null, 2) + "\n", "utf-8");
 }
 
-/**
- * Returns true when the project was initialized with the split-config layout
- * (i.e. postkit.secrets.json exists next to postkit.config.json).
- */
-function hasSplitConfig(): boolean {
-  return existsSync(getSecretsFilePath());
-}
-
 // ─── Remote management ───────────────────────────────────────────────────────
 
 /**
  * Add a new remote configuration.
- *
- * Split-config projects: metadata (default, addedAt) → postkit.config.json
- *                        URL → postkit.secrets.json
- * Legacy projects (no secrets file): everything → postkit.config.json
+ * All remote data (url, default flag, addedAt) is written to postkit.secrets.json.
+ * Nothing remote-related is written to postkit.config.json.
  */
 export async function addRemote(name: string, url: string, setAsDefault: boolean = false): Promise<void> {
-  // Validate name — only letters, numbers, hyphens, underscores
   if (!name || name.trim().length === 0) {
     throw new Error("Remote name cannot be empty");
   }
@@ -118,12 +106,21 @@ export async function addRemote(name: string, url: string, setAsDefault: boolean
     );
   }
 
-  const configPath = getConfigFilePath();
-  const config = await readJsonFile(configPath);
-  const db = (config.db ?? {}) as Record<string, unknown>;
-  const existingRemotes = (db.remotes ?? {}) as Record<string, Record<string, unknown>>;
+  const secretsPath = getSecretsFilePath();
+  let secrets: Record<string, unknown>;
+  try {
+    secrets = await readJsonFile(secretsPath);
+  } catch {
+    throw new Error(
+      `Secrets file not found: ${POSTKIT_SECRETS_FILE}\n` +
+      'Run "postkit init" to initialize your project first.',
+    );
+  }
 
-  if (existingRemotes[name]) {
+  const secretsDb = (secrets.db ?? {}) as Record<string, unknown>;
+  const secretsRemotes = (secretsDb.remotes ?? {}) as Record<string, Record<string, unknown>>;
+
+  if (secretsRemotes[name]) {
     throw new Error(`Remote "${name}" already exists`);
   }
 
@@ -144,52 +141,31 @@ export async function addRemote(name: string, url: string, setAsDefault: boolean
     );
   }
 
-  const remoteCount = Object.keys(existingRemotes).length;
+  const remoteCount = Object.keys(secretsRemotes).length;
   const makeDefault = setAsDefault || remoteCount === 0;
 
   if (makeDefault) {
-    for (const key of Object.keys(existingRemotes)) {
-      delete existingRemotes[key].default;
+    for (const key of Object.keys(secretsRemotes)) {
+      delete secretsRemotes[key]!.default;
     }
   }
 
   const addedAt = new Date().toISOString();
+  secretsRemotes[name] = {url, addedAt};
+  if (makeDefault) secretsRemotes[name]!.default = true;
 
-  if (hasSplitConfig()) {
-    // Write metadata to public config
-    existingRemotes[name] = {addedAt};
-    if (makeDefault) existingRemotes[name].default = true;
-    db.remotes = existingRemotes;
-    config.db = db;
-    await writeJsonFile(configPath, config);
-
-    // Write URL to secrets
-    const secretsPath = getSecretsFilePath();
-    const secrets = await readJsonFile(secretsPath);
-    const secretsDb = (secrets.db ?? {}) as Record<string, unknown>;
-    const secretsRemotes = (secretsDb.remotes ?? {}) as Record<string, unknown>;
-    secretsRemotes[name] = {url};
-    secretsDb.remotes = secretsRemotes;
-    secrets.db = secretsDb;
-    await writeJsonFile(secretsPath, secrets);
-  } else {
-    // Legacy: write everything to postkit.config.json
-    existingRemotes[name] = {url, addedAt};
-    if (makeDefault) existingRemotes[name].default = true;
-    db.remotes = existingRemotes;
-    config.db = db;
-    await writeJsonFile(configPath, config);
-  }
+  secretsDb.remotes = secretsRemotes;
+  secrets.db = secretsDb;
+  await writeJsonFile(secretsPath, secrets);
 
   invalidateConfig();
   logger.success(`Remote "${name}" added successfully`);
 }
 
 /**
- * Remove a remote configuration from both config and secrets files.
+ * Remove a remote configuration from postkit.secrets.json.
  */
 export async function removeRemote(name: string, force: boolean = false): Promise<void> {
-  // Use merged config to validate existence and count
   const merged = loadPostkitConfig();
   const remotes = merged.db.remotes ?? {};
 
@@ -215,33 +191,20 @@ export async function removeRemote(name: string, force: boolean = false): Promis
     );
   }
 
-  // Remove from public config
-  const configPath = getConfigFilePath();
-  const config = await readJsonFile(configPath);
-  const db = (config.db ?? {}) as Record<string, unknown>;
-  const configRemotes = (db.remotes ?? {}) as Record<string, Record<string, unknown>>;
-  delete configRemotes[name];
+  const secretsPath = getSecretsFilePath();
+  const secrets = await readJsonFile(secretsPath);
+  const secretsDb = (secrets.db ?? {}) as Record<string, unknown>;
+  const secretsRemotes = (secretsDb.remotes ?? {}) as Record<string, Record<string, unknown>>;
+  delete secretsRemotes[name];
 
   if (isDefault) {
-    const firstKey = Object.keys(configRemotes)[0];
-    if (firstKey) configRemotes[firstKey].default = true;
+    const firstKey = Object.keys(secretsRemotes)[0];
+    if (firstKey) secretsRemotes[firstKey]!.default = true;
   }
 
-  db.remotes = configRemotes;
-  config.db = db;
-  await writeJsonFile(configPath, config);
-
-  // Remove from secrets if split-config layout is in use
-  if (hasSplitConfig()) {
-    const secretsPath = getSecretsFilePath();
-    const secrets = await readJsonFile(secretsPath);
-    const secretsDb = (secrets.db ?? {}) as Record<string, unknown>;
-    const secretsRemotes = (secretsDb.remotes ?? {}) as Record<string, unknown>;
-    delete secretsRemotes[name];
-    secretsDb.remotes = secretsRemotes;
-    secrets.db = secretsDb;
-    await writeJsonFile(secretsPath, secrets);
-  }
+  secretsDb.remotes = secretsRemotes;
+  secrets.db = secretsDb;
+  await writeJsonFile(secretsPath, secrets);
 
   invalidateConfig();
   logger.success(`Remote "${name}" removed successfully`);
@@ -249,7 +212,7 @@ export async function removeRemote(name: string, force: boolean = false): Promis
 
 /**
  * Set a remote as the default.
- * Only updates postkit.config.json — the `default` flag is not sensitive.
+ * Updates postkit.secrets.json — all remote data lives there.
  */
 export async function setDefaultRemote(name: string): Promise<void> {
   const merged = loadPostkitConfig();
@@ -257,24 +220,23 @@ export async function setDefaultRemote(name: string): Promise<void> {
     throw new Error(`Remote "${name}" not found`);
   }
 
-  const configPath = getConfigFilePath();
-  const config = await readJsonFile(configPath);
-  const db = (config.db ?? {}) as Record<string, unknown>;
-  const configRemotes = (db.remotes ?? {}) as Record<string, Record<string, unknown>>;
+  const secretsPath = getSecretsFilePath();
+  const secrets = await readJsonFile(secretsPath);
+  const secretsDb = (secrets.db ?? {}) as Record<string, unknown>;
+  const secretsRemotes = (secretsDb.remotes ?? {}) as Record<string, Record<string, unknown>>;
 
-  for (const key of Object.keys(configRemotes)) {
-    delete configRemotes[key].default;
+  for (const key of Object.keys(secretsRemotes)) {
+    delete secretsRemotes[key]!.default;
   }
 
-  // Ensure the entry exists in config (it may only exist in secrets for legacy remotes)
-  if (!configRemotes[name]) {
-    configRemotes[name] = {};
+  if (!secretsRemotes[name]) {
+    secretsRemotes[name] = {};
   }
-  configRemotes[name].default = true;
+  secretsRemotes[name]!.default = true;
 
-  db.remotes = configRemotes;
-  config.db = db;
-  await writeJsonFile(configPath, config);
+  secretsDb.remotes = secretsRemotes;
+  secrets.db = secretsDb;
+  await writeJsonFile(secretsPath, secrets);
 
   invalidateConfig();
   logger.success(`Remote "${name}" set as default`);

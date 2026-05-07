@@ -127,12 +127,35 @@ describe("remotes", () => {
   });
 
   describe("addRemote()", () => {
-    it("writes new remote to config", async () => {
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(defaultMockConfig));
+    // Secrets file content (all remote data lives here)
+    const secretsWithRemotes = {
+      db: {
+        localDbUrl: "postgres://localhost:5432/local",
+        remotes: {
+          dev: {url: "postgres://user:pass@dev-host:5432/db", default: true, addedAt: "2024-01-01T00:00:00.000Z"},
+          staging: {url: "postgres://user:pass@staging-host:5432/db", addedAt: "2024-01-01T00:00:00.000Z"},
+        },
+      },
+    };
+
+    it("writes new remote to secrets only", async () => {
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(secretsWithRemotes));
       vi.mocked(fs.writeFile).mockResolvedValue();
       await addRemote("prod", "postgres://user:pass@prod-host:5432/db");
-      expect(fs.writeFile).toHaveBeenCalled();
+      expect(fs.writeFile).toHaveBeenCalledTimes(1);
+      const [writtenPath, writtenContent] = vi.mocked(fs.writeFile).mock.calls[0]!;
+      expect(writtenPath).toContain("postkit.secrets.json");
+      const written = JSON.parse(writtenContent as string);
+      expect(written.db.remotes.prod).toBeDefined();
+      expect(written.db.remotes.prod.url).toBe("postgres://user:pass@prod-host:5432/db");
       expect(invalidateConfig).toHaveBeenCalled();
+    });
+
+    it("throws when secrets file is missing", async () => {
+      vi.mocked(fs.readFile).mockRejectedValue(new Error("ENOENT"));
+      await expect(addRemote("prod", "postgres://user:pass@prod-host:5432/db")).rejects.toThrow(
+        "Secrets file not found",
+      );
     });
 
     it("throws for empty name", async () => {
@@ -144,7 +167,7 @@ describe("remotes", () => {
     });
 
     it("throws for duplicate name", async () => {
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(defaultMockConfig));
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(secretsWithRemotes));
       await expect(addRemote("dev", "postgres://new/db")).rejects.toThrow("already exists");
     });
 
@@ -153,23 +176,24 @@ describe("remotes", () => {
     });
 
     it("throws when URL matches local DB", async () => {
-      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(defaultMockConfig));
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(secretsWithRemotes));
       await expect(addRemote("new", "postgres://localhost:5432/local")).rejects.toThrow("matches local database");
     });
   });
 
   describe("removeRemote()", () => {
-    it("removes remote and reassigns default", async () => {
+    it("removes remote from secrets and reassigns default", async () => {
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(defaultMockConfig));
       vi.mocked(fs.writeFile).mockResolvedValue();
       await removeRemote("dev", true);
-      const written = JSON.parse(vi.mocked(fs.writeFile).mock.calls[0]![1] as string);
+      const [writtenPath, writtenContent] = vi.mocked(fs.writeFile).mock.calls[0]!;
+      expect(writtenPath).toContain("postkit.secrets.json");
+      const written = JSON.parse(writtenContent as string);
       expect(written.db.remotes.dev).toBeUndefined();
       expect(written.db.remotes.staging.default).toBe(true);
     });
 
     it("throws when removing the only remote", async () => {
-      // Validation now uses the merged config, so mock loadPostkitConfig with a single remote
       vi.mocked(loadPostkitConfig).mockReturnValueOnce({
         db: {localDbUrl: "postgres://localhost/db", remotes: {dev: {url: "postgres://dev/db", default: true}}},
       } as any);
@@ -178,11 +202,13 @@ describe("remotes", () => {
   });
 
   describe("setDefaultRemote()", () => {
-    it("sets remote as default", async () => {
+    it("sets remote as default in secrets", async () => {
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(defaultMockConfig));
       vi.mocked(fs.writeFile).mockResolvedValue();
       await setDefaultRemote("staging");
-      const written = JSON.parse(vi.mocked(fs.writeFile).mock.calls[0]![1] as string);
+      const [writtenPath, writtenContent] = vi.mocked(fs.writeFile).mock.calls[0]!;
+      expect(writtenPath).toContain("postkit.secrets.json");
+      const written = JSON.parse(writtenContent as string);
       expect(written.db.remotes.staging.default).toBe(true);
       expect(written.db.remotes.dev.default).toBeUndefined();
     });

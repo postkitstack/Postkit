@@ -86,8 +86,8 @@ describe("config", () => {
         db: {localDbUrl: "postgres://localhost:5432/test", remoteDbUrl: "postgres://remote:5432/test"},
       }));
       const config = loadPostkitConfig();
-      expect(config.db.remotes.default).toBeDefined();
-      expect(config.db.remotes.default.url).toBe("postgres://remote:5432/test");
+      expect(config.db.remotes!["default"]).toBeDefined();
+      expect(config.db.remotes!["default"]!.url).toBe("postgres://remote:5432/test");
       expect(fs.writeFileSync).toHaveBeenCalled();
     });
 
@@ -97,8 +97,8 @@ describe("config", () => {
         db: {localDbUrl: "postgres://localhost:5432/test", environments: {staging: "postgres://staging:5432/test"}},
       }));
       const config = loadPostkitConfig();
-      expect(config.db.remotes.staging).toBeDefined();
-      expect(config.db.environments).toBeUndefined();
+      expect(config.db.remotes!["staging"]).toBeDefined();
+      expect((config.db as Record<string, unknown>)["environments"]).toBeUndefined();
     });
 
     it("does not re-migrate if remotes already exist", () => {
@@ -109,12 +109,16 @@ describe("config", () => {
     });
 
     it("merges secrets file when both files exist", () => {
+      // Public config has no remotes — all remote data lives in secrets
       const publicConfig = {
-        db: {schemaPath: "schema", schema: "public", remotes: {dev: {default: true, addedAt: "2024-01-01"}}},
+        db: {schemaPath: "schema", schema: "public"},
         auth: {configCliImage: "keycloak:latest"},
       };
       const secrets = {
-        db: {localDbUrl: "postgres://localhost:5432/test", remotes: {dev: {url: "postgres://dev:5432/test"}}},
+        db: {
+          localDbUrl: "postgres://localhost:5432/test",
+          remotes: {dev: {url: "postgres://dev:5432/test", default: true, addedAt: "2024-01-01"}},
+        },
         auth: {source: {url: "http://kc:8080", adminUser: "admin", adminPass: "pass", realm: "r"}},
       };
       vi.mocked(fs.existsSync).mockReturnValue(true); // both files exist
@@ -122,11 +126,11 @@ describe("config", () => {
         .mockReturnValueOnce(JSON.stringify(publicConfig)) // config file
         .mockReturnValueOnce(JSON.stringify(secrets));      // secrets file
       const config = loadPostkitConfig();
-      // Secrets values are merged in
+      // All remote data comes from secrets
       expect(config.db.localDbUrl).toBe("postgres://localhost:5432/test");
-      expect(config.db.remotes.dev.url).toBe("postgres://dev:5432/test");
+      expect(config.db.remotes!["dev"]!.url).toBe("postgres://dev:5432/test");
+      expect(config.db.remotes!["dev"]!.default).toBe(true);
       // Public config values are preserved
-      expect(config.db.remotes.dev.default).toBe(true);
       expect((config.auth as any).configCliImage).toBe("keycloak:latest");
     });
   });

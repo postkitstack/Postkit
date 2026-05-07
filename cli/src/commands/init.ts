@@ -24,12 +24,11 @@ const GITIGNORE_ENTRIES = [
   "postkit.secrets.json",
 ];
 
-// Non-sensitive settings committed to git
+// Non-sensitive settings committed to git — no remotes (user/env-specific, lives in secrets)
 const SCAFFOLD_PUBLIC_CONFIG: PostkitPublicConfig = {
   db: {
     schemaPath: "schema",
     schema: "public",
-    remotes: {},
   },
   auth: {
     configCliImage: "adorsys/keycloak-config-cli:6.4.0-24",
@@ -209,8 +208,8 @@ export async function initCommand(options: CommandOptions): Promise<void> {
   logger.success("Postkit project initialized!");
   logger.blank();
   logger.info("Config split:");
-  logger.info(`  ${POSTKIT_CONFIG_FILE}         — committed to git (schema paths, remote metadata)`);
-  logger.info(`  ${POSTKIT_SECRETS_FILE}        — gitignored (DB URLs, passwords)`);
+  logger.info(`  ${POSTKIT_CONFIG_FILE}         — committed to git (schema paths, project settings)`);
+  logger.info(`  ${POSTKIT_SECRETS_FILE}        — gitignored (DB URLs, remotes, passwords)`);
   logger.info(`  postkit.secrets.example.json  — committed template for teammates`);
   logger.blank();
   logger.info("Next steps:");

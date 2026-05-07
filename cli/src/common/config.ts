@@ -64,17 +64,12 @@ export interface AuthInputConfig {
 }
 
 // ─── Public config (committed to git) ───────────────────────────────────────
-// Non-sensitive settings: schema paths, remote metadata, docker images, etc.
-
-export interface RemotePublicConfig {
-  default?: boolean;
-  addedAt?: string;
-}
+// Non-sensitive project settings: schema paths, docker images, etc.
+// Remotes are user/environment-specific and live entirely in secrets.
 
 export interface DbPublicConfig {
   schemaPath?: string;
   schema?: string;
-  remotes?: Record<string, RemotePublicConfig>;
 }
 
 export interface AuthPublicConfig {
@@ -88,9 +83,12 @@ export interface PostkitPublicConfig {
 
 // ─── Secrets (gitignored) ─────────────────────────────────────────────────────
 // Sensitive credentials: DB URLs, passwords, auth tokens.
+// Remotes are fully stored here (url + metadata).
 
 export interface RemoteSecretConfig {
   url: string;
+  default?: boolean;
+  addedAt?: string;
 }
 
 export interface DbSecretsConfig {
@@ -219,6 +217,6 @@ export function loadPostkitConfig(): PostkitConfig {
     parsed = deepMerge(parsed as object, secrets as object) as Record<string, unknown>;
   }
 
-  cachedConfig = parsed as PostkitConfig;
+  cachedConfig = parsed as unknown as PostkitConfig;
   return cachedConfig;
 }
