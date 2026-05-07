@@ -4,20 +4,47 @@ sidebar_position: 2
 
 # Configuration
 
-PostKit uses a `postkit.config.json` file in your project root for configuration.
+PostKit separates non-sensitive settings from credentials using two config files.
 
-## Basic Configuration
+## Config Files
+
+| File | Commit to Git | Purpose |
+|------|--------------|---------|
+| `postkit.config.json` | **Yes** | Schema paths, remote names, non-sensitive settings |
+| `postkit.secrets.json` | **No** (gitignored) | Database URLs, passwords, credentials |
+
+Both files are deep-merged at load time. `postkit init` creates all three files: the config, the secrets file, and a `postkit.secrets.example.json` template your team can use as a reference.
+
+## `postkit.config.json` (committed)
+
+```json
+{
+  "db": {
+    "localDbUrl": "",
+    "schemaPath": "db/schema",
+    "schema": "public",
+    "remotes": {
+      "dev": {
+        "default": true,
+        "addedAt": "2024-12-31T10:00:00.000Z"
+      },
+      "staging": {
+        "addedAt": "2024-12-31T10:00:00.000Z"
+      }
+    }
+  }
+}
+```
+
+## `postkit.secrets.json` (gitignored)
 
 ```json
 {
   "db": {
     "localDbUrl": "postgres://user:pass@localhost:5432/myapp_local",
-    "schemaPath": "db/schema",
-    "schema": "public",
     "remotes": {
       "dev": {
-        "url": "postgres://user:pass@dev-host:5432/myapp",
-        "default": true
+        "url": "postgres://user:pass@dev-host:5432/myapp"
       },
       "staging": {
         "url": "postgres://user:pass@staging-host:5432/myapp"
@@ -29,9 +56,9 @@ PostKit uses a `postkit.config.json` file in your project root for configuration
 
 ## Configuration Options
 
-### `db.localDbUrl` (required)
+### `db.localDbUrl` (optional)
 
-PostgreSQL connection URL for your local clone database.
+PostgreSQL connection URL for your local clone database. **Leave empty** to have PostKit automatically start a Docker container (`postgres:{version}-alpine`) for you. The container image version is matched to your remote PostgreSQL version automatically and the container is cleaned up when you abort the session.
 
 ### `db.schemaPath` (optional)
 
@@ -43,47 +70,22 @@ Database schema name. Default: `"public"`.
 
 ### `db.remotes` (required)
 
-Named remote database configurations. At least one remote must be configured.
+Named remote database configurations. At least one remote must be configured. Remote metadata (name, default flag, addedAt) goes in `postkit.config.json`; the URL goes in `postkit.secrets.json`. The `postkit db remote add` command handles this split automatically.
 
 #### Remote Properties
 
-| Property | Type | Required | Description |
+| Property | File | Required | Description |
 |----------|------|----------|-------------|
-| `url` | string | Yes | PostgreSQL connection URL |
-| `default` | boolean | No | Mark as default remote (one must be default) |
-| `addedAt` | string | No | ISO timestamp when remote was added (auto-set) |
-
-## Environment Variables
-
-For sensitive data like database passwords, use environment variables:
-
-```bash
-# .env file
-DEV_DB_URL="postgres://user:pass@dev-host:5432/myapp"
-STAGING_DB_URL="postgres://user:pass@staging-host:5432/myapp"
-```
-
-Then reference them in your config:
-
-```json
-{
-  "db": {
-    "localDbUrl": "postgres://user:pass@localhost:5432/myapp_local",
-    "remotes": {
-      "dev": {
-        "url": "${DEV_DB_URL}",
-        "default": true
-      }
-    }
-  }
-}
-```
+| `url` | secrets | Yes | PostgreSQL connection URL |
+| `default` | config | No | Mark as default remote (one must be default) |
+| `addedAt` | config | No | ISO timestamp when remote was added (auto-set) |
 
 ## Auth Module Configuration
 
-The auth module is configured in `postkit.config.json`:
+The auth module is configured in `postkit.config.json` (non-sensitive settings) and `postkit.secrets.json` (credentials):
 
 ```json
+// postkit.secrets.json
 {
   "auth": {
     "source": {
@@ -96,8 +98,7 @@ The auth module is configured in `postkit.config.json`:
       "url": "https://keycloak-staging.example.com",
       "adminUser": "admin",
       "adminPass": "staging-password"
-    },
-    "configCliImage": "adorsys/keycloak-config-cli:6.4.0-24"
+    }
   }
 }
 ```

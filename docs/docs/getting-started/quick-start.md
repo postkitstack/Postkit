@@ -17,13 +17,15 @@ postkit init
 ```
 
 This creates:
-- `postkit.config.json` - Your configuration file
+- `postkit.config.json` - Non-sensitive configuration (committed to git)
+- `postkit.secrets.json` - Your credentials (gitignored)
+- `postkit.secrets.example.json` - Credentials template for teammates (committed)
 - `db/schema/` - Your schema files directory
 - `.postkit/` - Runtime files (gitignored)
 
 ## 2. Configure Remotes
 
-Add your remote databases:
+Add your remote databases (URLs are stored in `postkit.secrets.json`, metadata in `postkit.config.json`):
 
 ```bash
 # Add development remote (set as default)
@@ -42,9 +44,10 @@ postkit db start
 ```
 
 This:
-1. Clones the remote database to local
-2. Creates a session to track your changes
-3. Prepares for schema modifications
+1. Detects the remote PostgreSQL version
+2. Clones the remote database to local (auto-starts a Docker container if `localDbUrl` is empty)
+3. Creates a session to track your changes
+4. Prepares for schema modifications
 
 ## 4. Make Schema Changes
 
