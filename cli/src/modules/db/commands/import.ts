@@ -217,14 +217,25 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       }
     }
 
-    // Step 5: Generate baseline migration using pgschema plan
-    logger.step(6, 8, "Generating baseline migration...");
+    // Step 5: Resolve local DB URL — start a Docker container if localDbUrl is not configured
+    // (must happen before generateBaselineDDL, which needs a live Postgres to create a temp DB)
+    logger.step(6, 8, "Setting up local database...");
+
+    let localDbUrl = config.localDbUrl;
+    if (!options.dryRun) {
+      const resolved = await resolveLocalDb(config.localDbUrl, targetUrl, spinner);
+      localDbUrl = resolved.url;
+      tempContainerID = resolved.containerID;
+    }
+
+    // Step 6: Generate baseline migration using pgschema plan
+    logger.step(7, 8, "Generating baseline migration...");
 
     if (options.dryRun) {
       spinner.info("Dry run — skipping baseline generation");
     } else {
       spinner.start("Generating baseline DDL via pgschema plan...");
-      const baselineDDL = await generateBaselineDDL(config.schemaPath, schemaName);
+      const baselineDDL = await generateBaselineDDL(config.schemaPath, schemaName, localDbUrl);
       spinner.succeed("Baseline DDL generated");
 
       // Clear migrations directory and reset committed state before creating baseline migration
@@ -262,13 +273,8 @@ export async function importCommand(options: ImportOptions): Promise<void> {
         committedAt: new Date().toISOString(),
       });
 
-      // Step 7: Set up local database
-      logger.step(7, 8, "Setting up local database...");
-
-      // Resolve local DB URL — start a Docker container if localDbUrl is not configured
-      const resolved = await resolveLocalDb(config.localDbUrl, targetUrl, spinner);
-      const localDbUrl = resolved.url;
-      tempContainerID = resolved.containerID;
+      // Step 7: Apply to local database
+      logger.step(8, 8, "Applying to local database...");
 
       spinner.start("Creating local database...");
       try {
@@ -296,7 +302,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
         logger.warn(`  ${migrateResult.output}`);
       }
 
-      // Step 8: Sync migration state with source database (only after successful local apply)
+      // Sync migration state with source database (only after successful local apply)
       logger.step(8, 8, "Syncing migration state...");
 
       spinner.start("Inserting migration tracking record...");

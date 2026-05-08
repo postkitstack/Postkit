@@ -446,11 +446,10 @@ export async function applyInfraToDatabase(databaseUrl: string, schemaPath: stri
 export async function generateBaselineDDL(
   schemaPath: string,
   schemaName: string,
+  localDbUrl: string,
 ): Promise<string> {
-  const config = getDbConfig();
-
-  // Construct a temp database URL based on localDbUrl
-  const localInfo = parseConnectionUrl(config.localDbUrl);
+  // Construct a temp database URL based on the resolved localDbUrl
+  const localInfo = parseConnectionUrl(localDbUrl);
   const tmpDbName = `postkit_import_${Date.now()}`;
   const tmpDbUrl = `postgres://${localInfo.user}:${encodeURIComponent(localInfo.password)}@${localInfo.host}:${localInfo.port}/${tmpDbName}`;
 

@@ -16,11 +16,14 @@ import {
 import type {CommandOptions} from "../common/types";
 import type {PostkitPublicConfig, PostkitSecrets} from "../common/config";
 
-// Only .postkit/ and the secrets file are gitignored.
+// Ephemeral/user-specific files are gitignored; committed migrations and auth state are tracked.
 // postkit.config.json is safe to commit.
 const GITIGNORE_ENTRIES = [
   "# Postkit",
-  ".postkit/",
+  ".postkit/db/session.json",
+  ".postkit/db/plan.sql",
+  ".postkit/db/schema.sql",
+  ".postkit/db/session/",
   "postkit.secrets.json",
 ];
 
@@ -207,10 +210,19 @@ export async function initCommand(options: CommandOptions): Promise<void> {
   logger.blank();
   logger.success("Postkit project initialized!");
   logger.blank();
-  logger.info("Config split:");
-  logger.info(`  ${POSTKIT_CONFIG_FILE}         — committed to git (schema paths, project settings)`);
-  logger.info(`  ${POSTKIT_SECRETS_FILE}        — gitignored (DB URLs, remotes, passwords)`);
-  logger.info(`  postkit.secrets.example.json  — committed template for teammates`);
+  logger.info("What gets committed to git:");
+  logger.info(`  ${POSTKIT_CONFIG_FILE}         — schema paths, project settings`);
+  logger.info(`  postkit.secrets.example.json  — secrets template for teammates`);
+  logger.info(`  .postkit/db/migrations/       — committed migration SQL files`);
+  logger.info(`  .postkit/db/committed.json    — migration tracking index`);
+  logger.info(`  .postkit/auth/                — auth realm and raw config`);
+  logger.blank();
+  logger.info("What is gitignored:");
+  logger.info(`  ${POSTKIT_SECRETS_FILE}        — DB URLs, remotes, passwords`);
+  logger.info(`  .postkit/db/session.json      — active session state`);
+  logger.info(`  .postkit/db/plan.sql          — generated diff (ephemeral)`);
+  logger.info(`  .postkit/db/schema.sql        — generated schema (ephemeral)`);
+  logger.info(`  .postkit/db/session/          — temporary session migrations`);
   logger.blank();
   logger.info("Next steps:");
   logger.info(`  1. Fill in ${POSTKIT_SECRETS_FILE} with your database credentials`);

@@ -100,17 +100,20 @@ The `db` module implements a **session-based migration workflow**:
 
 ### PostKit Directory Structure
 
-All PostKit runtime files are stored in `.postkit/` (gitignored):
+PostKit files are split between committed (shared with team) and gitignored (user-specific/ephemeral):
 
 ```
 .postkit/
-└── db/
-    ├── session.json         # Current session state
-    ├── committed.json       # Committed migrations tracking
-    ├── plan.sql             # Generated migration plan
-    ├── schema.sql           # Generated schema from files
-    ├── session/             # Session migrations (temporary)
-    └── migrations/          # Committed migrations (for deploy)
+├── db/
+│   ├── session.json         # GITIGNORED — active session state, local DB URL, container ID
+│   ├── plan.sql             # GITIGNORED — generated migration diff (ephemeral)
+│   ├── schema.sql           # GITIGNORED — generated schema artifact (ephemeral)
+│   ├── session/             # GITIGNORED — temporary in-progress migrations
+│   ├── committed.json       # COMMITTED — migration tracking index (shared)
+│   └── migrations/          # COMMITTED — committed SQL migrations for deploy (shared)
+└── auth/
+    ├── raw/                 # COMMITTED — auth raw config (shared)
+    └── realm/               # COMMITTED — auth realm config (shared)
 ```
 
 **Key paths** (from `modules/db/utils/db-config.ts`):
@@ -251,8 +254,8 @@ logger.debug(`Remote URL: ${maskRemoteUrl(url)}`, options.verbose);
 - All paths in `common/config.ts` are resolved relative to either `cliRoot` (the CLI installation) or `projectRoot` (where the user runs commands).
 - Session files in `.postkit/db/` track migration state and enable resume capability.
 - The `vendor/` directory contains platform-specific binaries that are bundled with the CLI - no separate installation required.
-- The `.gitignore` should include `.postkit/` to ignore all runtime files.
-- All migration-related files are in `.postkit/db/` - the only user-maintained DB files should be in `db/schema/`.
+- The `.gitignore` includes specific ephemeral paths (session.json, plan.sql, schema.sql, session/) — NOT the whole `.postkit/` directory. Committed migrations and auth state ARE tracked by git.
+- All migration-related files are in `.postkit/db/` — the only user-maintained DB files should be in `db/schema/`.
 
 ## Claude Code Skills & Agents
 

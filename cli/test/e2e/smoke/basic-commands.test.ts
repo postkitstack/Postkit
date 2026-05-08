@@ -106,6 +106,7 @@ describe("init command — detailed tests (no Docker)", () => {
       expect(fs.existsSync(path.join(tmpDir, ".postkit", "db", "committed.json"))).toBe(true);
       expect(fs.existsSync(path.join(tmpDir, ".postkit", "db", "plan.sql"))).toBe(true);
       expect(fs.existsSync(path.join(tmpDir, ".postkit", "db", "schema.sql"))).toBe(true);
+
     } finally {
       await cleanupDir(tmpDir);
     }
@@ -162,9 +163,17 @@ describe("init command — detailed tests (no Docker)", () => {
       await runCli(["init", "--force"], {cwd: tmpDir});
 
       const gitignore = fs.readFileSync(path.join(tmpDir, ".gitignore"), "utf-8");
-      expect(gitignore).toContain(".postkit/");
+      // Ephemeral/session-specific paths are gitignored
+      expect(gitignore).toContain(".postkit/db/session.json");
+      expect(gitignore).toContain(".postkit/db/plan.sql");
+      expect(gitignore).toContain(".postkit/db/schema.sql");
+      expect(gitignore).toContain(".postkit/db/session/");
       expect(gitignore).toContain("postkit.secrets.json");
+      // Committed files must NOT be gitignored
       expect(gitignore).not.toContain("postkit.config.json");
+      expect(gitignore).not.toContain(".postkit/db/migrations");
+      expect(gitignore).not.toContain(".postkit/db/committed.json");
+      expect(gitignore).not.toContain(".postkit/auth");
     } finally {
       await cleanupDir(tmpDir);
     }
