@@ -60,11 +60,11 @@ describe("Remote management", () => {
     );
     expect(result.exitCode).toBe(0);
 
-    const config = await readJson<{
+    const secrets = await readJson<{
       db: {remotes: Record<string, {url: string; default?: boolean}>};
-    }>(project, "postkit.config.json");
-    expect(config.db.remotes.prod).toBeDefined();
-    expect(config.db.remotes.prod?.default).toBe(true);
+    }>(project, "postkit.secrets.json");
+    expect(secrets.db.remotes.prod).toBeDefined();
+    expect(secrets.db.remotes.prod?.default).toBe(true);
   });
 
   it("sets default remote with 'use'", async () => {
@@ -87,11 +87,11 @@ describe("Remote management", () => {
     });
     expect(result.exitCode).toBe(0);
 
-    const config = await readJson<{
+    const secrets = await readJson<{
       db: {remotes: Record<string, {url: string; default?: boolean}>};
-    }>(project, "postkit.config.json");
-    expect(config.db.remotes.staging).toBeDefined();
-    expect(config.db.remotes.staging?.default).toBe(true);
+    }>(project, "postkit.secrets.json");
+    expect(secrets.db.remotes.staging).toBeDefined();
+    expect(secrets.db.remotes.staging?.default).toBe(true);
   });
 
   it("removes a remote with --force", async () => {
@@ -114,9 +114,9 @@ describe("Remote management", () => {
     });
     expect(result.exitCode).toBe(0);
 
-    const config = await readJson<{
+    const secrets = await readJson<{
       db: {remotes: Record<string, unknown>};
-    }>(project, "postkit.config.json");
-    expect(config.db.remotes.staging).toBeUndefined();
+    }>(project, "postkit.secrets.json");
+    expect(secrets.db.remotes.staging).toBeUndefined();
   });
 });
