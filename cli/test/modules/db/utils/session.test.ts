@@ -44,7 +44,6 @@ const validSession = {
     description: null,
     schemaFingerprint: null,
     migrationApplied: false,
-    grantsApplied: false,
     seedsApplied: false,
   },
 };

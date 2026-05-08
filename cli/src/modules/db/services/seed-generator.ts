@@ -1,9 +1,11 @@
 import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
+import type {Ora} from "ora";
 import {getDbConfig} from "../utils/db-config";
 import {loadSqlGroup} from "../utils/sql-loader";
 import type {SeedStatement} from "../types/index";
+import {PostkitError} from "../../../common/errors";
 
 export async function loadSeeds(): Promise<SeedStatement[]> {
   const config = getDbConfig();
@@ -85,5 +87,24 @@ export async function applySeeds(databaseUrl: string): Promise<void> {
     if (seed.content.trim()) {
       await executeSQL(databaseUrl, seed.content);
     }
+  }
+}
+
+export async function applySeedsStep(spinner: Ora, dbUrl: string, label = "local"): Promise<void> {
+  const seeds = await loadSeeds();
+  if (seeds.length === 0) {
+    spinner.info("No seed files found - skipping");
+    return;
+  }
+  try {
+    spinner.start(`Applying seeds to ${label}...`);
+    await applySeeds(dbUrl);
+    spinner.succeed(`Seeds applied to ${label} (${seeds.length} file(s))`);
+  } catch (error) {
+    spinner.fail("Failed to apply seeds");
+    throw new PostkitError(
+      `Seeds failed: ${error instanceof Error ? error.message : String(error)}`,
+      'Run "postkit db apply" again to retry from seeds.',
+    );
   }
 }

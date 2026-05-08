@@ -13,8 +13,8 @@ import {
   getRemotePgMajorVersion,
 } from "../services/database";
 import {runCommittedMigrate, runDbmateStatus} from "../services/dbmate";
-import {loadInfra, applyInfra} from "../services/infra-generator";
-import {loadSeeds, applySeeds} from "../services/seed-generator";
+import {applyInfraStep} from "../services/infra-generator";
+import {applySeedsStep} from "../services/seed-generator";
 import {resolveLocalDb, stopSessionContainer, cloneDatabaseViaContainer} from "../services/container";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import {resolveRemote, maskRemoteUrl, normalizeUrl} from "../utils/remotes";
@@ -74,16 +74,7 @@ async function runSteps(
 
   // Infra
   logger.step(step, totalSteps, `Applying infra to ${label}...`);
-  const infra = await loadInfra();
-
-  if (infra.length === 0) {
-    spinner.info("No infra files found - skipping");
-  } else {
-    spinner.start(`Applying infra to ${label}...`);
-    await applyInfra(dbUrl);
-    spinner.succeed(`Infra applied to ${label} (${infra.length} file(s))`);
-  }
-
+  await applyInfraStep(spinner, dbUrl, label);
   step++;
 
   // Dbmate migrate
@@ -101,15 +92,7 @@ async function runSteps(
 
   // Seeds
   logger.step(step, totalSteps, `Applying seeds to ${label}...`);
-  const seeds = await loadSeeds();
-
-  if (seeds.length === 0) {
-    spinner.info("No seed files found - skipping");
-  } else {
-    spinner.start(`Applying seeds to ${label}...`);
-    await applySeeds(dbUrl);
-    spinner.succeed(`Seeds applied to ${label} (${seeds.length} file(s))`);
-  }
+  await applySeedsStep(spinner, dbUrl, label);
 }
 
 export async function deployCommand(options: DeployOptions): Promise<void> {

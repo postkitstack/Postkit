@@ -1,44 +1,21 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
-import {getSession, updatePendingChanges} from "../utils/session";
+import {requireActiveSession, assertLocalConnection, updatePendingChanges} from "../utils/session";
 import {toRelativePath} from "../utils/db-config";
 import {generateSchemaSQLAndFingerprint} from "../services/schema-generator";
 import {runPgschemaplan} from "../services/pgschema";
-import {testConnection} from "../services/database";
 import type {CommandOptions} from "../../../common/types";
-import {PostkitError} from "../../../common/errors";
-
 export async function planCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();
 
   try {
-    // Check for active session
-    const session = await getSession();
-
-    if (!session || !session.active) {
-      throw new PostkitError(
-        "No active migration session.",
-        'Run "postkit db start" to begin a new session.',
-      );
-    }
+    const session = await requireActiveSession();
 
     logger.heading("Generating Migration Plan");
 
     // Step 1: Test local connection
     logger.step(1, 3, "Testing local database connection...");
-    spinner.start("Connecting to local database...");
-
-    const localConnected = await testConnection(session.localDbUrl);
-
-    if (!localConnected) {
-      spinner.fail("Failed to connect to local database");
-      throw new PostkitError(
-        "Could not connect to the local database.",
-        'The local clone may have been removed. Run "postkit db start" again.',
-      );
-    }
-
-    spinner.succeed("Connected to local database");
+    await assertLocalConnection(session, spinner);
 
     // Step 2: Generate combined schema
     logger.step(2, 3, "Generating schema SQL...");

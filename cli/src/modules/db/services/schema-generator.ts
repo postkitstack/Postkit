@@ -44,8 +44,6 @@ export async function generateSchemaSQL(): Promise<string> {
 
 /**
  * Generate schema SQL and compute fingerprint in a single filesystem pass.
- * Use this instead of calling generateSchemaSQL() and generateSchemaFingerprint()
- * separately to avoid reading schema files twice.
  */
 export async function generateSchemaSQLAndFingerprint(): Promise<{
   schemaFile: string;
@@ -156,67 +154,6 @@ async function loadSectionFiles(sectionPath: string): Promise<string> {
   }
 
   return "";
-}
-
-async function getSchemaFiles(): Promise<string[]> {
-  const config = getDbConfig();
-  const schemaPath = config.schemaPath;
-
-  if (!existsSync(schemaPath)) {
-    return [];
-  }
-
-  return collectSqlFiles(schemaPath);
-}
-
-const SKIP_DIRECTORIES = new Set(["seed", "seeds"]);
-
-async function collectSqlFiles(
-  dirPath: string,
-  isRoot = true,
-): Promise<string[]> {
-  const files: string[] = [];
-  const entries = await fs.readdir(dirPath, {withFileTypes: true});
-
-  for (const entry of entries) {
-    const fullPath = path.join(dirPath, entry.name);
-
-    if (entry.isDirectory()) {
-      // Skip seed and grant directories at the schema root level
-      if (isRoot && SKIP_DIRECTORIES.has(entry.name.toLowerCase())) {
-        continue;
-      }
-      const subFiles = await collectSqlFiles(fullPath, false);
-      files.push(...subFiles);
-    } else if (entry.isFile() && entry.name.endsWith(".sql")) {
-      files.push(fullPath);
-    }
-  }
-
-  return files.sort();
-}
-
-export async function generateSchemaFingerprint(): Promise<string> {
-  const config = getDbConfig();
-  const schemaPath = config.schemaPath;
-
-  if (!existsSync(schemaPath)) {
-    return createHash("sha256").digest("hex");
-  }
-
-  const sections = await discoverSchemaSections(schemaPath);
-  const sortedSections = sections.sort((a, b) => a.order - b.order);
-  const hash = createHash("sha256");
-
-  for (const section of sortedSections) {
-    const sectionContent = await loadSectionFiles(section.path);
-    if (sectionContent) {
-      hash.update(section.path);
-      hash.update(sectionContent);
-    }
-  }
-
-  return hash.digest("hex");
 }
 
 export async function deleteGeneratedSchema(): Promise<void> {

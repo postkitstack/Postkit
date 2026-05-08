@@ -7,11 +7,13 @@ import {promptConfirm} from "../../../common/prompt";
 import {PostkitError} from "../../../common/errors";
 import {getDbConfig, getTmpImportDir, getCommittedMigrationsPath, toRelativePath} from "../utils/db-config";
 import {hasActiveSession} from "../utils/session";
+import {maskRemoteUrl} from "../utils/remotes";
 import {addCommittedMigration, saveCommittedState} from "../utils/committed";
 import {testConnection, getTableCount, createDatabase} from "../services/database";
 import {resolveLocalDb, stopSessionContainer} from "../services/container";
-import {checkPgschemaInstalled, deletePlanFile} from "../services/pgschema";
-import {checkDbmateInstalled, createMigrationFile, runCommittedMigrate} from "../services/dbmate";
+import {deletePlanFile} from "../services/pgschema";
+import {createMigrationFile, runCommittedMigrate} from "../services/dbmate";
+import {checkDbPrerequisites} from "../services/prerequisites";
 import {deleteGeneratedSchema} from "../services/schema-generator";
 import {
   runPgschemaDump,
@@ -26,16 +28,6 @@ interface ImportOptions extends CommandOptions {
   url?: string;
   schema?: string;
   name?: string;
-}
-
-function maskConnectionUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.password = "****";
-    return parsed.toString();
-  } catch {
-    return url.replace(/:([^@]+)@/, ":****@");
-  }
 }
 
 export async function importCommand(options: ImportOptions): Promise<void> {
@@ -63,24 +55,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
 
     logger.step(1, 8, "Checking prerequisites...");
 
-    const pgschemaInstalled = await checkPgschemaInstalled();
-    const dbmateInstalled = await checkDbmateInstalled();
-
-    if (!pgschemaInstalled) {
-      throw new PostkitError(
-        "pgschema binary not found.",
-        "Visit: https://github.com/pgschema/pgschema",
-      );
-    }
-
-    if (!dbmateInstalled) {
-      throw new PostkitError(
-        "dbmate binary not found.",
-        "Install with: brew install dbmate  or  go install github.com/amacneil/dbmate@latest",
-      );
-    }
-
-    logger.debug("Prerequisites check passed", options.verbose);
+    await checkDbPrerequisites(options.verbose ?? false);
 
     // Step 1: Resolve target database and test connection
     logger.step(2, 8, "Validating database connection...");
@@ -95,7 +70,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       );
     }
 
-    logger.debug(`Target database: ${maskConnectionUrl(targetUrl)}`, options.verbose);
+    logger.debug(`Target database: ${maskRemoteUrl(targetUrl)}`, options.verbose);
 
     spinner.start("Connecting to database...");
     const connected = await testConnection(targetUrl);
@@ -103,7 +78,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     if (!connected) {
       spinner.fail("Failed to connect to database");
       throw new PostkitError(
-        `Could not connect to database: ${maskConnectionUrl(targetUrl)}`,
+        `Could not connect to database: ${maskRemoteUrl(targetUrl)}`,
         "Check the database URL and ensure the database is running.",
       );
     }
@@ -155,7 +130,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     }
 
     logger.info("This command will:");
-    logger.info(`  1. Dump schema from ${maskConnectionUrl(targetUrl)} (schema: ${schemaName})`);
+    logger.info(`  1. Dump schema from ${maskRemoteUrl(targetUrl)} (schema: ${schemaName})`);
     logger.info("  2. Normalize the dump into PostKit schema directory structure");
     logger.info(`  3. Generate baseline migration: "${migrationName}"`);
     logger.info("  4. Insert migration tracking record in the source database");

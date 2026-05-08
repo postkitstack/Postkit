@@ -13,8 +13,8 @@ import {
   getTableCount,
   getRemotePgMajorVersion,
 } from "../services/database";
-import {checkPgschemaInstalled} from "../services/pgschema";
-import {checkDbmateInstalled, runDbmateStatus} from "../services/dbmate";
+import {runDbmateStatus} from "../services/dbmate";
+import {checkDbPrerequisites} from "../services/prerequisites";
 import {resolveLocalDb, cloneDatabaseViaContainer} from "../services/container";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
@@ -41,24 +41,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
     // Step 1: Check prerequisites
     logger.step(1, 5, "Checking prerequisites...");
 
-    const pgschemaInstalled = await checkPgschemaInstalled();
-    const dbmateInstalled = await checkDbmateInstalled();
-
-    if (!pgschemaInstalled) {
-      throw new PostkitError(
-        "pgschema binary not found.",
-        "Visit: https://github.com/pgschema/pgschema",
-      );
-    }
-
-    if (!dbmateInstalled) {
-      throw new PostkitError(
-        "dbmate binary not found.",
-        "Install with: brew install dbmate  or  go install github.com/amacneil/dbmate@latest",
-      );
-    }
-
-    logger.debug("Prerequisites check passed", options.verbose);
+    await checkDbPrerequisites(options.verbose ?? false);
 
     // Step 2: Load configuration
     logger.step(2, 5, "Loading configuration...");
@@ -103,7 +86,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
     );
     if (localDbUrl) {
       logger.debug(
-        `Local DB: ${maskConnectionUrl(localDbUrl)}`,
+        `Local DB: ${maskRemoteUrl(localDbUrl)}`,
         options.verbose,
       );
     }
@@ -207,7 +190,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
       const resolved = await resolveLocalDb(localDbUrl, targetRemoteUrl, spinner);
       containerID = resolved.containerID;
       localDbUrl = resolved.url;
-      logger.debug(`Local DB (container): ${maskConnectionUrl(localDbUrl)}`, options.verbose);
+      logger.debug(`Local DB (container): ${maskRemoteUrl(localDbUrl)}`, options.verbose);
     }
 
     // Step 5/6: Clone database
@@ -273,14 +256,4 @@ async function ensurePgschemaIgnore(schemaPath: string): Promise<void> {
   ].join("\n");
 
   await fs.writeFile(ignorePath, content, "utf-8");
-}
-
-function maskConnectionUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.password = "****";
-    return parsed.toString();
-  } catch {
-    return url.replace(/:([^@]+)@/, ":****@");
-  }
 }

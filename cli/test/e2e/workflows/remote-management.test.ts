@@ -1,61 +1,48 @@
-import {describe, it, expect, afterAll} from "vitest";
+import {describe, it, expect, beforeAll, afterAll} from "vitest";
 import {runCli} from "../helpers/cli-runner";
 import {createTestProject, cleanupTestProject, type TestProject, readJson} from "../helpers/test-project";
 
 describe("Remote management", () => {
-  const projects: TestProject[] = [];
+  let project: TestProject;
 
-  afterAll(async () => {
-    for (const p of projects) {
-      await cleanupTestProject(p);
-    }
-  });
-
-  it("lists remotes", async () => {
-    const project = await createTestProject({
+  beforeAll(async () => {
+    project = await createTestProject({
       localDbUrl: "postgres://localhost:5432/test",
       remoteDbUrl: "postgres://localhost:5432/remote",
       remoteName: "dev",
     });
-    projects.push(project);
+  });
 
+  afterAll(async () => {
+    await cleanupTestProject(project);
+  });
+
+  it("lists remotes", async () => {
     const result = await runCli(["db", "remote", "list"], {cwd: project.rootDir});
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("dev");
   });
 
   it("adds a new remote", async () => {
-    const project = await createTestProject({
-      localDbUrl: "postgres://localhost:5432/test",
-      remoteDbUrl: "postgres://localhost:5432/remote",
-      remoteName: "dev",
-    });
-    projects.push(project);
-
     const result = await runCli(
-      ["db", "remote", "add", "staging", "postgres://localhost:5432/staging"],
+      ["db", "remote", "add", "staging-add", "postgres://localhost:5432/staging-add"],
       {cwd: project.rootDir},
     );
     expect(result.exitCode).toBe(0);
 
-    // URL is in secrets file; public config only has metadata
     const secrets = await readJson<{
       db: {remotes: Record<string, {url: string} | undefined>};
     }>(project, "postkit.secrets.json");
-    expect(secrets.db.remotes.staging).toBeDefined();
-    expect(secrets.db.remotes.staging?.url).toBe("postgres://localhost:5432/staging");
+    expect(secrets.db.remotes["staging-add"]).toBeDefined();
+    expect(secrets.db.remotes["staging-add"]?.url).toBe("postgres://localhost:5432/staging-add");
+
+    // Clean up
+    await runCli(["db", "remote", "remove", "staging-add", "--force"], {cwd: project.rootDir});
   });
 
   it("adds a remote with --default flag", async () => {
-    const project = await createTestProject({
-      localDbUrl: "postgres://localhost:5432/test",
-      remoteDbUrl: "postgres://localhost:5432/remote",
-      remoteName: "dev",
-    });
-    projects.push(project);
-
     const result = await runCli(
-      ["db", "remote", "add", "prod", "postgres://localhost:5432/prod", "--default"],
+      ["db", "remote", "add", "prod-default", "postgres://localhost:5432/prod-default", "--default"],
       {cwd: project.rootDir},
     );
     expect(result.exitCode).toBe(0);
@@ -63,26 +50,23 @@ describe("Remote management", () => {
     const secrets = await readJson<{
       db: {remotes: Record<string, {url: string; default?: boolean}>};
     }>(project, "postkit.secrets.json");
-    expect(secrets.db.remotes.prod).toBeDefined();
-    expect(secrets.db.remotes.prod?.default).toBe(true);
+    expect(secrets.db.remotes["prod-default"]).toBeDefined();
+    expect(secrets.db.remotes["prod-default"]?.default).toBe(true);
+
+    // Restore dev as default and clean up
+    await runCli(["db", "remote", "use", "dev"], {cwd: project.rootDir});
+    await runCli(["db", "remote", "remove", "prod-default", "--force"], {cwd: project.rootDir});
   });
 
   it("sets default remote with 'use'", async () => {
-    const project = await createTestProject({
-      localDbUrl: "postgres://localhost:5432/test",
-      remoteDbUrl: "postgres://localhost:5432/remote",
-      remoteName: "dev",
-    });
-    projects.push(project);
-
-    // Add another remote
+    // Add a staging-use remote
     await runCli(
-      ["db", "remote", "add", "staging", "postgres://localhost:5432/staging"],
+      ["db", "remote", "add", "staging-use", "postgres://localhost:5432/staging-use"],
       {cwd: project.rootDir},
     );
 
-    // Set staging as default
-    const result = await runCli(["db", "remote", "use", "staging"], {
+    // Set staging-use as default
+    const result = await runCli(["db", "remote", "use", "staging-use"], {
       cwd: project.rootDir,
     });
     expect(result.exitCode).toBe(0);
@@ -90,26 +74,23 @@ describe("Remote management", () => {
     const secrets = await readJson<{
       db: {remotes: Record<string, {url: string; default?: boolean}>};
     }>(project, "postkit.secrets.json");
-    expect(secrets.db.remotes.staging).toBeDefined();
-    expect(secrets.db.remotes.staging?.default).toBe(true);
+    expect(secrets.db.remotes["staging-use"]).toBeDefined();
+    expect(secrets.db.remotes["staging-use"]?.default).toBe(true);
+
+    // Restore and clean up
+    await runCli(["db", "remote", "use", "dev"], {cwd: project.rootDir});
+    await runCli(["db", "remote", "remove", "staging-use", "--force"], {cwd: project.rootDir});
   });
 
   it("removes a remote with --force", async () => {
-    const project = await createTestProject({
-      localDbUrl: "postgres://localhost:5432/test",
-      remoteDbUrl: "postgres://localhost:5432/remote",
-      remoteName: "dev",
-    });
-    projects.push(project);
-
-    // Add a second remote
+    // Add a second remote to remove
     await runCli(
-      ["db", "remote", "add", "staging", "postgres://localhost:5432/staging"],
+      ["db", "remote", "add", "staging-remove", "postgres://localhost:5432/staging-remove"],
       {cwd: project.rootDir},
     );
 
-    // Remove staging
-    const result = await runCli(["db", "remote", "remove", "staging", "--force"], {
+    // Remove it
+    const result = await runCli(["db", "remote", "remove", "staging-remove", "--force"], {
       cwd: project.rootDir,
     });
     expect(result.exitCode).toBe(0);
@@ -117,6 +98,6 @@ describe("Remote management", () => {
     const secrets = await readJson<{
       db: {remotes: Record<string, unknown>};
     }>(project, "postkit.secrets.json");
-    expect(secrets.db.remotes.staging).toBeUndefined();
+    expect(secrets.db.remotes["staging-remove"]).toBeUndefined();
   });
 });

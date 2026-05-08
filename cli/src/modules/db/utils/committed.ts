@@ -1,15 +1,13 @@
-import fs from "fs/promises";
 import {existsSync} from "fs";
-import pg from "pg";
 import type {CommittedState, CommittedMigration} from "../types/index";
-import {getCommittedFilePath, MIGRATIONS_TABLE} from "./db-config";
+import {getCommittedFilePath} from "./db-config";
+import {readJsonFile, writeJsonFile} from "./json-file";
+import {withPgClient} from "../services/database";
 import {
   CHECK_MIGRATIONS_TABLE_EXISTS,
   GET_APPLIED_VERSIONS,
 } from "../config/queries";
 import {logger} from "../../../common/logger";
-
-const {Client} = pg;
 
 /**
  * Reads the committed state from .postkit/committed.json
@@ -22,8 +20,7 @@ export async function getCommittedState(): Promise<CommittedState> {
   }
 
   try {
-    const content = await fs.readFile(committedFilePath, "utf-8");
-    const state = JSON.parse(content) as CommittedState;
+    const state = await readJsonFile<CommittedState>(committedFilePath);
     return {migrations: state.migrations ?? []};
   } catch (error) {
     logger.warn(
@@ -40,7 +37,7 @@ export async function getCommittedState(): Promise<CommittedState> {
  */
 export async function saveCommittedState(state: CommittedState): Promise<void> {
   const committedFilePath = getCommittedFilePath();
-  await fs.writeFile(committedFilePath, JSON.stringify(state, null, 2), "utf-8");
+  await writeJsonFile(committedFilePath, state);
 }
 
 /**
@@ -65,24 +62,18 @@ export async function getAllCommittedMigrations(): Promise<CommittedMigration[]>
  * and returns the set of applied migration version timestamps.
  */
 async function getAppliedMigrationVersions(remoteUrl: string): Promise<Set<string>> {
-  const client = new Client({connectionString: remoteUrl});
-
   try {
-    await client.connect();
-
-    // Check if migrations table exists in postkit schema
-    const tableCheck = await client.query(CHECK_MIGRATIONS_TABLE_EXISTS);
-
-    if (tableCheck.rows.length === 0) {
-      return new Set();
-    }
-
-    const result = await client.query(GET_APPLIED_VERSIONS);
-    return new Set(result.rows.map((row: {version: string}) => row.version));
+    return await withPgClient(remoteUrl, async (client) => {
+      // Check if migrations table exists in postkit schema
+      const tableCheck = await client.query(CHECK_MIGRATIONS_TABLE_EXISTS);
+      if (tableCheck.rows.length === 0) {
+        return new Set<string>();
+      }
+      const result = await client.query(GET_APPLIED_VERSIONS);
+      return new Set(result.rows.map((row: {version: string}) => row.version));
+    });
   } catch {
     return new Set();
-  } finally {
-    await client.end();
   }
 }
 

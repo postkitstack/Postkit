@@ -1,6 +1,6 @@
-import fs from "fs/promises";
 import {logger} from "../../../common/logger";
 import {loadPostkitConfig, getSecretsFilePath, POSTKIT_SECRETS_FILE, invalidateConfig} from "../../../common/config";
+import {readJsonFile, writeJsonFile} from "./json-file";
 import type {RemoteConfig} from "../../../common/config";
 
 export interface RemoteInfo {
@@ -71,17 +71,6 @@ export function getDefaultRemote(): string | null {
   return defaultName;
 }
 
-// ─── File read helpers ───────────────────────────────────────────────────────
-
-async function readJsonFile(filePath: string): Promise<Record<string, unknown>> {
-  const raw = await fs.readFile(filePath, "utf-8");
-  return JSON.parse(raw) as Record<string, unknown>;
-}
-
-async function writeJsonFile(filePath: string, data: Record<string, unknown>): Promise<void> {
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2) + "\n", "utf-8");
-}
-
 // ─── Remote management ───────────────────────────────────────────────────────
 
 /**
@@ -109,7 +98,7 @@ export async function addRemote(name: string, url: string, setAsDefault: boolean
   const secretsPath = getSecretsFilePath();
   let secrets: Record<string, unknown>;
   try {
-    secrets = await readJsonFile(secretsPath);
+    secrets = await readJsonFile<Record<string, unknown>>(secretsPath);
   } catch {
     throw new Error(
       `Secrets file not found: ${POSTKIT_SECRETS_FILE}\n` +
@@ -117,8 +106,8 @@ export async function addRemote(name: string, url: string, setAsDefault: boolean
     );
   }
 
-  const secretsDb = (secrets.db ?? {}) as Record<string, unknown>;
-  const secretsRemotes = (secretsDb.remotes ?? {}) as Record<string, Record<string, unknown>>;
+  const secretsDb = (secrets["db"] ?? {}) as Record<string, unknown>;
+  const secretsRemotes = (secretsDb["remotes"] ?? {}) as Record<string, Record<string, unknown>>;
 
   if (secretsRemotes[name]) {
     throw new Error(`Remote "${name}" already exists`);
@@ -146,16 +135,16 @@ export async function addRemote(name: string, url: string, setAsDefault: boolean
 
   if (makeDefault) {
     for (const key of Object.keys(secretsRemotes)) {
-      delete secretsRemotes[key]!.default;
+      delete secretsRemotes[key]!["default"];
     }
   }
 
   const addedAt = new Date().toISOString();
   secretsRemotes[name] = {url, addedAt};
-  if (makeDefault) secretsRemotes[name]!.default = true;
+  if (makeDefault) secretsRemotes[name]!["default"] = true;
 
-  secretsDb.remotes = secretsRemotes;
-  secrets.db = secretsDb;
+  secretsDb["remotes"] = secretsRemotes;
+  secrets["db"] = secretsDb;
   await writeJsonFile(secretsPath, secrets);
 
   invalidateConfig();
@@ -192,18 +181,18 @@ export async function removeRemote(name: string, force: boolean = false): Promis
   }
 
   const secretsPath = getSecretsFilePath();
-  const secrets = await readJsonFile(secretsPath);
-  const secretsDb = (secrets.db ?? {}) as Record<string, unknown>;
-  const secretsRemotes = (secretsDb.remotes ?? {}) as Record<string, Record<string, unknown>>;
+  const secrets = await readJsonFile<Record<string, unknown>>(secretsPath);
+  const secretsDb = (secrets["db"] ?? {}) as Record<string, unknown>;
+  const secretsRemotes = (secretsDb["remotes"] ?? {}) as Record<string, Record<string, unknown>>;
   delete secretsRemotes[name];
 
   if (isDefault) {
     const firstKey = Object.keys(secretsRemotes)[0];
-    if (firstKey) secretsRemotes[firstKey]!.default = true;
+    if (firstKey) secretsRemotes[firstKey]!["default"] = true;
   }
 
-  secretsDb.remotes = secretsRemotes;
-  secrets.db = secretsDb;
+  secretsDb["remotes"] = secretsRemotes;
+  secrets["db"] = secretsDb;
   await writeJsonFile(secretsPath, secrets);
 
   invalidateConfig();
@@ -221,21 +210,21 @@ export async function setDefaultRemote(name: string): Promise<void> {
   }
 
   const secretsPath = getSecretsFilePath();
-  const secrets = await readJsonFile(secretsPath);
-  const secretsDb = (secrets.db ?? {}) as Record<string, unknown>;
-  const secretsRemotes = (secretsDb.remotes ?? {}) as Record<string, Record<string, unknown>>;
+  const secrets = await readJsonFile<Record<string, unknown>>(secretsPath);
+  const secretsDb = (secrets["db"] ?? {}) as Record<string, unknown>;
+  const secretsRemotes = (secretsDb["remotes"] ?? {}) as Record<string, Record<string, unknown>>;
 
   for (const key of Object.keys(secretsRemotes)) {
-    delete secretsRemotes[key]!.default;
+    delete secretsRemotes[key]!["default"];
   }
 
   if (!secretsRemotes[name]) {
     secretsRemotes[name] = {};
   }
-  secretsRemotes[name]!.default = true;
+  secretsRemotes[name]!["default"] = true;
 
-  secretsDb.remotes = secretsRemotes;
-  secrets.db = secretsDb;
+  secretsDb["remotes"] = secretsRemotes;
+  secrets["db"] = secretsDb;
   await writeJsonFile(secretsPath, secrets);
 
   invalidateConfig();
