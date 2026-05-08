@@ -15,8 +15,8 @@ export async function withPgClient<T>(
   fn: (client: InstanceType<typeof Client>) => Promise<T>,
 ): Promise<T> {
   const client = new Client({connectionString: url});
-  await client.connect();
   try {
+    await client.connect();
     return await fn(client);
   } finally {
     await client.end();

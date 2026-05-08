@@ -1,4 +1,5 @@
 import {existsSync} from "fs";
+import fsp from "fs/promises";
 import type {Ora} from "ora";
 import type {SessionState} from "../types/index";
 import {getSessionFilePath} from "./db-config";
@@ -89,8 +90,7 @@ export async function deleteSession(): Promise<void> {
   const sessionPath = getSessionFilePath();
 
   if (existsSync(sessionPath)) {
-    const {unlink} = await import("fs/promises");
-    await unlink(sessionPath);
+    await fsp.unlink(sessionPath);
   }
 }
 
