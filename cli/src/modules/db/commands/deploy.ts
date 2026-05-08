@@ -2,7 +2,6 @@ import ora from "ora";
 import {logger} from "../../../common/logger";
 import {promptConfirm} from "../../../common/prompt";
 import {getDbConfig} from "../utils/db-config";
-import type {DbConfig} from "../utils/db-config";
 import {hasActiveSession, deleteSession} from "../utils/session";
 import {deletePlanFile} from "../services/pgschema";
 import {deleteGeneratedSchema} from "../services/schema-generator";
@@ -16,7 +15,7 @@ import {
 import {runCommittedMigrate, runDbmateStatus} from "../services/dbmate";
 import {loadInfra, applyInfra} from "../services/infra-generator";
 import {loadSeeds, applySeeds} from "../services/seed-generator";
-import {checkDockerAvailable, startSessionContainer, stopSessionContainer, cloneDatabaseViaContainer} from "../services/container";
+import {resolveLocalDb, stopSessionContainer, cloneDatabaseViaContainer} from "../services/container";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import {resolveRemote, maskRemoteUrl, normalizeUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
@@ -42,21 +41,6 @@ function resolveTargetUrl(options: DeployOptions): {url: string; label: string} 
   return {url: resolved.url, label: `${resolved.name} (default)`};
 }
 
-async function resolveLocalDbUrl(
-  config: DbConfig,
-  spinner: ReturnType<typeof ora>,
-  remotePgVersion: number,
-): Promise<{url: string; tempContainerID?: string}> {
-  if (config.localDbUrl) {
-    return {url: config.localDbUrl};
-  }
-  spinner.start("Checking Docker availability...");
-  await checkDockerAvailable();
-  spinner.text = `Starting temporary postgres:${remotePgVersion}-alpine container for dry-run...`;
-  const container = await startSessionContainer(remotePgVersion);
-  spinner.succeed(`Temporary Postgres ${remotePgVersion} container started on port ${container.port}`);
-  return {url: container.localDbUrl, tempContainerID: container.containerID};
-}
 
 async function confirmAndRemoveSession(
   spinner: ReturnType<typeof ora>,
@@ -228,7 +212,12 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     }
 
     // Step 3: Resolve local DB URL (spin up a container if localDbUrl is not configured)
-    const {url: localDbUrl, tempContainerID} = await resolveLocalDbUrl(config, spinner, remotePgVersion);
+    const {url: localDbUrl, containerID: tempContainerID} = await resolveLocalDb(
+      config.localDbUrl,
+      targetUrl,
+      spinner,
+      "Starting temporary container for dry-run...",
+    );
 
     const cleanupLocal = async () => {
       try { await dropDatabase(localDbUrl); } catch { /* best effort */ }

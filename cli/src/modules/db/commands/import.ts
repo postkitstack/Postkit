@@ -9,6 +9,7 @@ import {getDbConfig, getTmpImportDir, getCommittedMigrationsPath, toRelativePath
 import {hasActiveSession} from "../utils/session";
 import {addCommittedMigration, saveCommittedState} from "../utils/committed";
 import {testConnection, getTableCount, createDatabase} from "../services/database";
+import {resolveLocalDb, stopSessionContainer} from "../services/container";
 import {checkPgschemaInstalled, deletePlanFile} from "../services/pgschema";
 import {checkDbmateInstalled, createMigrationFile, runCommittedMigrate} from "../services/dbmate";
 import {deleteGeneratedSchema} from "../services/schema-generator";
@@ -41,6 +42,13 @@ export async function importCommand(options: ImportOptions): Promise<void> {
   const spinner = ora();
   const migrationName = options.name || "imported_baseline";
   const schemaName = options.schema || "public";
+  let tempContainerID: string | undefined;
+
+  async function cleanupContainer(): Promise<void> {
+    if (tempContainerID) {
+      try { await stopSessionContainer(tempContainerID); } catch { /* best effort */ }
+    }
+  }
 
   try {
     // Step 0: Check prerequisites
@@ -257,9 +265,14 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       // Step 7: Set up local database
       logger.step(7, 8, "Setting up local database...");
 
+      // Resolve local DB URL — start a Docker container if localDbUrl is not configured
+      const resolved = await resolveLocalDb(config.localDbUrl, targetUrl, spinner);
+      const localDbUrl = resolved.url;
+      tempContainerID = resolved.containerID;
+
       spinner.start("Creating local database...");
       try {
-        await createDatabase(config.localDbUrl);
+        await createDatabase(localDbUrl);
         spinner.succeed("Local database created");
       } catch {
         spinner.warn("Local database may already exist — continuing");
@@ -268,14 +281,14 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       // Apply infra SQL (roles, schemas) before running migration
       spinner.start("Applying infrastructure SQL to local database...");
       try {
-        await applyInfraToDatabase(config.localDbUrl, config.schemaPath);
+        await applyInfraToDatabase(localDbUrl, config.schemaPath);
         spinner.succeed("Infrastructure SQL applied");
       } catch {
         spinner.warn("Could not apply infrastructure SQL — continuing");
       }
 
       spinner.start("Applying baseline migration to local database...");
-      const migrateResult = await runCommittedMigrate(config.localDbUrl);
+      const migrateResult = await runCommittedMigrate(localDbUrl);
       if (migrateResult.success) {
         spinner.succeed("Baseline migration applied to local database");
       } else {
@@ -313,6 +326,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       }
       await deletePlanFile();
       await deleteGeneratedSchema();
+      await cleanupContainer();
     }
 
     // Summary
@@ -330,6 +344,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     logger.info('  3. Start working: modify schema files, then "postkit db plan" to see changes');
   } catch (error) {
     spinner.fail("Import failed");
+    await cleanupContainer();
     throw error;
   }
 }

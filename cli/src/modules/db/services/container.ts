@@ -1,6 +1,7 @@
 import net from "net";
+import type {Ora} from "ora";
 import {runCommand, runSpawnCommand, commandExists} from "../../../common/shell";
-import {testConnection, parseConnectionUrl} from "./database";
+import {testConnection, parseConnectionUrl, getRemotePgMajorVersion} from "./database";
 import {runPipedCommands} from "../../../common/shell";
 import {PostkitError} from "../../../common/errors";
 
@@ -66,6 +67,36 @@ export async function startSessionContainer(pgVersion: number): Promise<Containe
 export async function stopSessionContainer(containerID: string): Promise<void> {
   await runCommand(`docker stop ${containerID}`);
   await runCommand(`docker rm ${containerID}`);
+}
+
+export interface ResolvedLocalDb {
+  url: string;
+  containerID?: string;
+}
+
+/**
+ * Resolve the local database URL.
+ * If localDbUrl is already set, return it directly without touching Docker.
+ * If empty, detect the remote PG version, check Docker availability, and start
+ * a version-matched container. The caller is responsible for stopping it via containerID.
+ */
+export async function resolveLocalDb(
+  localDbUrl: string,
+  remoteUrl: string,
+  spinner: Ora,
+  spinnerText?: string,
+): Promise<ResolvedLocalDb> {
+  if (localDbUrl) {
+    return {url: localDbUrl};
+  }
+  spinner.start("Checking Docker availability...");
+  await checkDockerAvailable();
+  spinner.text = "Detecting remote PostgreSQL version...";
+  const pgVersion = await getRemotePgMajorVersion(remoteUrl);
+  spinner.text = spinnerText ?? `Starting postgres:${pgVersion}-alpine container...`;
+  const container = await startSessionContainer(pgVersion);
+  spinner.succeed(`Postgres ${pgVersion} container started on port ${container.port}`);
+  return {url: container.localDbUrl, containerID: container.containerID};
 }
 
 /**

@@ -15,7 +15,7 @@ import {
 } from "../services/database";
 import {checkPgschemaInstalled} from "../services/pgschema";
 import {checkDbmateInstalled, runDbmateStatus} from "../services/dbmate";
-import {checkDockerAvailable, startSessionContainer, cloneDatabaseViaContainer} from "../services/container";
+import {resolveLocalDb, cloneDatabaseViaContainer} from "../services/container";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
 import {PostkitError} from "../../../common/errors";
@@ -204,13 +204,9 @@ export async function startCommand(options: StartOptions): Promise<void> {
     // Step 5 (only when no localDbUrl): Start local Postgres container
     if (needsContainer) {
       logger.step(5, totalSteps, "Starting local Postgres container...");
-      spinner.start("Checking Docker availability...");
-      await checkDockerAvailable();
-      spinner.text = `Starting postgres:${remotePgVersion}-alpine container...`;
-      const container = await startSessionContainer(remotePgVersion);
-      containerID = container.containerID;
-      localDbUrl = container.localDbUrl;
-      spinner.succeed(`Postgres ${remotePgVersion} container started on port ${container.port}`);
+      const resolved = await resolveLocalDb(localDbUrl, targetRemoteUrl, spinner);
+      containerID = resolved.containerID;
+      localDbUrl = resolved.url;
       logger.debug(`Local DB (container): ${maskConnectionUrl(localDbUrl)}`, options.verbose);
     }
 

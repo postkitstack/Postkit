@@ -9,6 +9,7 @@ vi.mock("../../../../src/common/shell", () => ({
 
 vi.mock("../../../../src/modules/db/services/database", () => ({
   testConnection: vi.fn(),
+  getRemotePgMajorVersion: vi.fn().mockResolvedValue(16),
   parseConnectionUrl: vi.fn((url: string) => {
     const parsed = new URL(url);
     return {
@@ -53,12 +54,13 @@ vi.mock("net", () => {
 });
 
 import {runCommand, runSpawnCommand, commandExists, runPipedCommands} from "../../../../src/common/shell";
-import {testConnection} from "../../../../src/modules/db/services/database";
+import {testConnection, getRemotePgMajorVersion} from "../../../../src/modules/db/services/database";
 import {
   checkDockerAvailable,
   startSessionContainer,
   stopSessionContainer,
   cloneDatabaseViaContainer,
+  resolveLocalDb,
 } from "../../../../src/modules/db/services/container";
 
 describe("container", () => {
@@ -237,6 +239,66 @@ describe("container", () => {
       await expect(
         cloneDatabaseViaContainer(containerID, sourceUrl, targetUrl),
       ).rejects.toThrow("Failed to clone database via container");
+    });
+  });
+
+  // ─── resolveLocalDb ───────────────────────────────────────────────────────
+
+  describe("resolveLocalDb()", () => {
+    const remoteUrl = "postgres://user:pass@remote-host:5432/mydb";
+    const mockSpinner = {
+      start: vi.fn(),
+      succeed: vi.fn(),
+      fail: vi.fn(),
+      text: "",
+    } as any;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.mocked(getRemotePgMajorVersion).mockResolvedValue(16);
+    });
+
+    it("returns existing URL directly without touching Docker", async () => {
+      const result = await resolveLocalDb(
+        "postgres://localhost:5432/mydb",
+        remoteUrl,
+        mockSpinner,
+      );
+      expect(result.url).toBe("postgres://localhost:5432/mydb");
+      expect(result.containerID).toBeUndefined();
+      expect(commandExists).not.toHaveBeenCalled();
+      expect(getRemotePgMajorVersion).not.toHaveBeenCalled();
+    });
+
+    it("fetches PG version from remoteUrl and starts a container when localDbUrl is empty", async () => {
+      vi.mocked(commandExists).mockResolvedValue(true);
+      vi.mocked(runCommand).mockResolvedValue({stdout: "", stderr: "", exitCode: 0});
+      vi.mocked(runSpawnCommand).mockResolvedValue({stdout: "newcontainer\n", stderr: "", exitCode: 0});
+      vi.mocked(testConnection).mockResolvedValue(true);
+
+      const result = await resolveLocalDb("", remoteUrl, mockSpinner);
+
+      expect(getRemotePgMajorVersion).toHaveBeenCalledWith(remoteUrl);
+      expect(result.containerID).toBe("newcontainer");
+      expect(result.url).toMatch(/^postgres:\/\//);
+      expect(result.url).toContain("localhost");
+    });
+
+    it("propagates PostkitError when Docker is not available", async () => {
+      vi.mocked(commandExists).mockResolvedValue(false);
+
+      await expect(resolveLocalDb("", remoteUrl, mockSpinner)).rejects.toThrow("Docker not found");
+    });
+
+    it("uses custom spinnerText when provided", async () => {
+      vi.mocked(commandExists).mockResolvedValue(true);
+      vi.mocked(runCommand).mockResolvedValue({stdout: "", stderr: "", exitCode: 0});
+      vi.mocked(runSpawnCommand).mockResolvedValue({stdout: "cid\n", stderr: "", exitCode: 0});
+      vi.mocked(testConnection).mockResolvedValue(true);
+
+      await resolveLocalDb("", remoteUrl, mockSpinner, "Custom spinner text");
+
+      expect(mockSpinner.text).toBe("Custom spinner text");
     });
   });
 });
