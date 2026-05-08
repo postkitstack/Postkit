@@ -107,6 +107,19 @@ Shared utilities used by all modules, located in `cli/src/common/`:
 | `types.ts` | Shared TypeScript types (`CommandOptions`) |
 | `init-check.ts` | Project initialization validation |
 
+### DB Module Shared Utilities
+
+Key shared utilities within the `db` module (used by multiple commands):
+
+| File | Purpose |
+|------|---------|
+| `utils/json-file.ts` | `readJsonFile<T>()` / `writeJsonFile()` — typed JSON read/write |
+| `utils/apply-target.ts` | `resolveApplyTarget(target?)` — resolves `local` or `remote` for infra/seed commands |
+| `utils/session.ts` | `requireActiveSession()`, `assertLocalConnection(session, spinner)` |
+| `services/prerequisites.ts` | `checkDbPrerequisites(verbose)` — verifies pgschema + dbmate are available |
+| `services/database.ts` | `withPgClient<T>(url, fn)` — scoped pg client wrapper |
+| `services/container.ts` | `resolveLocalDb(localDbUrl, remoteUrl, spinner, spinnerText?)` — starts auto Docker container when `localDbUrl` is empty; fetches PG version from `remoteUrl` internally |
+
 ---
 
 ## Configuration
@@ -192,17 +205,25 @@ cli/test/
 
 ## Runtime Directory Structure
 
-All PostKit runtime files in `.postkit/` (gitignored):
+PostKit files in `.postkit/` are split between gitignored (ephemeral/user-specific) and committed (shared with team):
 
 ```
 .postkit/
 ├── db/
-│   ├── session.json         # Current session state
-│   ├── committed.json       # Committed migration tracking
-│   ├── plan.sql             # Generated migration plan
-│   ├── schema.sql           # Generated schema from files
-│   ├── session/             # Session migrations (temporary)
-│   └── migrations/          # Committed migrations (for deploy)
+│   ├── session.json         # GITIGNORED — active session state, local DB URL, container ID
+│   ├── plan.sql             # GITIGNORED — generated migration diff (ephemeral)
+│   ├── schema.sql           # GITIGNORED — generated schema artifact (ephemeral)
+│   ├── session/             # GITIGNORED — temporary in-progress migrations
+│   ├── committed.json       # COMMITTED — migration tracking index (shared)
+│   └── migrations/          # COMMITTED — committed SQL migrations for deploy (shared)
 └── auth/
-    └── raw/                 # Exported realm config (pre-clean)
+    ├── raw/                 # COMMITTED — auth raw config (shared)
+    └── realm/               # COMMITTED — auth realm config (shared)
 ```
+
+`.gitignore` (written by `postkit init`) covers only the ephemeral paths:
+- `.postkit/db/session.json`
+- `.postkit/db/plan.sql`
+- `.postkit/db/schema.sql`
+- `.postkit/db/session/`
+- `postkit.secrets.json`

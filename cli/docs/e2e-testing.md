@@ -254,10 +254,10 @@ Tests infrastructure SQL (roles) and seed data management. Grant permissions are
 | Test | What It Tests |
 |------|---------------|
 | `db remote list` | Shows configured remote name |
-| `db remote add` | Persists to `postkit.config.json` |
-| `db remote add --default` | Sets `default: true` flag |
-| `db remote use` | Switches default remote |
-| `db remote remove --force` | Deletes from config |
+| `db remote add` | Persists to `postkit.secrets.json` |
+| `db remote add --default` | Sets `default: true` flag in `postkit.secrets.json` |
+| `db remote use` | Switches default remote in `postkit.secrets.json` |
+| `db remote remove --force` | Deletes from `postkit.secrets.json` |
 
 ### Error Handling (4 files)
 

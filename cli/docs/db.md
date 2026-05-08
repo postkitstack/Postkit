@@ -211,21 +211,23 @@ db/schema/
 
 ### PostKit Directory Structure
 
-All PostKit runtime files are stored in `.postkit/` (gitignored):
+PostKit files in `.postkit/db/` are split between gitignored (ephemeral) and committed (shared with team):
 
 ```
 .postkit/
 └── db/
-    ├── session.json         # Current session state
-    ├── committed.json       # Committed migrations tracking
-    ├── plan.sql             # Generated migration plan
-    ├── schema.sql           # Generated schema from files
-    ├── session/             # Session migrations (temporary)
+    ├── session.json         # GITIGNORED — current session state
+    ├── plan.sql             # GITIGNORED — generated migration plan
+    ├── schema.sql           # GITIGNORED — generated schema from files
+    ├── session/             # GITIGNORED — session migrations (temporary)
     │   └── 20250131_*.sql
-    └── migrations/          # Committed migrations (for deploy)
+    ├── committed.json       # COMMITTED — migrations tracking index (shared)
+    └── migrations/          # COMMITTED — committed migrations (for deploy)
         ├── 20250130_add_users.sql
         └── 20250131_add_posts.sql
 ```
+
+`postkit init` adds only the ephemeral paths to `.gitignore` (`.postkit/db/session.json`, `.postkit/db/plan.sql`, `.postkit/db/schema.sql`, `.postkit/db/session/`). The `migrations/` directory and `committed.json` are committed to git and shared across the team.
 
 ---
 

@@ -86,12 +86,13 @@ The `db` module implements a **session-based migration workflow**:
 3. **Binary resolution**: Both `pgschema` and `dbmate` binaries are auto-resolved:
    - `pgschema`: Bundled in `vendor/pgschema/` for all platforms (darwin-{arm64,amd64}, linux-{arm64,amd64}, windows-{arm64,amd64})
    - `dbmate`: npm-installed via the `dbmate` package
-4. **Auto Docker container** (`modules/db/services/container.ts`): When `localDbUrl` is empty, PostKit:
+4. **Auto Docker container** (`modules/db/services/container.ts`): When `localDbUrl` is empty, PostKit uses `resolveLocalDb(localDbUrl, remoteUrl, spinner)` which:
    - Checks Docker availability (`checkDockerAvailable()`)
-   - Queries remote PG version via `getRemotePgMajorVersion()` (uses `SHOW server_version_num`)
+   - Queries remote PG version via `getRemotePgMajorVersion()` (uses `SHOW server_version_num`) — callers do not pass the version
    - Starts `postgres:{version}-alpine` on a free port in range 15432–15532
    - Runs `pg_dump`/`psql` inside the container via `docker exec` (`cloneDatabaseViaContainer()`)
    - Stores `containerID` in session; cleaned up on `db abort` or `db deploy` completion
+   - Used by `start`, `deploy`, and `import` commands
 5. **Migration steps execution**: The `deploy` command uses `runSteps()` to execute multi-step operations with resume capability - if a step fails, re-running resumes from where it left off.
 6. **Schema directory structure** (`db/schema/`):
    - `infra/` - Pre-migration (roles, schemas, extensions) - excluded from pgschema
@@ -127,6 +128,13 @@ PostKit files are split between committed (shared with team) and gitignored (use
 
 **Key functions** (from `modules/db/services/`):
 - `generateSchemaSQLAndFingerprint()` - Reads all schema files once and returns both the output path (`.postkit/db/schema.sql`) and a SHA-256 fingerprint of the source files
+- `resolveLocalDb(localDbUrl, remoteUrl, spinner, spinnerText?)` (`container.ts`) - When `localDbUrl` is empty, fetches PG version from `remoteUrl` and starts an auto Docker container. Used by `start`, `deploy`, and `import` commands.
+- `withPgClient<T>(url, fn)` (`database.ts`) - Scoped pg client wrapper; opens a connection, runs `fn`, closes on completion or error
+- `checkDbPrerequisites(verbose)` (`prerequisites.ts`) - Shared pgschema + dbmate availability check used by all commands that need them
+- `requireActiveSession()` (`utils/session.ts`) - Returns active session or throws a descriptive error
+- `assertLocalConnection(session, spinner)` (`utils/session.ts`) - Tests local DB connection from session; throws if unreachable
+- `resolveApplyTarget(target?)` (`utils/apply-target.ts`) - Resolves `"local"` or `"remote"` apply target; used by infra and seed commands
+- `readJsonFile<T>(path)` / `writeJsonFile(path, data)` (`utils/json-file.ts`) - Typed JSON helpers used by remotes and committed migration tracking
 
 ### Configuration System
 

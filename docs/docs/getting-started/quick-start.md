@@ -21,7 +21,7 @@ This creates:
 - `postkit.secrets.json` - Your credentials (gitignored)
 - `postkit.secrets.example.json` - Credentials template for teammates (committed)
 - `db/schema/` - Your schema files directory
-- `.postkit/` - Runtime files (gitignored)
+- `.postkit/` - Runtime state (ephemeral files gitignored; committed migrations and auth config are tracked by git)
 
 ## 2. Configure Remotes
 
