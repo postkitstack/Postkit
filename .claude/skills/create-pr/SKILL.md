@@ -21,12 +21,17 @@ Use the PR template at `.github/pull_request_template.md`.
 
 ### Step 1: Analyze Changes
 
-Determine the base branch from the argument (default: `main`). Then gather branch information:
+Determine the base branch from the argument (default: `main`). Always compare against the **remote** tracking branch, not a local branch. First fetch to ensure the remote ref is up to date, then gather branch information:
+
 ```bash
+git fetch origin <base>
 git log origin/<base>...HEAD --oneline
 git diff origin/<base>...HEAD --stat
 git diff origin/<base>...HEAD
 ```
+
+Always use `origin/<base>` (not `<base>`) in all git commands so the comparison is against the remote state, not a potentially stale local branch.
+
 Categorize changes into: features, fixes, refactors, tests, docs, chore.
 
 ### Step 2: Generate PR Description
