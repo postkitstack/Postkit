@@ -2,7 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
 import {createHash} from "crypto";
-import {getDbConfig, getGeneratedSchemaPath} from "../utils/db-config";
+import {getDbConfig, getGeneratedSchemaPath, isPerSchemaLayout} from "../utils/db-config";
 
 interface SchemaSection {
   name: string;
@@ -37,30 +37,38 @@ const SCHEMA_ORDER: Record<string, number> = {
   grants: 14,
 };
 
-export async function generateSchemaSQL(): Promise<string> {
-  const {schemaFile} = await generateSchemaSQLAndFingerprint();
+export async function generateSchemaSQL(schemaName: string): Promise<string> {
+  const {schemaFile} = await generateSchemaSQLAndFingerprint(schemaName);
   return schemaFile;
 }
 
 /**
  * Generate schema SQL and compute fingerprint in a single filesystem pass.
+ * Reads from db/schema/<schemaName>/ when per-schema layout is detected,
+ * falls back to db/schema/ directly for single-schema flat layout.
  */
-export async function generateSchemaSQLAndFingerprint(): Promise<{
+export async function generateSchemaSQLAndFingerprint(schemaName: string): Promise<{
   schemaFile: string;
   fingerprint: string;
 }> {
   const config = getDbConfig();
-  const schemaPath = config.schemaPath;
 
-  if (!existsSync(schemaPath)) {
-    throw new Error(`Schema directory not found: ${schemaPath}`);
+  // Determine the root to read SQL from
+  const usePerSchema = isPerSchemaLayout(schemaName);
+  const readRoot = usePerSchema
+    ? path.join(config.schemaPath, schemaName)
+    : config.schemaPath;
+
+  if (!existsSync(readRoot)) {
+    throw new Error(`Schema directory not found: ${readRoot}`);
   }
 
-  const sections = await discoverSchemaSections(schemaPath);
+  const sections = await discoverSchemaSections(readRoot);
   const sortedSections = sections.sort((a, b) => a.order - b.order);
 
   const parts: string[] = [
     "-- Generated schema file",
+    `-- Schema: ${schemaName}`,
     `-- Generated at: ${new Date().toISOString()}`,
     "",
   ];
@@ -83,8 +91,8 @@ export async function generateSchemaSQLAndFingerprint(): Promise<{
 
   const fullSchema = parts.join("\n");
 
-  // Write to generated schema file
-  const outputPath = getGeneratedSchemaPath();
+  // Write to per-schema generated file
+  const outputPath = getGeneratedSchemaPath(schemaName);
   await fs.writeFile(outputPath, fullSchema, "utf-8");
 
   return {schemaFile: outputPath, fingerprint: hash.digest("hex")};
@@ -157,9 +165,15 @@ async function loadSectionFiles(sectionPath: string): Promise<string> {
 }
 
 export async function deleteGeneratedSchema(): Promise<void> {
-  const outputPath = getGeneratedSchemaPath();
+  const {getPostkitDbDir} = await import("../utils/db-config");
+  const dbDir = getPostkitDbDir();
 
-  if (existsSync(outputPath)) {
-    await fs.unlink(outputPath);
+  if (!existsSync(dbDir)) return;
+
+  const entries = await fs.readdir(dbDir);
+  for (const entry of entries) {
+    if (entry.startsWith("schema_") && entry.endsWith(".sql")) {
+      await fs.unlink(path.join(dbDir, entry));
+    }
   }
 }

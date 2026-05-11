@@ -12,10 +12,12 @@ import type {CommandOptions} from "../../../common/types";
 interface SeedOptions extends CommandOptions {
   apply?: boolean;
   target?: string;
+  schema?: string;
 }
 
 export async function seedCommand(options: SeedOptions): Promise<void> {
   const spinner = ora();
+  const schemaFilter = options.schema;
 
   try {
     logger.heading("Seed Data");
@@ -24,14 +26,14 @@ export async function seedCommand(options: SeedOptions): Promise<void> {
     logger.step(1, 2, "Loading seed files...");
     spinner.start("Scanning for seed files...");
 
-    const seeds = await loadSeeds();
+    const seeds = await loadSeeds(schemaFilter);
 
     if (seeds.length === 0) {
       spinner.warn("No seed files found");
       logger.blank();
       logger.info("Seed files should be placed in:");
-      logger.info("  - db/schema/seeds/");
-      logger.info("  - db/schema/seed/");
+      logger.info("  - db/schema/<name>/seeds/   (per-schema layout)");
+      logger.info("  - db/schema/seeds/           (flat layout)");
       return;
     }
 
@@ -40,7 +42,7 @@ export async function seedCommand(options: SeedOptions): Promise<void> {
     // Step 2: Display seeds
     logger.step(2, 2, "Generating seed statements...");
 
-    const seedsSQL = await getSeedsSQL();
+    const seedsSQL = await getSeedsSQL(schemaFilter);
 
     logger.blank();
     logger.info("Seed Data Statements:");
@@ -70,7 +72,7 @@ export async function seedCommand(options: SeedOptions): Promise<void> {
         spinner.info("Dry run - skipping seed application");
       } else {
         spinner.start("Applying seeds...");
-        await applySeeds(target.url);
+        await applySeeds(target.url, schemaFilter);
         spinner.succeed("Seeds applied successfully");
       }
     }

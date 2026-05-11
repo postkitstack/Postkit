@@ -2,27 +2,49 @@ import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
 import type {Ora} from "ora";
-import {getDbConfig} from "../utils/db-config";
+import {getDbConfig, isPerSchemaLayout} from "../utils/db-config";
 import {loadSqlGroup} from "../utils/sql-loader";
 import type {SeedStatement} from "../types/index";
 import {PostkitError} from "../../../common/errors";
 
-export async function loadSeeds(): Promise<SeedStatement[]> {
+/**
+ * Load seed statements. If schemaName is given, load only that schema's seeds.
+ * Otherwise load seeds for all schemas in config order.
+ * Backward compat: flat layout reads from db/schema/seeds/ directly.
+ */
+export async function loadSeeds(schemaName?: string): Promise<SeedStatement[]> {
   const config = getDbConfig();
-  const seedsPath = path.join(config.schemaPath, "seeds");
 
-  if (!existsSync(seedsPath)) {
-    // Try alternative location
-    const altPath = path.join(config.schemaPath, "seed");
+  if (schemaName) {
+    return loadSeedsForSchema(config.schemaPath, schemaName);
+  }
 
-    if (existsSync(altPath)) {
-      return loadSeedsFromDirectory(altPath);
-    }
+  // Iterate all schemas in config order
+  const all: SeedStatement[] = [];
+  for (const name of config.schemas) {
+    const seeds = await loadSeedsForSchema(config.schemaPath, name);
+    all.push(...seeds);
+  }
+  return all;
+}
 
+async function loadSeedsForSchema(schemaPath: string, schemaName: string): Promise<SeedStatement[]> {
+  const usePerSchema = isPerSchemaLayout(schemaName);
+
+  if (usePerSchema) {
+    const seedsPath = path.join(schemaPath, schemaName, "seeds");
+    if (existsSync(seedsPath)) return loadSeedsFromDirectory(seedsPath);
+    const altPath = path.join(schemaPath, schemaName, "seed");
+    if (existsSync(altPath)) return loadSeedsFromDirectory(altPath);
     return [];
   }
 
-  return loadSeedsFromDirectory(seedsPath);
+  // Flat layout — look directly under schemaPath/seeds or schemaPath/seed
+  const seedsPath = path.join(schemaPath, "seeds");
+  if (existsSync(seedsPath)) return loadSeedsFromDirectory(seedsPath);
+  const altPath = path.join(schemaPath, "seed");
+  if (existsSync(altPath)) return loadSeedsFromDirectory(altPath);
+  return [];
 }
 
 async function loadSeedsFromDirectory(
@@ -56,8 +78,8 @@ async function loadSeedsFromSubdir(
   return loadSqlGroup(dirPath, groupName);
 }
 
-export async function getSeedsSQL(): Promise<string> {
-  const seeds = await loadSeeds();
+export async function getSeedsSQL(schemaName?: string): Promise<string> {
+  const seeds = await loadSeeds(schemaName);
 
   if (seeds.length === 0) {
     return "-- No seed files found";
@@ -79,9 +101,9 @@ export async function getSeedsSQL(): Promise<string> {
   return parts.join("\n");
 }
 
-export async function applySeeds(databaseUrl: string): Promise<void> {
+export async function applySeeds(databaseUrl: string, schemaName?: string): Promise<void> {
   const {executeSQL} = await import("./database");
-  const seeds = await loadSeeds();
+  const seeds = await loadSeeds(schemaName);
 
   for (const seed of seeds) {
     if (seed.content.trim()) {
@@ -90,15 +112,15 @@ export async function applySeeds(databaseUrl: string): Promise<void> {
   }
 }
 
-export async function applySeedsStep(spinner: Ora, dbUrl: string, label = "local"): Promise<void> {
-  const seeds = await loadSeeds();
+export async function applySeedsStep(spinner: Ora, dbUrl: string, label = "local", schemaName?: string): Promise<void> {
+  const seeds = await loadSeeds(schemaName);
   if (seeds.length === 0) {
     spinner.info("No seed files found - skipping");
     return;
   }
   try {
     spinner.start(`Applying seeds to ${label}...`);
-    await applySeeds(dbUrl);
+    await applySeeds(dbUrl, schemaName);
     spinner.succeed(`Seeds applied to ${label} (${seeds.length} file(s))`);
   } catch (error) {
     spinner.fail("Failed to apply seeds");

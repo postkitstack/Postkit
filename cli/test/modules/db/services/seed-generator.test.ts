@@ -4,11 +4,13 @@ vi.mock("../../../../src/modules/db/utils/db-config", () => ({
   getDbConfig: vi.fn(() => ({
     localDbUrl: "postgres://localhost:5432/test",
     schemaPath: "/project/schema",
-    schema: "public",
+    schemas: ["public"],
+    infraPath: "/project/db/infra",
     remotes: {},
     cliRoot: "/cli",
     projectRoot: "/project",
   })),
+  isPerSchemaLayout: vi.fn(() => false),
 }));
 
 vi.mock("../../../../src/modules/db/utils/sql-loader", () => ({

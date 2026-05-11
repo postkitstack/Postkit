@@ -118,6 +118,7 @@ export function registerDbModule(program: Command): void {
     .description("Show and apply seed data")
     .option("--apply", "Apply seeds to database")
     .option("--target <target>", "Target database: local or remote", "local")
+    .option("--schema <name>", "Filter seeds to a specific schema")
     .action(async (cmdOptions) => {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};
@@ -142,7 +143,8 @@ export function registerDbModule(program: Command): void {
   db.command("import")
     .description("Import an existing database into PostKit as a baseline migration")
     .option("--url <string>", "Database URL to import from (default: localDbUrl from config)")
-    .option("--schema <string>", "PostgreSQL schema to import", "public")
+    .option("--schema <string>", "Single PostgreSQL schema to import (use --schemas for multiple)")
+    .option("--schemas <list>", "Comma-separated list of schemas to import (e.g. public,app)")
     .option("--name <string>", "Label for the baseline migration", "imported_baseline")
     .option("-f, --force", "Skip confirmation prompts")
     .action(async (cmdOptions) => {

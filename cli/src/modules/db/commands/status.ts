@@ -47,12 +47,17 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
     if (options.json) {
       const localConnected = session?.active ? await testConnection(session.localDbUrl) : false;
       const remoteConnected = session?.active ? await testConnection(session.remoteDbUrl) : false;
+      const pc = session?.pendingChanges ?? null;
       console.log(JSON.stringify({
         sessionActive: session?.active ?? false,
         startedAt: session?.startedAt ?? null,
         remoteName: session?.remoteName ?? null,
         clonedAt: session?.clonedAt ?? null,
-        pendingChanges: session?.pendingChanges ?? null,
+        pendingChanges: pc ? {
+          ...pc,
+          planFiles: pc.planFiles ?? {},
+          schemaFingerprints: pc.schemaFingerprints ?? {},
+        } : null,
         connections: session?.active ? {local: localConnected, remote: remoteConnected} : null,
         pendingCommittedMigrations: pendingCommitted.length,
       }, null, 2));
@@ -114,8 +119,12 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
       ["Applied to Local", applied],
     ];
 
-    if (session.pendingChanges.planFile) {
-      changeRows.push(["Plan File", session.pendingChanges.planFile]);
+    const planFiles = session.pendingChanges.planFiles ?? {};
+    const activePlanEntries = Object.entries(planFiles).filter(([, f]) => f !== null);
+    if (activePlanEntries.length > 0) {
+      for (const [schema, f] of activePlanEntries) {
+        changeRows.push([`Plan (${schema})`, f!]);
+      }
     }
 
     if (session.pendingChanges.migrationFiles.length > 0) {
@@ -161,12 +170,14 @@ export async function statusCommand(options: CommandOptions): Promise<void> {
 
     logger.blank();
 
-    // Show plan preview if exists
-    if (session.pendingChanges.planFile) {
-      const planContent = await getPlanFileContent();
+    // Show plan preview if exists (first schema with a plan)
+    const planFilesForPreview = session.pendingChanges.planFiles ?? {};
+    const firstPlanEntry = Object.entries(planFilesForPreview).find(([, f]) => f !== null);
+    if (firstPlanEntry) {
+      const planContent = await getPlanFileContent(firstPlanEntry[0]);
 
       if (planContent) {
-        logger.info("Plan Preview (first 20 lines):");
+        logger.info(`Plan Preview — schema "${firstPlanEntry[0]}" (first 20 lines):`);
         logger.blank();
 
         const lines = planContent.split("\n").slice(0, 20);

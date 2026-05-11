@@ -4,7 +4,8 @@ import path from "path";
 const mockDbConfig = {
   localDbUrl: "postgres://localhost:5432/test",
   schemaPath: "/project/schema",
-  schema: "public",
+  schemas: ["public"],
+  infraPath: "/project/db/infra",
   pgSchemaBin: "/cli/vendor/pgschema/pgschema-darwin-arm64",
   dbmateBin: "dbmate",
   remotes: {},
@@ -19,7 +20,7 @@ vi.mock("../../../../src/common/shell", () => ({
 
 vi.mock("../../../../src/modules/db/utils/db-config", () => ({
   getDbConfig: vi.fn(() => mockDbConfig),
-  getPlanFilePath: vi.fn(() => "/project/.postkit/db/plan.sql"),
+  getPlanFilePath: vi.fn((name: string) => `/project/.postkit/db/plan_${name}.sql`),
 }));
 
 vi.mock("../../../../src/modules/db/services/database", () => ({
@@ -75,7 +76,12 @@ describe("pgschema", () => {
         stdout: "No changes", stderr: "", exitCode: 0,
       });
       vi.mocked(existsSync).mockReturnValue(false);
-      const result = await runPgschemaplan("/schema.sql", "postgres://user:pass@host/db");
+      const result = await runPgschemaplan(
+        "/schema.sql",
+        "postgres://user:pass@host/db",
+        "public",
+        "/project/.postkit/db/plan_public.sql",
+      );
       expect(result.hasChanges).toBe(false);
       expect(result.planOutput).toBe("No changes detected");
     });
@@ -87,9 +93,14 @@ describe("pgschema", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(fs.readFile).mockResolvedValue("ALTER TABLE foo ADD COLUMN bar TEXT;");
       vi.mocked(fs.writeFile).mockResolvedValue();
-      const result = await runPgschemaplan("/schema.sql", "postgres://user:pass@host/db");
+      const result = await runPgschemaplan(
+        "/schema.sql",
+        "postgres://user:pass@host/db",
+        "public",
+        "/project/.postkit/db/plan_public.sql",
+      );
       expect(result.hasChanges).toBe(true);
-      expect(result.planFile).toBe("/project/.postkit/db/plan.sql");
+      expect(result.planFile).toBe("/project/.postkit/db/plan_public.sql");
     });
 
     it("strips CONCURRENTLY from plan SQL", async () => {
@@ -97,7 +108,12 @@ describe("pgschema", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(fs.readFile).mockResolvedValue("CREATE INDEX CONCURRENTLY idx ON foo(col);");
       vi.mocked(fs.writeFile).mockResolvedValue();
-      const result = await runPgschemaplan("/schema.sql", "postgres://user:pass@host/db");
+      const result = await runPgschemaplan(
+        "/schema.sql",
+        "postgres://user:pass@host/db",
+        "public",
+        "/project/.postkit/db/plan_public.sql",
+      );
       expect(result.planOutput).not.toContain("CONCURRENTLY");
       expect(result.planOutput).toContain("CREATE INDEX");
     });
@@ -108,18 +124,28 @@ describe("pgschema", () => {
       });
       vi.mocked(existsSync).mockReturnValue(false);
       await expect(
-        runPgschemaplan("/schema.sql", "postgres://user:pass@host/db"),
+        runPgschemaplan(
+          "/schema.sql",
+          "postgres://user:pass@host/db",
+          "public",
+          "/project/.postkit/db/plan_public.sql",
+        ),
       ).rejects.toThrow("pgschema plan failed");
     });
 
-    it("uses schemaOverride instead of config.schema when provided", async () => {
+    it("uses schemaName param in command args", async () => {
       const commandSpy = vi.mocked(runCommand).mockResolvedValue({
         stdout: "Changes found", stderr: "", exitCode: 0,
       });
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(fs.readFile).mockResolvedValue("CREATE TABLE foo (id int);");
       vi.mocked(fs.writeFile).mockResolvedValue();
-      await runPgschemaplan("/schema.sql", "postgres://user:pass@host/db", "myapp");
+      await runPgschemaplan(
+        "/schema.sql",
+        "postgres://user:pass@host/db",
+        "myapp",
+        "/project/.postkit/db/plan_myapp.sql",
+      );
       expect(commandSpy).toHaveBeenCalledTimes(1);
       const calledCommand = commandSpy.mock.calls[0]![0] as string;
       expect(calledCommand).toContain('--schema "myapp"');
@@ -131,7 +157,7 @@ describe("pgschema", () => {
     it("prepends SET search_path", async () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(fs.readFile).mockResolvedValue("ALTER TABLE foo ADD bar TEXT;");
-      const result = await wrapPlanSQL("/project/.postkit/db/plan.sql");
+      const result = await wrapPlanSQL("/project/.postkit/db/plan_public.sql", "public");
       expect(result).toContain('SET search_path TO "public"');
       expect(result).toContain("ALTER TABLE");
     });
@@ -139,7 +165,7 @@ describe("pgschema", () => {
     it("returns empty string for empty plan", async () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(fs.readFile).mockResolvedValue("  ");
-      const result = await wrapPlanSQL("/project/.postkit/db/plan.sql");
+      const result = await wrapPlanSQL("/project/.postkit/db/plan_public.sql", "public");
       expect(result).toBe("");
     });
   });
@@ -149,7 +175,7 @@ describe("pgschema", () => {
       vi.mocked(runCommand).mockResolvedValue({
         stdout: "--- a/table.sql\n+++ b/table.sql", stderr: "", exitCode: 0,
       });
-      const result = await runPgschemaDiff("/schema.sql", "postgres://user:pass@host/db");
+      const result = await runPgschemaDiff("/schema.sql", "postgres://user:pass@host/db", "public");
       expect(result).toContain("table.sql");
     });
   });
