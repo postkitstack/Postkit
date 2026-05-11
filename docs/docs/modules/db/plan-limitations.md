@@ -63,17 +63,17 @@ Schema-level objects **within a schema** are fully supported:
 
 | Command | Alternative |
 |---------|-------------|
-| `CREATE DATABASE` | Use `db/schema/infra/` or manual migration |
-| `CREATE ROLE` | Use `db/schema/infra/` or manual migration |
+| `CREATE DATABASE` | Use `db/infra/` or manual migration |
+| `CREATE ROLE` | Use `db/infra/` or manual migration |
 | `CREATE TABLESPACE` | Use manual migration |
-| `CREATE USER` | Use `db/schema/infra/` or manual migration |
+| `CREATE USER` | Use `db/infra/` or manual migration |
 
 ### Database Level (Not Supported)
 
 | Command | Alternative |
 |---------|-------------|
-| `CREATE EXTENSION` | Use `db/schema/infra/` or manual migration |
-| `CREATE SCHEMA` | Use `db/schema/infra/` or manual migration |
+| `CREATE EXTENSION` | Use `db/infra/` or manual migration |
+| `CREATE SCHEMA` | Use `db/infra/` or manual migration |
 | `CREATE CAST` | Use manual migration |
 | `CREATE COLLATION` | Use manual migration |
 | `CREATE CONVERSION` | Use manual migration |
@@ -93,13 +93,13 @@ Schema-level objects **within a schema** are fully supported:
 
 ## How to Handle Unsupported Commands
 
-### Option 1: Infrastructure SQL (`db/schema/infra/`)
+### Option 1: Infrastructure SQL (`db/infra/`)
 
-Place cluster and database level commands in `db/schema/infra/`. These are applied **before** the plan command runs:
+Place cluster and database level commands in `db/infra/`. These are applied **before** the plan command runs:
 
 ```
-db/schema/infra/
-├── 001_roles.sql       -- CREATE ROLE, CREATE USER
+db/infra/
+├── 001_roles.sql        -- CREATE ROLE, CREATE USER
 ├── 002_schemas.sql      -- CREATE SCHEMA
 └── 003_extensions.sql   -- CREATE EXTENSION
 ```
@@ -166,7 +166,7 @@ GRANT app_write TO app_admin;
 
 ## Key Takeaway
 
-> **The `plan` command uses pgschema, which only handles schema-level objects. For cluster/database level commands, use `db/schema/infra/` or create manual migrations with `postkit db migration`.**
+> **The `plan` command uses pgschema, which only handles schema-level objects. For cluster/database level commands, use `db/infra/` or create manual migrations with `postkit db migration`.**
 
 ## Related
 

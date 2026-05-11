@@ -79,40 +79,43 @@ The `db` module provides a **session-based database migration workflow** for saf
 
 ## Important Notes
 
-**pgschema operates at the schema level only.** Cluster and database level commands (like `CREATE DATABASE`, `CREATE ROLE`, `CREATE EXTENSION`) are not supported and must be handled through the `infra/` directory or manual migrations.
+**pgschema operates at the schema level only.** Cluster and database level commands (like `CREATE DATABASE`, `CREATE ROLE`, `CREATE EXTENSION`) are not supported and must be handled through the `db/infra/` directory or manual migrations.
 
 See [Plan Command Limitations](/docs/modules/db/plan-limitations) for details.
 
 ## Schema Directory Structure
+
+Multiple schemas are managed via the `schemas` array in config. Array order determines execution order. Each schema has its own subdirectory under `db/schema/`.
 
 Your schema files are organized into three categories:
 
 ### 1. Infrastructure (Handled Separately)
 
 ```
-db/schema/infra/
+db/infra/
 ├── 001_roles.sql       # CREATE ROLE, CREATE USER (pre-migration)
 ├── 002_schemas.sql      # CREATE SCHEMA (pre-migration)
 └── 003_extensions.sql   # CREATE EXTENSION (pre-migration)
 ```
 
-**Note:** Files in `infra/` are **excluded from pgschema** and applied separately.
+**Note:** `db/infra/` holds DB-level objects and is NOT inside a schema subdirectory. Files here are **excluded from pgschema** and applied separately.
 
 ### 2. Schema Objects (Processed by `postkit db plan`)
 
-The `plan` command uses pgschema to process these directories:
+The `plan` command uses pgschema to process these directories per schema:
 
 ```
 db/schema/
-├── types/              # Custom types
-├── enums/              # ENUM types
-├── tables/             # CREATE TABLE, ALTER TABLE
-├── views/              # CREATE VIEW
-├── materialized_views/ # CREATE MATERIALIZED VIEW
-├── functions/          # CREATE FUNCTION
-├── triggers/           # CREATE TRIGGER
-├── indexes/             # CREATE INDEX
-└── constraints/        # PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK
+└── <name>/             # Schema name (e.g. public, app)
+    ├── types/              # Custom types
+    ├── enums/              # ENUM types
+    ├── tables/             # CREATE TABLE, ALTER TABLE
+    ├── views/              # CREATE VIEW
+    ├── materialized_views/ # CREATE MATERIALIZED VIEW
+    ├── functions/          # CREATE FUNCTION
+    ├── triggers/           # CREATE TRIGGER
+    ├── indexes/             # CREATE INDEX
+    └── constraints/        # PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK
 ```
 
 **File naming:** When importing via `postkit db import`, files are automatically prefixed with numeric ordering (e.g. `001_users.sql`, `002_posts.sql`) based on the pgschema dump order. For manually created files, any naming convention works — files are sorted alphabetically within each directory.
@@ -122,17 +125,17 @@ db/schema/
 ### 3. Post-Migration (Handled Separately)
 
 ```
-db/schema/
+db/schema/<name>/
 └── seeds/              # Seed data (post-migration)
 ```
 
-**Note:** These are applied separately after the main migration.
+**Note:** Seeds are applied separately after the main migration, per schema.
 
 ### Execution Order
 
-1. **Pre-migration:** `infra/` (roles, schemas, extensions)
-2. **Migration:** pgschema processes types → enums → tables → views → materialized_views → functions → triggers → indexes → constraints
-3. **Post-migration:** `seeds/` (data)
+1. **Pre-migration:** `db/infra/` (roles, schemas, extensions)
+2. **Migration:** For each schema in config order — pgschema processes types → enums → tables → views → materialized_views → functions → triggers → indexes → constraints
+3. **Post-migration:** `seeds/` for each schema in config order (data)
 
 ## Prerequisites
 
