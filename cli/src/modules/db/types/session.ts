@@ -17,7 +17,6 @@ export interface SessionState {
     description: string | null;
     schemaFingerprint: string | null;
     migrationApplied: boolean;
-    grantsApplied: boolean;
     seedsApplied: boolean;
   };
 }
@@ -27,8 +26,6 @@ export interface CommittedMigration {
   description: string;
   sessionMigrations: {name: string; path: string}[];
   committedAt: string;
-  deployed: boolean;
-  deployedAt?: string;
 }
 
 export interface CommittedState {

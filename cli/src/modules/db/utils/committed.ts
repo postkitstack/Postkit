@@ -1,8 +1,15 @@
 import fs from "fs/promises";
 import {existsSync} from "fs";
+import pg from "pg";
 import type {CommittedState, CommittedMigration} from "../types/index";
-import {getCommittedFilePath} from "./db-config";
+import {getCommittedFilePath, MIGRATIONS_TABLE} from "./db-config";
+import {
+  CHECK_MIGRATIONS_TABLE_EXISTS,
+  GET_APPLIED_VERSIONS,
+} from "../config/queries";
 import {logger} from "../../../common/logger";
+
+const {Client} = pg;
 
 /**
  * Reads the committed state from .postkit/committed.json
@@ -46,24 +53,51 @@ export async function addCommittedMigration(migration: CommittedMigration): Prom
 }
 
 /**
- * Marks a migration as deployed
+ * Gets all committed migrations from local state
  */
-export async function markMigrationDeployed(migrationFileName: string): Promise<void> {
+export async function getAllCommittedMigrations(): Promise<CommittedMigration[]> {
   const state = await getCommittedState();
-  const migration = state.migrations.find(m => m.migrationFile.name === migrationFileName);
+  return state.migrations;
+}
 
-  if (migration) {
-    migration.deployed = true;
-    migration.deployedAt = new Date().toISOString();
-    await saveCommittedState(state);
+/**
+ * Queries the postkit.schema_migrations table on a remote database
+ * and returns the set of applied migration version timestamps.
+ */
+async function getAppliedMigrationVersions(remoteUrl: string): Promise<Set<string>> {
+  const client = new Client({connectionString: remoteUrl});
+
+  try {
+    await client.connect();
+
+    // Check if migrations table exists in postkit schema
+    const tableCheck = await client.query(CHECK_MIGRATIONS_TABLE_EXISTS);
+
+    if (tableCheck.rows.length === 0) {
+      return new Set();
+    }
+
+    const result = await client.query(GET_APPLIED_VERSIONS);
+    return new Set(result.rows.map((row: {version: string}) => row.version));
+  } catch {
+    return new Set();
+  } finally {
+    await client.end();
   }
 }
 
 /**
- * Gets all pending (undeployed) committed migrations
+ * Gets committed migrations that have NOT been applied to the given remote database.
+ * Checks the remote's schema_migrations table as the source of truth.
  */
-export async function getPendingCommittedMigrations(): Promise<CommittedMigration[]> {
+export async function getPendingCommittedMigrations(remoteUrl: string): Promise<CommittedMigration[]> {
   const state = await getCommittedState();
-  return state.migrations.filter(m => !m.deployed);
-}
 
+  if (state.migrations.length === 0) {
+    return [];
+  }
+
+  const appliedVersions = await getAppliedMigrationVersions(remoteUrl);
+
+  return state.migrations.filter(m => !appliedVersions.has(m.migrationFile.timestamp));
+}

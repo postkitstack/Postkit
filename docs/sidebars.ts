@@ -40,7 +40,6 @@ const sidebars: SidebarsConfig = {
             'modules/db/commands/migration',
             'modules/db/commands/remote',
             'modules/db/commands/infra',
-            'modules/db/commands/grants',
             'modules/db/commands/seed',
             'modules/db/commands/import',
           ],

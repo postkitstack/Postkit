@@ -27,7 +27,7 @@ my-project/
 │       │   └── ...
 │       ├── triggers/
 │       ├── indexes/
-│       ├── grants/           # Grant statements
+│       ├── grants/           # Grant statements (managed by pgschema)
 │       └── seeds/            # Seed data
 ├── .postkit/                 # PostKit runtime (gitignored)
 │   ├── db/                   # All DB runtime files
@@ -73,7 +73,7 @@ The `db/schema/` directory is organized into three categories:
 
 | Directory | Description | Processed By |
 |-----------|-------------|--------------|
-| `grants/` | Grant statements | Applied separately |
+| `grants/` | Grant statements | Managed by pgschema |
 | `seeds/` | Seed data | Applied separately |
 
 **Note:** Cluster and database level commands (CREATE DATABASE, CREATE ROLE, CREATE EXTENSION, etc.) are not supported by pgschema. Use `db/schema/infra/` or manual migrations instead.

@@ -89,7 +89,6 @@ The `db` module implements a **session-based migration workflow**:
 5. **Schema directory structure** (`db/schema/`):
    - `infra/` - Pre-migration (roles, schemas, extensions) - excluded from pgschema
    - `extensions/`, `types/`, `enums/`, `tables/`, etc. - pgschema-managed
-   - `grants/` - Post-migration grants - excluded from pgschema
    - `seeds/` - Post-migration seed data - excluded from pgschema
 
 ### PostKit Directory Structure
@@ -188,7 +187,6 @@ Remotes are managed via utilities in `modules/db/utils/remotes.ts`:
 | `postkit db remote remove <name>` | Remove a remote |
 | `postkit db remote use <name>` | Set default remote |
 | `postkit db infra [--apply]` | Manage infra SQL (roles, schemas, extensions) |
-| `postkit db grants [--apply]` | Regenerate and apply grants |
 | `postkit db seed [--apply]` | Apply seed data |
 
 ## Common Patterns
@@ -347,3 +345,43 @@ When a skill grows beyond ~500 lines, split domain-specific content into `refere
 - The `vendor/` directory contains platform-specific binaries that are bundled with the CLI - no separate installation required.
 - The `.gitignore` should include `.postkit/` to ignore all runtime files.
 - All migration-related files are in `.postkit/db/` - the only user-maintained DB files should be in `db/schema/`.
+
+## Claude Code Skills & Agents
+
+Skills are invoked via `/<skill-name>` in Claude Code. Agents are sub-processes spawned by skills.
+
+### Project Documentation (`cli/docs/`)
+
+| Doc | Content |
+|-----|---------|
+| `cli/docs/architecture.md` | System architecture, module system, dependency direction |
+| `cli/docs/db.md` | Database module workflow and commands |
+| `cli/docs/auth.md` | Auth module workflow and commands |
+| `cli/docs/e2e-testing.md` | E2E testing guide and infrastructure |
+
+### Skills Registry
+
+| Skill | Invocation | Purpose | Sub-Agents |
+|-------|-----------|---------|------------|
+| create-pr | `/create-pr` | Generate PR description to `temp/pr-description.md` | — |
+| write-test-e2e | `/write-test-e2e` | Write E2E tests using testcontainers | e2e-test-agent |
+| write-test-unit | `/write-test-unit` | Write unit tests with Vitest mocks | unit-test-agent |
+| bugfix | `/bugfix` | Diagnose and fix bugs (asks for info, 4 stages) | bugfixer, tester, reviewer, validator |
+| create-feature | `/create-feature` | Implement features (asks for info, 4 stages + tests) | feature-planner, senior-engineer, reviewer, validator, architect |
+| architecture | `/architecture` | Review architecture, generate ADRs | architect |
+| update-docs | `/update-docs` | Update documentation for code changes | docs-agent |
+
+### Agents Registry
+
+| Agent | File | Specialty | Used By |
+|-------|------|-----------|---------|
+| e2e-test-agent | `.claude/agents/e2e-test-agent.md` | E2E test implementation (testcontainers) | write-test-e2e |
+| unit-test-agent | `.claude/agents/unit-test-agent.md` | Unit test implementation (Vitest mocks) | write-test-unit |
+| bugfixer | `.claude/agents/bugfixer.md` | Bug diagnosis and minimal fix | bugfix |
+| tester | `.claude/agents/tester.md` | Regression test creation | bugfix |
+| reviewer | `.claude/agents/reviewer.md` | Code review (reuse, lint, best practices) | bugfix, create-feature |
+| validator | `.claude/agents/validator.md` | Build/test/quality validation | bugfix, create-feature |
+| feature-planner | `.claude/agents/feature-planner.md` | Feature design and task breakdown | create-feature |
+| senior-engineer | `.claude/agents/senior-engineer.md` | Feature implementation | create-feature |
+| architect | `.claude/agents/architect.md` | Architecture analysis, ADR authoring | architecture |
+| docs-agent | `.claude/agents/docs-agent.md` | Documentation writing and maintenance | update-docs |

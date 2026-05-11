@@ -1,8 +1,12 @@
 # PostKit
 
+<img width="800" height="300" alt="PostKit Logo Design - Light " src="https://github.com/user-attachments/assets/240038c7-1f18-47c4-9d22-61882ae1f6e2" /></br>
+
 > Open-source backend stack for modern applications
 
-PostKit is a full-stack backend toolkit that combines battle-tested open-source technologies into a cohesive, developer-friendly platform. It provides everything you need to build, migrate, and manage production-ready backends.
+![Active Development](https://img.shields.io/badge/Status-Active_Development-orange)
+
+> **This project is in active development.** Expect breaking changes, incomplete features, and frequent updates.
 
 ## The Stack
 

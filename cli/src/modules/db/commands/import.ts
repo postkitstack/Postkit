@@ -5,9 +5,9 @@ import path from "path";
 import {logger} from "../../../common/logger";
 import {promptConfirm} from "../../../common/prompt";
 import {PostkitError} from "../../../common/errors";
-import {getDbConfig, getTmpImportDir, getCommittedMigrationsPath} from "../utils/db-config";
+import {getDbConfig, getTmpImportDir, getCommittedMigrationsPath, toRelativePath} from "../utils/db-config";
 import {hasActiveSession} from "../utils/session";
-import {addCommittedMigration} from "../utils/committed";
+import {addCommittedMigration, saveCommittedState} from "../utils/committed";
 import {testConnection, getTableCount, createDatabase} from "../services/database";
 import {checkPgschemaInstalled, deletePlanFile} from "../services/pgschema";
 import {checkDbmateInstalled, createMigrationFile, runCommittedMigrate} from "../services/dbmate";
@@ -219,7 +219,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       const baselineDDL = await generateBaselineDDL(config.schemaPath, schemaName);
       spinner.succeed("Baseline DDL generated");
 
-      // Clear migrations directory before creating baseline migration
+      // Clear migrations directory and reset committed state before creating baseline migration
       const migrationsDir = getCommittedMigrationsPath();
       if (existsSync(migrationsDir)) {
         const entries = await fs.readdir(migrationsDir);
@@ -229,6 +229,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
           }
         }
       }
+      await saveCommittedState({migrations: []});
 
       // Create migration file
       const migrationFile = await createMigrationFile(
@@ -245,13 +246,12 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       await addCommittedMigration({
         migrationFile: {
           name: migrationFile.name,
-          path: migrationFile.path,
+          path: toRelativePath(migrationFile.path),
           timestamp: migrationFile.timestamp,
         },
         description: `Baseline import (${schemaName})`,
         sessionMigrations: [],
         committedAt: new Date().toISOString(),
-        deployed: false,
       });
 
       // Step 7: Set up local database
@@ -305,6 +305,11 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       const tmpImportDir = getTmpImportDir();
       if (existsSync(tmpImportDir)) {
         await fs.rm(tmpImportDir, {recursive: true, force: true});
+      }
+      // Clean up schema.sql artifact from baseline generation step
+      const artifact = path.join(path.dirname(config.schemaPath), "schema.sql");
+      if (existsSync(artifact)) {
+        await fs.unlink(artifact);
       }
       await deletePlanFile();
       await deleteGeneratedSchema();

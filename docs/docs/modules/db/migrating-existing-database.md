@@ -68,7 +68,7 @@ db/schema/
 │   └── ...
 ├── views/
 ├── functions/
-├── grants/
+├── grants/                         # Managed by pgschema
 │   └── public.sql             # Consolidated privileges
 └── .pgschemaignore
 ```

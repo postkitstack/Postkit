@@ -13,9 +13,8 @@ import {
 } from "../services/database";
 import {runCommittedMigrate, runDbmateStatus} from "../services/dbmate";
 import {loadInfra, applyInfra} from "../services/infra-generator";
-import {loadGrants, applyGrants} from "../services/grant-generator";
 import {loadSeeds, applySeeds} from "../services/seed-generator";
-import {getPendingCommittedMigrations, markMigrationDeployed} from "../utils/committed";
+import {getPendingCommittedMigrations} from "../utils/committed";
 import {resolveRemote, maskRemoteUrl, normalizeUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
 import {PostkitError} from "../../../common/errors";
@@ -97,20 +96,6 @@ async function runSteps(
   spinner.succeed(`Migrations applied to ${label}`);
   step++;
 
-  // Grants
-  logger.step(step, totalSteps, `Applying grants to ${label}...`);
-  const grants = await loadGrants();
-
-  if (grants.length === 0) {
-    spinner.info("No grant files found - skipping");
-  } else {
-    spinner.start(`Applying grants to ${label}...`);
-    await applyGrants(dbUrl);
-    spinner.succeed(`Grants applied to ${label} (${grants.length} file(s))`);
-  }
-
-  step++;
-
   // Seeds
   logger.step(step, totalSteps, `Applying seeds to ${label}...`);
   const seeds = await loadSeeds();
@@ -149,8 +134,8 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     logger.info(`Target: ${targetLabel}`);
     logger.blank();
 
-    // Step 2: Check for pending committed migrations
-    const pendingMigrations = await getPendingCommittedMigrations();
+    // Step 2: Check for pending committed migrations (check target's schema_migrations table)
+    const pendingMigrations = await getPendingCommittedMigrations(targetUrl);
 
     if (pendingMigrations.length === 0) {
       logger.info("No committed migrations pending deployment.");
@@ -178,8 +163,8 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       logger.blank();
     }
 
-    // 3 fixed steps (test, status, clone) + 4 runSteps × 2 passes (dry-run + target) + 2 fixed steps (mark deployed, cleanup)
-    const totalSteps = 3 + 4 * 2 + 2; // = 13
+    // 3 fixed steps (test, status, clone) + 3 runSteps × 2 passes (dry-run + target) + 1 fixed step (cleanup)
+    const totalSteps = 3 + 3 * 2 + 1; // = 10
     const migrationNames = pendingMigrations.map(m => m.migrationFile.name);
 
     // Step 1: Test target DB connection
@@ -229,7 +214,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     const localTableCount = await getTableCount(localDbUrl);
     spinner.succeed(`Target cloned to local (${localTableCount} tables)`);
 
-    // Steps 4-7: Dry run on local clone
+    // Steps 4-6: Dry run on local clone
     logger.blank();
     logger.heading("Dry Run (local verification)");
 
@@ -285,12 +270,12 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       return;
     }
 
-    // Steps 8-11: Apply to target
+    // Steps 7-9: Apply to target
     logger.blank();
     logger.heading("Deploying to Target");
 
     try {
-      await runSteps(targetUrl, targetLabel, spinner, 8, totalSteps, migrationNames);
+      await runSteps(targetUrl, targetLabel, spinner, 7, totalSteps, migrationNames);
     } catch (error) {
       logger.error(error instanceof Error ? error.message : String(error));
       logger.blank();
@@ -306,19 +291,9 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       );
     }
 
-    // Step 12: Mark migrations as deployed
-    logger.step(12, totalSteps, "Marking migrations as deployed...");
-    spinner.start("Updating committed state...");
-
-    for (const migration of pendingMigrations) {
-      await markMigrationDeployed(migration.migrationFile.name);
-    }
-
-    spinner.succeed(`${pendingMigrations.length} migration(s) marked as deployed`);
-
-    // Drop local clone
+    // Step 10: Drop local clone
     logger.blank();
-    logger.step(13, totalSteps, "Cleaning up local clone...");
+    logger.step(10, totalSteps, "Cleaning up local clone...");
     spinner.start("Dropping local clone database...");
 
     try {

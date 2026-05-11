@@ -144,23 +144,24 @@ describe("Case 4: Existing DB — import → verify → plan → apply → commi
 
   // ── Step 2: Deploy baseline then start session ─────────────────────
 
-  it("deploys the baseline migration to register it as deployed", async () => {
-    // Import creates a baseline migration tracked in committed.json but not deployed.
-    // db start blocks when pending committed migrations exist, so deploy first.
-    await runDeploy(project);
+  it("verifies baseline migration is already tracked on remote", async () => {
+    // Import syncs the baseline version into the source DB's schema_migrations table,
+    // so deploy correctly sees no pending migrations — baseline is already applied.
+    const result = await runCli(["db", "deploy", "--force"], {
+      cwd: project.rootDir,
+      timeout: 120_000,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("No committed migrations pending deployment");
   });
 
   it("starts a session after import", async () => {
     await startSession(project);
-    // db start cleans the schema dir, so reinstall fixture schema (matches remote)
-    // Install everything except grants/seeds (not in the remote DB we seeded)
-    await installFixtureSections(project, [
-      "infra", "core", "tables", "rls", "trigger", "function",
-    ]);
+    // Schema files already exist from import — no need to reinstall fixtures
   });
 
   it("adds a new view schema file to trigger a diff", async () => {
-    const viewDir = path.join(project.schemaPath, "view");
+    const viewDir = path.join(project.schemaPath, "views");
     fs.mkdirSync(viewDir, {recursive: true});
     fs.writeFileSync(
       path.join(viewDir, "01_products_with_category.view.sql"),
@@ -180,8 +181,13 @@ WHERE p.is_deleted = false AND c.is_deleted = false;
   // ── Step 3: Plan → Apply ────────────────────────────────────────────
 
   it("generates a plan for the new view", async () => {
-    const output = await runPlan(project);
-    expect(output).toContain("products_with_category");
+    const result = await runCli(["db", "plan"], {cwd: project.rootDir});
+    if (result.exitCode !== 0) {
+      console.log("PLAN STDOUT:", result.stdout);
+      console.log("PLAN STDERR:", result.stderr);
+    }
+    expect(result.exitCode, `Plan failed: ${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain("products_with_category");
   });
 
   it("applies the migration to local DB", async () => {

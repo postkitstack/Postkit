@@ -29,10 +29,9 @@ postkit db apply [-f]
 4. Applies infrastructure SQL from `db/schema/infra/`
 5. Wraps the plan SQL and creates a dbmate migration file (staged in `.postkit/db/session/`)
 6. Runs `dbmate migrate` on the local database
-7. Applies grant statements from `db/schema/grants/`
-8. Applies seed data from `db/schema/seeds/`
+7. Applies seed data from `db/schema/seeds/`
 
-**Resume support:** If grants or seeds fail, re-running `postkit db apply` resumes from where it left off.
+**Resume support:** If seeds fail, re-running `postkit db apply` resumes from where it left off.
 
 ## Requirements
 

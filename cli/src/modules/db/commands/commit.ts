@@ -2,11 +2,11 @@ import ora from "ora";
 import {logger} from "../../../common/logger";
 import {promptInput} from "../../../common/prompt";
 import {getSession, deleteSession} from "../utils/session";
-import {getSessionMigrationsPath} from "../utils/db-config";
+import {getSessionMigrationsPath, toRelativePath} from "../utils/db-config";
 import {mergeSessionMigrations, deleteSessionMigrations} from "../services/dbmate";
 import {deletePlanFile} from "../services/pgschema";
 import {deleteGeneratedSchema} from "../services/schema-generator";
-import {addCommittedMigration, getPendingCommittedMigrations} from "../utils/committed";
+import {addCommittedMigration, getAllCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
 import type {SessionState} from "../types/index";
 import {PostkitError} from "../../../common/errors";
@@ -54,10 +54,10 @@ export async function commitCommand(options: CommitOptions): Promise<void> {
     }
     logger.blank();
 
-    // Show any existing pending committed migrations
-    const existingCommitted = await getPendingCommittedMigrations();
+    // Show any existing committed migrations
+    const existingCommitted = await getAllCommittedMigrations();
     if (existingCommitted.length > 0) {
-      logger.warn(`Note: There are ${existingCommitted.length} committed migration(s) pending deployment:`);
+      logger.warn(`Note: There are ${existingCommitted.length} existing committed migration(s):`);
       for (const cm of existingCommitted) {
         logger.warn(`  - ${cm.migrationFile.name}`);
       }
@@ -92,13 +92,15 @@ export async function commitCommand(options: CommitOptions): Promise<void> {
     await addCommittedMigration({
       migrationFile: {
         name: mergedMigration.name,
-        path: mergedMigration.path,
+        path: toRelativePath(mergedMigration.path),
         timestamp: mergedMigration.timestamp,
       },
       description,
-      sessionMigrations: migrationFiles,
+      sessionMigrations: migrationFiles.map((mf) => ({
+        name: mf.name,
+        path: mf.path, // already relative from session
+      })),
       committedAt: new Date().toISOString(),
-      deployed: false,
     });
 
     spinner.succeed("Committed migration tracked");
@@ -123,10 +125,10 @@ export async function commitCommand(options: CommitOptions): Promise<void> {
     logger.info(`Merged from: ${migrationFiles.length} session migration(s)`);
     logger.blank();
 
-    const allPending = await getPendingCommittedMigrations();
-    if (allPending.length > 0) {
-      logger.info(`You have ${allPending.length} committed migration(s) pending deployment:`);
-      for (const cm of allPending) {
+    const allCommitted = await getAllCommittedMigrations();
+    if (allCommitted.length > 0) {
+      logger.info(`You have ${allCommitted.length} committed migration(s):`);
+      for (const cm of allCommitted) {
         logger.info(`  - ${cm.migrationFile.name}`);
       }
       logger.blank();
