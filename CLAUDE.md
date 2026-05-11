@@ -77,33 +77,44 @@ Then import and call the registration function in `cli/src/index.ts`.
 
 The `db` module implements a **session-based migration workflow**:
 
-1. **Session state**: Tracked in `.postkit/db/session.json`. Includes `remoteName` to track which remote was used.
-2. **Named remotes**: Users can configure multiple named remote databases via `db.remotes` in config:
+1. **Session state**: Tracked in `.postkit/db/session.json`. Includes `remoteName` to track which remote was used, and optional `containerID` for auto Docker containers.
+2. **Named remotes**: Users can configure multiple named remote databases via `db.remotes` in secrets:
    - At least one remote must be configured
    - One remote can be marked as `default: true`
    - Managed via `postkit db remote` commands
+   - All remote data (url, default, addedAt) stored entirely in `postkit.secrets.json` — nothing remote-related in `postkit.config.json`
 3. **Binary resolution**: Both `pgschema` and `dbmate` binaries are auto-resolved:
    - `pgschema`: Bundled in `vendor/pgschema/` for all platforms (darwin-{arm64,amd64}, linux-{arm64,amd64}, windows-{arm64,amd64})
    - `dbmate`: npm-installed via the `dbmate` package
-4. **Migration steps execution**: The `deploy` command uses `runSteps()` to execute multi-step operations with resume capability - if a step fails, re-running resumes from where it left off.
-5. **Schema directory structure** (`db/schema/`):
+4. **Auto Docker container** (`modules/db/services/container.ts`): When `localDbUrl` is empty, PostKit uses `resolveLocalDb(localDbUrl, remoteUrl, spinner)` which:
+   - Checks Docker availability (`checkDockerAvailable()`)
+   - Queries remote PG version via `getRemotePgMajorVersion()` (uses `SHOW server_version_num`) — callers do not pass the version
+   - Starts `postgres:{version}-alpine` on a free port in range 15432–15532
+   - Runs `pg_dump`/`psql` inside the container via `docker exec` (`cloneDatabaseViaContainer()`)
+   - Stores `containerID` in session; cleaned up on `db abort` or `db deploy` completion
+   - Used by `start`, `deploy`, and `import` commands
+5. **Migration steps execution**: The `deploy` command uses `runSteps()` to execute multi-step operations with resume capability - if a step fails, re-running resumes from where it left off.
+6. **Schema directory structure** (`db/schema/`):
    - `infra/` - Pre-migration (roles, schemas, extensions) - excluded from pgschema
    - `extensions/`, `types/`, `enums/`, `tables/`, etc. - pgschema-managed
    - `seeds/` - Post-migration seed data - excluded from pgschema
 
 ### PostKit Directory Structure
 
-All PostKit runtime files are stored in `.postkit/` (gitignored):
+PostKit files are split between committed (shared with team) and gitignored (user-specific/ephemeral):
 
 ```
 .postkit/
-└── db/
-    ├── session.json         # Current session state
-    ├── committed.json       # Committed migrations tracking
-    ├── plan.sql             # Generated migration plan
-    ├── schema.sql           # Generated schema from files
-    ├── session/             # Session migrations (temporary)
-    └── migrations/          # Committed migrations (for deploy)
+├── db/
+│   ├── session.json         # GITIGNORED — active session state, local DB URL, container ID
+│   ├── plan.sql             # GITIGNORED — generated migration diff (ephemeral)
+│   ├── schema.sql           # GITIGNORED — generated schema artifact (ephemeral)
+│   ├── session/             # GITIGNORED — temporary in-progress migrations
+│   ├── committed.json       # COMMITTED — migration tracking index (shared)
+│   └── migrations/          # COMMITTED — committed SQL migrations for deploy (shared)
+└── auth/
+    ├── raw/                 # COMMITTED — auth raw config (shared)
+    └── realm/               # COMMITTED — auth realm config (shared)
 ```
 
 **Key paths** (from `modules/db/utils/db-config.ts`):
@@ -117,38 +128,53 @@ All PostKit runtime files are stored in `.postkit/` (gitignored):
 
 **Key functions** (from `modules/db/services/`):
 - `generateSchemaSQLAndFingerprint()` - Reads all schema files once and returns both the output path (`.postkit/db/schema.sql`) and a SHA-256 fingerprint of the source files
+- `resolveLocalDb(localDbUrl, remoteUrl, spinner, spinnerText?)` (`container.ts`) - When `localDbUrl` is empty, fetches PG version from `remoteUrl` and starts an auto Docker container. Used by `start`, `deploy`, and `import` commands.
+- `withPgClient<T>(url, fn)` (`database.ts`) - Scoped pg client wrapper; opens a connection, runs `fn`, closes on completion or error
+- `checkDbPrerequisites(verbose)` (`prerequisites.ts`) - Shared pgschema + dbmate availability check used by all commands that need them
+- `requireActiveSession()` (`utils/session.ts`) - Returns active session or throws a descriptive error
+- `assertLocalConnection(session, spinner)` (`utils/session.ts`) - Tests local DB connection from session; throws if unreachable
+- `resolveApplyTarget(target?)` (`utils/apply-target.ts`) - Resolves `"local"` or `"remote"` apply target; used by infra and seed commands
+- `readJsonFile<T>(path)` / `writeJsonFile(path, data)` (`utils/json-file.ts`) - Typed JSON helpers used by remotes and committed migration tracking
 
 ### Configuration System
 
-Config is loaded from `postkit.config.json` in the project root. Use `loadPostkitConfig()` from `common/config.ts`.
+Config is loaded by `loadPostkitConfig()` from `common/config.ts`, which deep-merges two files:
 
-**Database config structure:**
+| File | Committed | Purpose |
+|------|-----------|---------|
+| `postkit.config.json` | Yes | Non-sensitive project settings (schema paths, flags) |
+| `postkit.secrets.json` | No (gitignored) | Credentials + all remote config (URLs, names, defaults) |
+
+**`postkit.config.json` (committed):**
+```json
+{
+  "db": {
+    "schemaPath": "db/schema",
+    "schema": "public"
+  }
+}
+```
+
+**`postkit.secrets.json` (gitignored):**
 ```json
 {
   "db": {
     "localDbUrl": "postgres://...",
-    "schemaPath": "schema",
-    "schema": "public",
-    "pgSchemaBin": "pgschema",
-    "dbmateBin": "dbmate",
     "remotes": {
-      "dev": {
-        "url": "postgres://...",
-        "default": true,
-        "addedAt": "2024-12-31T10:00:00.000Z"
-      },
-      "staging": {
-        "url": "postgres://..."
-      }
+      "dev": { "url": "postgres://...", "default": true, "addedAt": "2024-12-31T10:00:00.000Z" },
+      "staging": { "url": "postgres://..." }
     }
   }
 }
 ```
 
+**`localDbUrl`**: Leave empty to have PostKit automatically start a `postgres:{version}-alpine` Docker container. The version is queried from the remote DB via `SHOW server_version_num`. The container is started on `db start` and stopped on `db abort`.
+
 **Auto-migration:** When loading config, if `remotes` is missing but `remoteDbUrl` exists, it's auto-migrated to create a `default` remote.
 
 Key config paths:
 - `POSTKIT_CONFIG_FILE` = "postkit.config.json"
+- `POSTKIT_SECRETS_FILE` = "postkit.secrets.json"
 - `POSTKIT_DIR` = ".postkit" (session state, staged files)
 - `vendor/` = Bundled binaries (resolved relative to CLI root, not project root)
 
@@ -343,8 +369,8 @@ When a skill grows beyond ~500 lines, split domain-specific content into `refere
 - All paths in `common/config.ts` are resolved relative to either `cliRoot` (the CLI installation) or `projectRoot` (where the user runs commands).
 - Session files in `.postkit/db/` track migration state and enable resume capability.
 - The `vendor/` directory contains platform-specific binaries that are bundled with the CLI - no separate installation required.
-- The `.gitignore` should include `.postkit/` to ignore all runtime files.
-- All migration-related files are in `.postkit/db/` - the only user-maintained DB files should be in `db/schema/`.
+- The `.gitignore` includes specific ephemeral paths (session.json, plan.sql, schema.sql, session/) — NOT the whole `.postkit/` directory. Committed migrations and auth state ARE tracked by git.
+- All migration-related files are in `.postkit/db/` — the only user-maintained DB files should be in `db/schema/`.
 
 ## Claude Code Skills & Agents
 

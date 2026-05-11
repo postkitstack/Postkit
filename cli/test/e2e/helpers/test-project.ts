@@ -13,7 +13,7 @@ export interface TestProject {
 }
 
 export interface CreateTestProjectOptions {
-  localDbUrl: string;
+  localDbUrl?: string;   // omit or pass "" for auto-Docker mode
   remoteDbUrl?: string;
   remoteName?: string;
   schemaPath?: string;
@@ -46,22 +46,18 @@ export async function createTestProject(
   // Ensure schema directory exists (init doesn't create it)
   await fs.mkdir(schemaPath, {recursive: true});
 
-  // Read the generated config and merge in test-specific values
-  const existingConfig = JSON.parse(await fs.readFile(configPath, "utf-8"));
+  // Patch secrets: all credentials and remote data live exclusively in postkit.secrets.json
+  const secretsPath = path.join(rootDir, "postkit.secrets.json");
   const remoteName = config.remoteName ?? "test-remote";
 
-  existingConfig.db.localDbUrl = config.localDbUrl;
+  const existingSecrets = JSON.parse(await fs.readFile(secretsPath, "utf-8"));
+  existingSecrets.db.localDbUrl = config.localDbUrl ?? "";
   if (config.remoteDbUrl) {
-    existingConfig.db.remotes = {
-      [remoteName]: {
-        url: config.remoteDbUrl,
-        default: true,
-        addedAt: new Date().toISOString(),
-      },
+    existingSecrets.db.remotes = {
+      [remoteName]: {url: config.remoteDbUrl, default: true, addedAt: new Date().toISOString()},
     };
   }
-
-  await fs.writeFile(configPath, JSON.stringify(existingConfig, null, 2));
+  await fs.writeFile(secretsPath, JSON.stringify(existingSecrets, null, 2));
 
   return {rootDir, configPath, postkitDir, dbDir, schemaPath};
 }

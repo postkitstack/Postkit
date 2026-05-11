@@ -14,8 +14,9 @@ The database module uses a session-based workflow. Session state is tracked in `
   "startedAt": "2026-02-11T12:00:00Z",
   "clonedAt": "20260211120000",
   "remoteName": "staging",
-  "localDbUrl": "postgres://user:pass@localhost:5432/myapp_local",
+  "localDbUrl": "postgres://postgres:postkit_local@localhost:15432/postkit_local",
   "remoteDbUrl": "postgres://user:pass@staging-host:5432/myapp",
+  "containerID": "abc123def456",
   "pendingChanges": {
     "planned": false,
     "applied": false,
@@ -39,6 +40,7 @@ The database module uses a session-based workflow. Session state is tracked in `
 | `remoteName` | Name of the remote that was cloned |
 | `localDbUrl` | Local database connection URL |
 | `remoteDbUrl` | Remote database connection URL |
+| `containerID` | Docker container ID (present only when PostKit auto-started a container) |
 | `pendingChanges` | Object tracking changes in the session |
 
 ### pendingChanges

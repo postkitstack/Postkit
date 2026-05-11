@@ -136,9 +136,9 @@ db/schema/
 
 ## Prerequisites
 
-- **PostgreSQL** client tools (`psql`, `pg_dump`)
 - **pgschema** - Bundled with PostKit (no separate installation needed)
 - **dbmate** - Auto-installed via npm (no separate installation needed)
+- **Docker** _(optional)_ - Required only when `db.localDbUrl` is empty. PostKit starts a `postgres:{version}-alpine` container automatically, version-matched to your remote DB.
 
 ## Troubleshooting
 

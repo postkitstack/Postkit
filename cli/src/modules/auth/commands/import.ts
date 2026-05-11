@@ -45,7 +45,6 @@ export async function importCommand(options: CommandOptions): Promise<void> {
     logger.success("Import complete!");
   } catch (error) {
     spinner.fail("Import failed");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }

@@ -42,6 +42,33 @@ sidebar_position: 100
 
 **Solution:** No changes were made to the target. Fix the issue and retry.
 
+## Docker / Auto-Container Issues
+
+### `Docker not found`
+
+**Solution:** Install [Docker Desktop](https://www.docker.com/products/docker-desktop/). Docker is only needed when `db.localDbUrl` is empty in `postkit.secrets.json`. Alternatively, set `localDbUrl` to use an existing local PostgreSQL instance.
+
+### `Docker is not running`
+
+**Solution:** Start Docker Desktop before running `postkit db start` or `postkit db deploy`.
+
+### `Failed to start container`
+
+**Solution:** The `postgres:{version}-alpine` image could not be started. Ensure you have internet access to pull the image, or pre-pull it:
+```bash
+docker pull postgres:16-alpine
+```
+Check that Docker has enough memory allocated (at least 512MB recommended).
+
+### Container not cleaned up after abort
+
+**Solution:** If a container was left running after an interrupted session, stop it manually:
+```bash
+docker stop <containerID>
+docker rm <containerID>
+```
+The container ID is stored in `.postkit/db/session.json` under `containerID` if the session file still exists.
+
 ## Import Issues
 
 ### `Import: pgschema plan produced no output`

@@ -1,9 +1,8 @@
-import pg from "pg";
 import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
 import {runCommand} from "../../../common/shell";
-import {getDbConfig, getTmpImportDir, MIGRATIONS_TABLE} from "../utils/db-config";
+import {getDbConfig} from "../utils/db-config";
 import {
   CREATE_POSTKIT_SCHEMA,
   CREATE_MIGRATIONS_TABLE,
@@ -11,11 +10,9 @@ import {
   FETCH_SCHEMAS,
   FETCH_ROLES,
 } from "../config/queries";
-import {parseConnectionUrl, createDatabase, dropDatabase} from "./database";
+import {parseConnectionUrl, createDatabase, dropDatabase, withPgClient} from "./database";
 import {runPgschemaplan} from "./pgschema";
 import {generateSchemaSQLAndFingerprint} from "./schema-generator";
-
-const {Client} = pg;
 
 /**
  * Parse schema.sql \i include directives to determine file ordering per directory.
@@ -231,17 +228,12 @@ export async function fetchInfraFromDatabase(
   databaseUrl: string,
   schemaName: string,
 ): Promise<{roles: string[]; schemas: string[]}> {
-  const client = new Client({connectionString: databaseUrl});
-  const roles: string[] = [];
-  const schemas: string[] = [];
-
-  try {
-    await client.connect();
+  return withPgClient(databaseUrl, async (client) => {
+    const roles: string[] = [];
+    const schemas: string[] = [];
 
     // Fetch non-system schemas
-    const schemaRows = await client.query<{nspname: string; owner: string}>(
-      FETCH_SCHEMAS,
-    );
+    const schemaRows = await client.query<{nspname: string; owner: string}>(FETCH_SCHEMAS);
 
     for (const row of schemaRows.rows) {
       schemas.push(`CREATE SCHEMA IF NOT EXISTS ${row.nspname} AUTHORIZATION ${row.owner};`);
@@ -274,11 +266,9 @@ export async function fetchInfraFromDatabase(
         `DO $$\nBEGIN\n    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${row.rolname}') THEN\n        CREATE ROLE ${row.rolname} ${attrs};\n    END IF;\nEND\n$$;`,
       );
     }
-  } finally {
-    await client.end();
-  }
 
-  return {roles, schemas};
+    return {roles, schemas};
+  });
 }
 
 /**
@@ -416,10 +406,7 @@ export async function applyInfraToDatabase(databaseUrl: string, schemaPath: stri
   const infraDir = path.join(schemaPath, "infra");
   if (!existsSync(infraDir)) return;
 
-  const client = new Client({connectionString: databaseUrl});
-  try {
-    await client.connect();
-
+  await withPgClient(databaseUrl, async (client) => {
     const entries = (await fs.readdir(infraDir)).sort();
     for (const entry of entries) {
       if (!entry.endsWith(".sql")) continue;
@@ -428,9 +415,7 @@ export async function applyInfraToDatabase(databaseUrl: string, schemaPath: stri
         await client.query(sql);
       }
     }
-  } finally {
-    await client.end();
-  }
+  });
 }
 
 /**
@@ -446,11 +431,10 @@ export async function applyInfraToDatabase(databaseUrl: string, schemaPath: stri
 export async function generateBaselineDDL(
   schemaPath: string,
   schemaName: string,
+  localDbUrl: string,
 ): Promise<string> {
-  const config = getDbConfig();
-
-  // Construct a temp database URL based on localDbUrl
-  const localInfo = parseConnectionUrl(config.localDbUrl);
+  // Construct a temp database URL based on the resolved localDbUrl
+  const localInfo = parseConnectionUrl(localDbUrl);
   const tmpDbName = `postkit_import_${Date.now()}`;
   const tmpDbUrl = `postgres://${localInfo.user}:${encodeURIComponent(localInfo.password)}@${localInfo.host}:${localInfo.port}/${tmpDbName}`;
 
@@ -499,22 +483,14 @@ export async function syncMigrationState(
   databaseUrl: string,
   version: string,
 ): Promise<void> {
-  const client = new Client({connectionString: databaseUrl});
-
-  try {
-    await client.connect();
-
+  await withPgClient(databaseUrl, async (client) => {
     // Ensure postkit schema exists
     await client.query(CREATE_POSTKIT_SCHEMA);
-
     // Create schema_migrations table in postkit schema
     await client.query(CREATE_MIGRATIONS_TABLE);
-
     // Insert the baseline version
     await client.query(INSERT_MIGRATION_VERSION, [version]);
-  } finally {
-    await client.end();
-  }
+  });
 }
 
 /**

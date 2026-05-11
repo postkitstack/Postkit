@@ -79,7 +79,6 @@ export async function exportCommand(options: CommandOptions): Promise<void> {
     logger.info(`Clean  → ${config.cleanFilePath}`);
   } catch (error) {
     spinner.fail("Export failed");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }

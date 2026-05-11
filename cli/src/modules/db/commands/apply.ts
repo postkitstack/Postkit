@@ -4,72 +4,26 @@ import fs from "fs/promises";
 import {promptConfirm, promptInput} from "../../../common/prompt";
 import {existsSync} from "fs";
 import {logger} from "../../../common/logger";
-import {getSession, updatePendingChanges} from "../utils/session";
+import {requireActiveSession, assertLocalConnection, updatePendingChanges} from "../utils/session";
 import {getSessionMigrationsPath, toRelativePath, resolveProjectPath} from "../utils/db-config";
 import {wrapPlanSQL, getPlanFileContent} from "../services/pgschema";
-import {testConnection} from "../services/database";
 import {
   createMigrationFile,
   runSessionMigrate,
   deleteMigrationFile,
 } from "../services/dbmate";
-import {generateSchemaFingerprint} from "../services/schema-generator";
-import {applyInfra, loadInfra} from "../services/infra-generator";
-import {applySeeds, loadSeeds} from "../services/seed-generator";
+import {generateSchemaSQLAndFingerprint} from "../services/schema-generator";
+import {applyInfraStep} from "../services/infra-generator";
+import {applySeedsStep} from "../services/seed-generator";
 import type {CommandOptions} from "../../../common/types";
 import type {SessionState} from "../types/index";
 import {PostkitError} from "../../../common/errors";
-
-async function applyInfraStep(
-  spinner: ReturnType<typeof ora>,
-  dbUrl: string,
-): Promise<void> {
-  const infra = await loadInfra();
-  if (infra.length === 0) {
-    spinner.info("No infra files found - skipping");
-    return;
-  }
-  spinner.start("Applying infra...");
-  await applyInfra(dbUrl);
-  spinner.succeed(`Infra applied (${infra.length} file(s))`);
-}
-
-async function applySeedsStep(
-  spinner: ReturnType<typeof ora>,
-  dbUrl: string,
-  retryHint: string,
-): Promise<void> {
-  const seeds = await loadSeeds();
-  if (seeds.length === 0) {
-    spinner.info("No seed files found - skipping");
-    return;
-  }
-  try {
-    spinner.start("Applying seed data...");
-    await applySeeds(dbUrl);
-    spinner.succeed(`Seeds applied (${seeds.length} file(s))`);
-  } catch (error) {
-    spinner.fail("Failed to apply seeds");
-    throw new PostkitError(
-      `Seeds failed: ${error instanceof Error ? error.message : String(error)}`,
-      retryHint,
-    );
-  }
-}
 
 export async function applyCommand(options: CommandOptions): Promise<void> {
   const spinner = ora();
 
   try {
-    // Check for active session
-    const session = await getSession();
-
-    if (!session || !session.active) {
-      throw new PostkitError(
-        "No active migration session.",
-        'Run "postkit db start" to begin a new session.',
-      );
-    }
+    const session = await requireActiveSession();
 
     // Confirm apply operation (unless force flag)
     const confirmed = await promptConfirm(
@@ -206,11 +160,7 @@ async function handleResume(
   // Seeds
   if (!pc.seedsApplied) {
     logger.step(step, totalSteps, "Applying seeds...");
-    await applySeedsStep(
-      spinner,
-      session.localDbUrl,
-      'Run "postkit db apply" again to retry from seeds.',
-    );
+    await applySeedsStep(spinner, session.localDbUrl);
     await updatePendingChanges({seedsApplied: true});
   } else {
     logger.step(step, totalSteps, "Seeds already applied - skipping");
@@ -281,7 +231,7 @@ async function handlePlanApply(
   // Plan-based migration flow (original logic)
   // Validate schema fingerprint
   if (session.pendingChanges.schemaFingerprint) {
-    const currentFingerprint = await generateSchemaFingerprint();
+    const {fingerprint: currentFingerprint} = await generateSchemaSQLAndFingerprint();
 
     if (currentFingerprint !== session.pendingChanges.schemaFingerprint) {
       throw new PostkitError(
@@ -312,19 +262,7 @@ async function handlePlanApply(
 
   // Step 2: Test local connection
   logger.step(2, 7, "Testing local database connection...");
-  spinner.start("Connecting to local database...");
-
-  const localConnected = await testConnection(session.localDbUrl);
-
-  if (!localConnected) {
-    spinner.fail("Failed to connect to local database");
-    throw new PostkitError(
-      "Could not connect to the local database.",
-      'The local clone may have been removed. Run "postkit db start" again.',
-    );
-  }
-
-  spinner.succeed("Connected to local database");
+  await assertLocalConnection(session, spinner);
 
   // Step 3: Apply infra (roles, schemas, extensions)
   logger.step(3, 7, "Applying infrastructure...");
@@ -395,11 +333,7 @@ async function handlePlanApply(
 
   // Step 6: Apply seeds
   logger.step(6, 7, "Applying seeds...");
-  await applySeedsStep(
-    spinner,
-    session.localDbUrl,
-    'Migration is already applied. Run "postkit db apply" again to retry from seeds.',
-  );
+  await applySeedsStep(spinner, session.localDbUrl);
   await updatePendingChanges({seedsApplied: true});
 
   // Step 7: Mark fully applied and clean up plan file
@@ -467,19 +401,7 @@ async function handleManualApply(
 
   // Step 1: Test local connection
   logger.step(1, 4, "Testing local database connection...");
-  spinner.start("Connecting to local database...");
-
-  const localConnected = await testConnection(session.localDbUrl);
-
-  if (!localConnected) {
-    spinner.fail("Failed to connect to local database");
-    throw new PostkitError(
-      "Could not connect to the local database.",
-      'The local clone may have been removed. Run "postkit db start" again.',
-    );
-  }
-
-  spinner.succeed("Connected to local database");
+  await assertLocalConnection(session, spinner);
 
   // Step 2: Apply infra
   logger.step(2, 4, "Applying infrastructure...");
@@ -518,11 +440,7 @@ async function handleManualApply(
 
   // Step 4: Apply seeds
   logger.step(4, 4, "Applying seeds...");
-  await applySeedsStep(
-    spinner,
-    session.localDbUrl,
-    'Migration(s) are already applied. Run "postkit db apply" again to retry from seeds.',
-  );
+  await applySeedsStep(spinner, session.localDbUrl);
   await updatePendingChanges({seedsApplied: true, applied: true});
 
   logger.blank();

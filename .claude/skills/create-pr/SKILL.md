@@ -7,6 +7,11 @@ description: Generate a PR description and save to temp/pr-description.md.
 
 Generate a standardized PR description for the PostKit project and save it to `temp/pr-description.md`.
 
+## Arguments
+
+Optional: base branch to compare against (e.g. `/create-pr dev` or `/create-pr main`).
+Default to `main` if no argument is provided.
+
 ## Project Context
 
 Read `CLAUDE.md` at the project root for project conventions.
@@ -15,16 +20,21 @@ Use the PR template at `.github/pull_request_template.md`.
 ## Workflow
 
 ### Step 1: Analyze Changes
-Gather branch information:
+
+Determine the base branch from the argument (default: `main`). Always compare against the **remote** tracking branch, not a local branch. First fetch to ensure the remote ref is up to date, then gather branch information:
+
 ```bash
-git log origin/main...HEAD --oneline
-git diff origin/main...HEAD --stat
-git diff origin/main...HEAD
+git fetch origin <base>
+git log origin/<base>...HEAD --oneline
+git diff origin/<base>...HEAD --stat
+git diff origin/<base>...HEAD
 ```
+
+Always use `origin/<base>` (not `<base>`) in all git commands so the comparison is against the remote state, not a potentially stale local branch.
+
 Categorize changes into: features, fixes, refactors, tests, docs, chore.
 
 ### Step 2: Generate PR Description
-Using the PR template structure, generate:
 
 **Title** — under 70 characters with conventional commit prefix:
 - `feat: <description>` for new features
@@ -34,15 +44,44 @@ Using the PR template structure, generate:
 - `docs: <description>` for documentation changes
 - `chore: <description>` for build/tooling changes
 
-**Body** — using the template sections:
-- Summary (1-3 bullet points)
-- Changes (specific list)
-- Type of Change (check one)
-- Test Plan (checklist)
+**Body** — follow the exact section order from `.github/pull_request_template.md`:
+1. **Summary** — 1-3 bullet points describing what this PR does
+2. **Changes** — specific list of changes made
+3. **Type of Change** — check one box (`[x]`) matching the primary change type
+4. **Test Plan** — check completed items; fill in "Manually tested" description
+5. **Breaking Changes** — check "No breaking changes" if none; otherwise describe them
 
 ### Step 3: Save to File
+
 Create `temp/` directory if needed and save to `temp/pr-description.md`.
-Use the exact format from `.github/pull_request_template.md` — read that file and follow its structure.
+
+The file must follow this exact structure:
+```
+# <title>
+
+**Branch:** `<current-branch>` → `<base-branch>`
+
+## Summary
+...
+
+## Changes
+...
+
+## Type of Change
+...
+
+## Test Plan
+...
+
+## Breaking Changes
+...
+```
+
+Get the current branch name with:
+```bash
+git rev-parse --abbrev-ref HEAD
+```
 
 ### Step 4: Show to User
-Display the generated PR description and ask for confirmation or edits before saving.
+
+Display the full generated PR description from the saved file and invite the user to request edits.

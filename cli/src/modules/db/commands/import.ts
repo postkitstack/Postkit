@@ -7,10 +7,13 @@ import {promptConfirm} from "../../../common/prompt";
 import {PostkitError} from "../../../common/errors";
 import {getDbConfig, getTmpImportDir, getCommittedMigrationsPath, toRelativePath} from "../utils/db-config";
 import {hasActiveSession} from "../utils/session";
+import {maskRemoteUrl} from "../utils/remotes";
 import {addCommittedMigration, saveCommittedState} from "../utils/committed";
 import {testConnection, getTableCount, createDatabase} from "../services/database";
-import {checkPgschemaInstalled, deletePlanFile} from "../services/pgschema";
-import {checkDbmateInstalled, createMigrationFile, runCommittedMigrate} from "../services/dbmate";
+import {resolveLocalDb, stopSessionContainer} from "../services/container";
+import {deletePlanFile} from "../services/pgschema";
+import {createMigrationFile, runCommittedMigrate} from "../services/dbmate";
+import {checkDbPrerequisites} from "../services/prerequisites";
 import {deleteGeneratedSchema} from "../services/schema-generator";
 import {
   runPgschemaDump,
@@ -27,20 +30,17 @@ interface ImportOptions extends CommandOptions {
   name?: string;
 }
 
-function maskConnectionUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.password = "****";
-    return parsed.toString();
-  } catch {
-    return url.replace(/:([^@]+)@/, ":****@");
-  }
-}
-
 export async function importCommand(options: ImportOptions): Promise<void> {
   const spinner = ora();
   const migrationName = options.name || "imported_baseline";
   const schemaName = options.schema || "public";
+  let tempContainerID: string | undefined;
+
+  async function cleanupContainer(): Promise<void> {
+    if (tempContainerID) {
+      try { await stopSessionContainer(tempContainerID); } catch { /* best effort */ }
+    }
+  }
 
   try {
     // Step 0: Check prerequisites
@@ -55,24 +55,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
 
     logger.step(1, 8, "Checking prerequisites...");
 
-    const pgschemaInstalled = await checkPgschemaInstalled();
-    const dbmateInstalled = await checkDbmateInstalled();
-
-    if (!pgschemaInstalled) {
-      throw new PostkitError(
-        "pgschema binary not found.",
-        "Visit: https://github.com/pgschema/pgschema",
-      );
-    }
-
-    if (!dbmateInstalled) {
-      throw new PostkitError(
-        "dbmate binary not found.",
-        "Install with: brew install dbmate  or  go install github.com/amacneil/dbmate@latest",
-      );
-    }
-
-    logger.debug("Prerequisites check passed", options.verbose);
+    await checkDbPrerequisites(options.verbose ?? false);
 
     // Step 1: Resolve target database and test connection
     logger.step(2, 8, "Validating database connection...");
@@ -83,11 +66,11 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     if (!targetUrl) {
       throw new PostkitError(
         "No database URL provided.",
-        "Use --url flag or set localDbUrl in postkit.config.json.",
+        "Use --url flag or set localDbUrl in postkit.secrets.json.",
       );
     }
 
-    logger.debug(`Target database: ${maskConnectionUrl(targetUrl)}`, options.verbose);
+    logger.debug(`Target database: ${maskRemoteUrl(targetUrl)}`, options.verbose);
 
     spinner.start("Connecting to database...");
     const connected = await testConnection(targetUrl);
@@ -95,7 +78,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     if (!connected) {
       spinner.fail("Failed to connect to database");
       throw new PostkitError(
-        `Could not connect to database: ${maskConnectionUrl(targetUrl)}`,
+        `Could not connect to database: ${maskRemoteUrl(targetUrl)}`,
         "Check the database URL and ensure the database is running.",
       );
     }
@@ -147,7 +130,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     }
 
     logger.info("This command will:");
-    logger.info(`  1. Dump schema from ${maskConnectionUrl(targetUrl)} (schema: ${schemaName})`);
+    logger.info(`  1. Dump schema from ${maskRemoteUrl(targetUrl)} (schema: ${schemaName})`);
     logger.info("  2. Normalize the dump into PostKit schema directory structure");
     logger.info(`  3. Generate baseline migration: "${migrationName}"`);
     logger.info("  4. Insert migration tracking record in the source database");
@@ -209,14 +192,25 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       }
     }
 
-    // Step 5: Generate baseline migration using pgschema plan
-    logger.step(6, 8, "Generating baseline migration...");
+    // Step 5: Resolve local DB URL — start a Docker container if localDbUrl is not configured
+    // (must happen before generateBaselineDDL, which needs a live Postgres to create a temp DB)
+    logger.step(6, 8, "Setting up local database...");
+
+    let localDbUrl = config.localDbUrl;
+    if (!options.dryRun) {
+      const resolved = await resolveLocalDb(config.localDbUrl, targetUrl, spinner);
+      localDbUrl = resolved.url;
+      tempContainerID = resolved.containerID;
+    }
+
+    // Step 6: Generate baseline migration using pgschema plan
+    logger.step(7, 8, "Generating baseline migration...");
 
     if (options.dryRun) {
       spinner.info("Dry run — skipping baseline generation");
     } else {
       spinner.start("Generating baseline DDL via pgschema plan...");
-      const baselineDDL = await generateBaselineDDL(config.schemaPath, schemaName);
+      const baselineDDL = await generateBaselineDDL(config.schemaPath, schemaName, localDbUrl);
       spinner.succeed("Baseline DDL generated");
 
       // Clear migrations directory and reset committed state before creating baseline migration
@@ -254,12 +248,12 @@ export async function importCommand(options: ImportOptions): Promise<void> {
         committedAt: new Date().toISOString(),
       });
 
-      // Step 7: Set up local database
-      logger.step(7, 8, "Setting up local database...");
+      // Step 7: Apply to local database
+      logger.step(8, 8, "Applying to local database...");
 
       spinner.start("Creating local database...");
       try {
-        await createDatabase(config.localDbUrl);
+        await createDatabase(localDbUrl);
         spinner.succeed("Local database created");
       } catch {
         spinner.warn("Local database may already exist — continuing");
@@ -268,14 +262,14 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       // Apply infra SQL (roles, schemas) before running migration
       spinner.start("Applying infrastructure SQL to local database...");
       try {
-        await applyInfraToDatabase(config.localDbUrl, config.schemaPath);
+        await applyInfraToDatabase(localDbUrl, config.schemaPath);
         spinner.succeed("Infrastructure SQL applied");
       } catch {
         spinner.warn("Could not apply infrastructure SQL — continuing");
       }
 
       spinner.start("Applying baseline migration to local database...");
-      const migrateResult = await runCommittedMigrate(config.localDbUrl);
+      const migrateResult = await runCommittedMigrate(localDbUrl);
       if (migrateResult.success) {
         spinner.succeed("Baseline migration applied to local database");
       } else {
@@ -283,7 +277,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
         logger.warn(`  ${migrateResult.output}`);
       }
 
-      // Step 8: Sync migration state with source database (only after successful local apply)
+      // Sync migration state with source database (only after successful local apply)
       logger.step(8, 8, "Syncing migration state...");
 
       spinner.start("Inserting migration tracking record...");
@@ -313,6 +307,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       }
       await deletePlanFile();
       await deleteGeneratedSchema();
+      await cleanupContainer();
     }
 
     // Summary
@@ -330,6 +325,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     logger.info('  3. Start working: modify schema files, then "postkit db plan" to see changes');
   } catch (error) {
     spinner.fail("Import failed");
+    await cleanupContainer();
     throw error;
   }
 }

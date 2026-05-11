@@ -9,6 +9,7 @@ export interface SessionState {
   remoteName?: string;
   localDbUrl: string;
   remoteDbUrl: string;
+  containerID?: string;
   pendingChanges: {
     planned: boolean;
     applied: boolean;

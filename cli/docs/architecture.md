@@ -71,8 +71,9 @@ Session-based migration workflow: `start → plan → apply → commit → deplo
 **Key components:**
 - **pgschema** — Bundled binary for schema diffing (`vendor/pgschema/`)
 - **dbmate** — npm-installed migration runner (`--migrations-table postkit.schema_migrations`)
-- **Session state** — Tracked in `.postkit/db/session.json`
-- **Named remotes** — Multiple remote DBs via `db.remotes` in config
+- **Session state** — Tracked in `.postkit/db/session.json`; includes optional `containerID` when auto Docker container is active
+- **Named remotes** — Multiple remote DBs via `db.remotes`; all remote data (url, default, addedAt) stored entirely in `postkit.secrets.json`
+- **Auto Docker container** — When `localDbUrl` is empty, `container.ts` starts a `postgres:{version}-alpine` container. Version is queried from remote via `SHOW server_version_num`. `pg_dump`/`psql` run inside the container via `docker exec` for version-matched tools.
 - **Schema directory** — User-maintained SQL files (`db/schema/`) with sections: `infra/`, `extensions/`, `types/`, `enums/`, `tables/`, `views/`, `functions/`, `triggers/`, `grants/`, `seeds/`
 
 **Import sub-workflow** (`postkit db import`):
@@ -100,35 +101,58 @@ Shared utilities used by all modules, located in `cli/src/common/`:
 
 | File | Purpose |
 |------|---------|
-| `config.ts` | Config loader (`.env`, `postkit.config.json`), path resolution |
+| `config.ts` | Config loader — merges `postkit.config.json` + `postkit.secrets.json`, path resolution |
 | `logger.ts` | Chalk-based console output (respects `--verbose`) |
 | `shell.ts` | Shell command execution wrapper |
 | `types.ts` | Shared TypeScript types (`CommandOptions`) |
 | `init-check.ts` | Project initialization validation |
 
+### DB Module Shared Utilities
+
+Key shared utilities within the `db` module (used by multiple commands):
+
+| File | Purpose |
+|------|---------|
+| `utils/json-file.ts` | `readJsonFile<T>()` / `writeJsonFile()` — typed JSON read/write |
+| `utils/apply-target.ts` | `resolveApplyTarget(target?)` — resolves `local` or `remote` for infra/seed commands |
+| `utils/session.ts` | `requireActiveSession()`, `assertLocalConnection(session, spinner)` |
+| `services/prerequisites.ts` | `checkDbPrerequisites(verbose)` — verifies pgschema + dbmate are available |
+| `services/database.ts` | `withPgClient<T>(url, fn)` — scoped pg client wrapper |
+| `services/container.ts` | `resolveLocalDb(localDbUrl, remoteUrl, spinner, spinnerText?)` — starts auto Docker container when `localDbUrl` is empty; fetches PG version from `remoteUrl` internally |
+
 ---
 
 ## Configuration
 
-Loaded from `postkit.config.json` via `loadPostkitConfig()`:
+Loaded via `loadPostkitConfig()`, which deep-merges two files:
+
+| File | Committed | Contains |
+|------|-----------|---------|
+| `postkit.config.json` | Yes | Non-sensitive project settings (schema paths, flags) |
+| `postkit.secrets.json` | No (gitignored) | Credentials + all remote config (URLs, names, defaults) |
 
 ```json
+// postkit.config.json (committed — no remotes)
 {
   "db": {
-    "localDbUrl": "postgres://...",
     "schemaPath": "db/schema",
-    "schema": "public",
+    "schema": "public"
+  }
+}
+
+// postkit.secrets.json (gitignored — all remote data lives here)
+{
+  "db": {
+    "localDbUrl": "postgres://user:pass@localhost:5432/myapp_local",
     "remotes": {
-      "dev": { "url": "postgres://...", "default": true },
-      "staging": { "url": "postgres://..." }
+      "dev": { "url": "postgres://user:pass@dev-host:5432/myapp", "default": true, "addedAt": "2024-12-31T10:00:00.000Z" },
+      "staging": { "url": "postgres://user:pass@staging-host:5432/myapp" }
     }
-  },
-  "auth": {
-    "sourceKeycloak": { "baseUrl": "...", "realm": "..." },
-    "targetKeycloak": { "baseUrl": "...", "realm": "..." }
   }
 }
 ```
+
+`localDbUrl` can be empty — PostKit will automatically start a Docker container (`postgres:{version}-alpine`) for the session. The container image version is detected from the remote database at runtime via `SHOW server_version_num`.
 
 ---
 
@@ -181,17 +205,25 @@ cli/test/
 
 ## Runtime Directory Structure
 
-All PostKit runtime files in `.postkit/` (gitignored):
+PostKit files in `.postkit/` are split between gitignored (ephemeral/user-specific) and committed (shared with team):
 
 ```
 .postkit/
 ├── db/
-│   ├── session.json         # Current session state
-│   ├── committed.json       # Committed migration tracking
-│   ├── plan.sql             # Generated migration plan
-│   ├── schema.sql           # Generated schema from files
-│   ├── session/             # Session migrations (temporary)
-│   └── migrations/          # Committed migrations (for deploy)
+│   ├── session.json         # GITIGNORED — active session state, local DB URL, container ID
+│   ├── plan.sql             # GITIGNORED — generated migration diff (ephemeral)
+│   ├── schema.sql           # GITIGNORED — generated schema artifact (ephemeral)
+│   ├── session/             # GITIGNORED — temporary in-progress migrations
+│   ├── committed.json       # COMMITTED — migration tracking index (shared)
+│   └── migrations/          # COMMITTED — committed SQL migrations for deploy (shared)
 └── auth/
-    └── raw/                 # Exported realm config (pre-clean)
+    ├── raw/                 # COMMITTED — auth raw config (shared)
+    └── realm/               # COMMITTED — auth realm config (shared)
 ```
+
+`.gitignore` (written by `postkit init`) covers only the ephemeral paths:
+- `.postkit/db/session.json`
+- `.postkit/db/plan.sql`
+- `.postkit/db/schema.sql`
+- `.postkit/db/session/`
+- `postkit.secrets.json`

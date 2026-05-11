@@ -22,7 +22,7 @@ vi.mock("../../../../src/common/shell", () => ({
 // Get references to the mocked functions via pg import
 import pg from "pg";
 import {runPipedCommands} from "../../../../src/common/shell";
-import {parseConnectionUrl, testConnection, createDatabase, dropDatabase, cloneDatabase} from "../../../../src/modules/db/services/database";
+import {parseConnectionUrl, testConnection, createDatabase, dropDatabase, cloneDatabase, getRemotePgMajorVersion} from "../../../../src/modules/db/services/database";
 
 // Access mock methods from the Client prototype
 const getMockClient = () => {
@@ -100,6 +100,36 @@ describe("database", () => {
     });
   });
 
+  describe("getRemotePgMajorVersion()", () => {
+    it("parses version_num and returns major version", async () => {
+      mockClient.query.mockResolvedValue({rows: [{server_version_num: "160003"}]});
+      const version = await getRemotePgMajorVersion("postgres://user:pass@host/db");
+      expect(version).toBe(16);
+    });
+
+    it("returns correct major for PG 14", async () => {
+      mockClient.query.mockResolvedValue({rows: [{server_version_num: "140012"}]});
+      expect(await getRemotePgMajorVersion("postgres://user:pass@host/db")).toBe(14);
+    });
+
+    it("returns correct major for PG 15", async () => {
+      mockClient.query.mockResolvedValue({rows: [{server_version_num: "150007"}]});
+      expect(await getRemotePgMajorVersion("postgres://user:pass@host/db")).toBe(15);
+    });
+
+    it("always closes the connection", async () => {
+      mockClient.query.mockResolvedValue({rows: [{server_version_num: "160003"}]});
+      await getRemotePgMajorVersion("postgres://user:pass@host/db");
+      expect(mockClient.end).toHaveBeenCalledTimes(1);
+    });
+
+    it("closes connection even on query failure", async () => {
+      mockClient.query.mockRejectedValue(new Error("query failed"));
+      await expect(getRemotePgMajorVersion("postgres://user:pass@host/db")).rejects.toThrow();
+      expect(mockClient.end).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("cloneDatabase()", () => {
     it("calls runPipedCommands with pg_dump and psql", async () => {
       vi.mocked(runPipedCommands).mockResolvedValue({stdout: "", stderr: "", exitCode: 0});
@@ -107,7 +137,7 @@ describe("database", () => {
       expect(runPipedCommands).toHaveBeenCalledTimes(1);
       const [producer, consumer] = vi.mocked(runPipedCommands).mock.calls[0]!;
       expect(producer.args[0]).toBe("pg_dump");
-      expect(producer.env.PGPASSWORD).toBe("pass");
+      expect(producer.env?.PGPASSWORD).toBe("pass");
       expect(consumer.args[0]).toBe("psql");
     });
 

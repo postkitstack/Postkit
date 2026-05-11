@@ -32,7 +32,7 @@ vi.mock("fs", async () => {
 
 import fs from "fs/promises";
 import {existsSync} from "fs";
-import {generateSchemaSQLAndFingerprint, generateSchemaFingerprint, deleteGeneratedSchema} from "../../../../src/modules/db/services/schema-generator";
+import {generateSchemaSQLAndFingerprint, deleteGeneratedSchema} from "../../../../src/modules/db/services/schema-generator";
 
 describe("schema-generator", () => {
   beforeEach(() => {
@@ -98,10 +98,12 @@ describe("schema-generator", () => {
     });
   });
 
-  describe("generateSchemaFingerprint()", () => {
-    it("returns valid hex when no schema dir", async () => {
-      vi.mocked(existsSync).mockReturnValue(false);
-      const fingerprint = await generateSchemaFingerprint();
+  describe("generateSchemaSQLAndFingerprint() fingerprint edge case", () => {
+    it("returns valid hex fingerprint when schema dir is empty", async () => {
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(fs.readdir).mockResolvedValue([]);
+      vi.mocked(fs.writeFile).mockResolvedValue();
+      const {fingerprint} = await generateSchemaSQLAndFingerprint();
       expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
     });
   });

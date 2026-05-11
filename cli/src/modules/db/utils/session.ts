@@ -1,7 +1,10 @@
-import fs from "fs/promises";
 import {existsSync} from "fs";
+import fsp from "fs/promises";
+import type {Ora} from "ora";
 import type {SessionState} from "../types/index";
 import {getSessionFilePath} from "./db-config";
+import {readJsonFile, writeJsonFile} from "./json-file";
+import {PostkitError} from "../../../common/errors";
 
 export async function getSession(): Promise<SessionState | null> {
   const sessionPath = getSessionFilePath();
@@ -11,8 +14,7 @@ export async function getSession(): Promise<SessionState | null> {
   }
 
   try {
-    const content = await fs.readFile(sessionPath, "utf-8");
-    const state = JSON.parse(content) as SessionState;
+    const state = await readJsonFile<SessionState>(sessionPath);
     if (!state || typeof state.active !== "boolean" || !state.pendingChanges) {
       return null;
     }
@@ -26,6 +28,7 @@ export async function createSession(
   remoteDbUrl: string,
   localDbUrl: string,
   remoteName?: string,
+  containerID?: string,
 ): Promise<SessionState> {
   const now = new Date();
   const session: SessionState = {
@@ -35,6 +38,7 @@ export async function createSession(
     remoteName,
     localDbUrl,
     remoteDbUrl,
+    containerID,
     pendingChanges: {
       planned: false,
       applied: false,
@@ -86,7 +90,7 @@ export async function deleteSession(): Promise<void> {
   const sessionPath = getSessionFilePath();
 
   if (existsSync(sessionPath)) {
-    await fs.unlink(sessionPath);
+    await fsp.unlink(sessionPath);
   }
 }
 
@@ -95,9 +99,34 @@ export async function hasActiveSession(): Promise<boolean> {
   return session !== null && session.active;
 }
 
+export async function requireActiveSession(): Promise<SessionState> {
+  const session = await getSession();
+  if (!session || !session.active) {
+    throw new PostkitError(
+      "No active migration session.",
+      'Run "postkit db start" to begin a new session.',
+    );
+  }
+  return session;
+}
+
+export async function assertLocalConnection(session: SessionState, spinner: Ora): Promise<void> {
+  const {testConnection} = await import("../services/database");
+  spinner.start("Connecting to local database...");
+  const connected = await testConnection(session.localDbUrl);
+  if (!connected) {
+    spinner.fail("Failed to connect to local database");
+    throw new PostkitError(
+      "Could not connect to the local database.",
+      'The local clone may have been removed. Run "postkit db start" again.',
+    );
+  }
+  spinner.succeed("Connected to local database");
+}
+
 async function saveSession(session: SessionState): Promise<void> {
   const sessionPath = getSessionFilePath();
-  await fs.writeFile(sessionPath, JSON.stringify(session, null, 2), "utf-8");
+  await writeJsonFile(sessionPath, session);
 }
 
 export function formatTimestamp(date: Date): string {

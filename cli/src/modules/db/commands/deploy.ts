@@ -10,10 +10,12 @@ import {
   cloneDatabase,
   dropDatabase,
   getTableCount,
+  getRemotePgMajorVersion,
 } from "../services/database";
 import {runCommittedMigrate, runDbmateStatus} from "../services/dbmate";
-import {loadInfra, applyInfra} from "../services/infra-generator";
-import {loadSeeds, applySeeds} from "../services/seed-generator";
+import {applyInfraStep} from "../services/infra-generator";
+import {applySeedsStep} from "../services/seed-generator";
+import {resolveLocalDb, stopSessionContainer, cloneDatabaseViaContainer} from "../services/container";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import {resolveRemote, maskRemoteUrl, normalizeUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
@@ -38,6 +40,7 @@ function resolveTargetUrl(options: DeployOptions): {url: string; label: string} 
   const resolved = resolveRemote();
   return {url: resolved.url, label: `${resolved.name} (default)`};
 }
+
 
 async function confirmAndRemoveSession(
   spinner: ReturnType<typeof ora>,
@@ -71,16 +74,7 @@ async function runSteps(
 
   // Infra
   logger.step(step, totalSteps, `Applying infra to ${label}...`);
-  const infra = await loadInfra();
-
-  if (infra.length === 0) {
-    spinner.info("No infra files found - skipping");
-  } else {
-    spinner.start(`Applying infra to ${label}...`);
-    await applyInfra(dbUrl);
-    spinner.succeed(`Infra applied to ${label} (${infra.length} file(s))`);
-  }
-
+  await applyInfraStep(spinner, dbUrl, label);
   step++;
 
   // Dbmate migrate
@@ -98,15 +92,7 @@ async function runSteps(
 
   // Seeds
   logger.step(step, totalSteps, `Applying seeds to ${label}...`);
-  const seeds = await loadSeeds();
-
-  if (seeds.length === 0) {
-    spinner.info("No seed files found - skipping");
-  } else {
-    spinner.start(`Applying seeds to ${label}...`);
-    await applySeeds(dbUrl);
-    spinner.succeed(`Seeds applied to ${label} (${seeds.length} file(s))`);
-  }
+  await applySeedsStep(spinner, dbUrl, label);
 }
 
 export async function deployCommand(options: DeployOptions): Promise<void> {
@@ -118,16 +104,18 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     // Step 1: Resolve target URL
     const {url: targetUrl, label: targetLabel} = resolveTargetUrl(options);
 
-    // Validate: localDbUrl cannot equal target URL
-    const normalizedLocalUrl = normalizeUrl(config.localDbUrl);
-    const normalizedTargetUrl = normalizeUrl(targetUrl);
+    // Validate: localDbUrl cannot equal target URL (skip check if localDbUrl is empty — container will be used)
+    if (config.localDbUrl) {
+      const normalizedLocalUrl = normalizeUrl(config.localDbUrl);
+      const normalizedTargetUrl = normalizeUrl(targetUrl);
 
-    if (normalizedLocalUrl === normalizedTargetUrl) {
-      throw new PostkitError(
-        `Cannot deploy: localDbUrl equals target URL (${targetLabel}).`,
-        "Your local database URL must be different from the target remote. " +
-        "Update your postkit.config.json or use a different remote.",
-      );
+      if (normalizedLocalUrl === normalizedTargetUrl) {
+        throw new PostkitError(
+          `Cannot deploy: localDbUrl equals target URL (${targetLabel}).`,
+          "Your local database URL must be different from the target remote. " +
+          "Update your postkit.config.json or use a different remote.",
+        );
+      }
     }
 
     logger.heading("Deploy Migrations");
@@ -181,7 +169,8 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     }
 
     const targetTableCount = await getTableCount(targetUrl);
-    spinner.succeed(`Connected to target database (${targetTableCount} tables)`);
+    const remotePgVersion = await getRemotePgMajorVersion(targetUrl);
+    spinner.succeed(`Connected to target database (${targetTableCount} tables, PostgreSQL ${remotePgVersion})`);
 
     // Step 2: Check target migration status
     logger.step(2, totalSteps, "Checking target migration status...");
@@ -205,12 +194,28 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       spinner.succeed("Target database up to date");
     }
 
-    // Step 3: Clone target DB to local
-    const localDbUrl = config.localDbUrl;
+    // Step 3: Resolve local DB URL (spin up a container if localDbUrl is not configured)
+    const {url: localDbUrl, containerID: tempContainerID} = await resolveLocalDb(
+      config.localDbUrl,
+      targetUrl,
+      spinner,
+      "Starting temporary container for dry-run...",
+    );
+
+    const cleanupLocal = async () => {
+      try { await dropDatabase(localDbUrl); } catch { /* best effort */ }
+      if (tempContainerID) {
+        try { await stopSessionContainer(tempContainerID); } catch { /* best effort */ }
+      }
+    };
 
     logger.step(3, totalSteps, "Cloning target database to local...");
     spinner.start("Cloning target database to local for dry-run verification...");
-    await cloneDatabase(targetUrl, localDbUrl);
+    if (tempContainerID) {
+      await cloneDatabaseViaContainer(tempContainerID, targetUrl, localDbUrl);
+    } else {
+      await cloneDatabase(targetUrl, localDbUrl);
+    }
     const localTableCount = await getTableCount(localDbUrl);
     spinner.succeed(`Target cloned to local (${localTableCount} tables)`);
 
@@ -227,11 +232,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
 
       // Clean up local clone
       logger.info("Cleaning up local clone...");
-      try {
-        await dropDatabase(localDbUrl);
-      } catch {
-        // Best effort cleanup
-      }
+      await cleanupLocal();
 
       throw new PostkitError(
         "Deployment aborted — dry run failed. No changes were made to the target database.",
@@ -245,11 +246,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     // If --dry-run, stop here — don't touch the target database
     if (options.dryRun) {
       logger.info("Dry run complete. Target database was not modified.");
-      try {
-        await dropDatabase(localDbUrl);
-      } catch {
-        // Best effort cleanup
-      }
+      await cleanupLocal();
       return;
     }
 
@@ -261,12 +258,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
 
     if (!confirmed) {
       logger.info("Deploy cancelled.");
-      // Clean up local clone
-      try {
-        await dropDatabase(localDbUrl);
-      } catch {
-        // Best effort cleanup
-      }
+      await cleanupLocal();
       return;
     }
 
@@ -279,11 +271,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     } catch (error) {
       logger.error(error instanceof Error ? error.message : String(error));
       logger.blank();
-      try {
-        await dropDatabase(localDbUrl);
-      } catch {
-        // Best effort cleanup
-      }
+      await cleanupLocal();
 
       throw new PostkitError(
         "Target deployment failed. The target database may be in a partial state.",
@@ -291,7 +279,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       );
     }
 
-    // Step 10: Drop local clone
+    // Step 10: Drop local clone and stop temp container
     logger.blank();
     logger.step(10, totalSteps, "Cleaning up local clone...");
     spinner.start("Dropping local clone database...");
@@ -301,6 +289,16 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       spinner.succeed("Local clone database dropped");
     } catch (error) {
       spinner.warn("Failed to drop local clone (non-fatal): " + (error instanceof Error ? error.message : String(error)));
+    }
+
+    if (tempContainerID) {
+      spinner.start("Stopping temporary container...");
+      try {
+        await stopSessionContainer(tempContainerID);
+        spinner.succeed("Temporary container stopped and removed");
+      } catch {
+        spinner.warn("Could not stop temporary container (non-fatal)");
+      }
     }
 
     // Report success

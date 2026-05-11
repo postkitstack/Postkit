@@ -1,12 +1,12 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
 import {promptInput} from "../../../common/prompt";
-import {getSession, updatePendingChanges} from "../utils/session";
+import {requireActiveSession, assertLocalConnection, updatePendingChanges} from "../utils/session";
 import {getSessionMigrationsPath} from "../utils/db-config";
 import {createMigrationFile} from "../services/dbmate";
-import {testConnection} from "../services/database";
 import {getDbConfig} from "../utils/db-config";
 import type {CommandOptions} from "../../../common/types";
+import {PostkitError} from "../../../common/errors";
 
 interface MigrateOptions extends CommandOptions {
   name?: string;
@@ -40,14 +40,7 @@ export async function migrationCommand(options: MigrateOptions, name?: string): 
   const spinner = ora();
 
   try {
-    // Check for active session
-    const session = await getSession();
-
-    if (!session || !session.active) {
-      logger.error("No active migration session.");
-      logger.info('Run "postkit db start" to begin a new session.');
-      process.exit(1);
-    }
+    const session = await requireActiveSession();
 
     // Get migration name
     let migrationName = name || options.name;
@@ -61,8 +54,7 @@ export async function migrationCommand(options: MigrateOptions, name?: string): 
 
     // Ensure migrationName is defined (TypeScript safety)
     if (!migrationName) {
-      logger.error("Migration name is required.");
-      process.exit(1);
+      throw new PostkitError("Migration name is required.");
     }
 
     logger.heading("Create Manual Migration");
@@ -72,20 +64,7 @@ export async function migrationCommand(options: MigrateOptions, name?: string): 
 
     // Test local connection
     logger.step(1, 3, "Testing local database connection...");
-    spinner.start("Connecting to local database...");
-
-    const localConnected = await testConnection(session.localDbUrl);
-
-    if (!localConnected) {
-      spinner.fail("Failed to connect to local database");
-      logger.error("Could not connect to the local database.");
-      logger.info(
-        'The local clone may have been removed. Run "postkit db start" again.',
-      );
-      process.exit(1);
-    }
-
-    spinner.succeed("Connected to local database");
+    await assertLocalConnection(session, spinner);
 
     // Create migration file
     logger.step(2, 3, "Creating migration file...");
@@ -150,7 +129,6 @@ export async function migrationCommand(options: MigrateOptions, name?: string): 
     logger.info('  - Run "postkit db migration <name>" to create more migrations in this session');
   } catch (error) {
     spinner.fail("Failed to create migration");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }

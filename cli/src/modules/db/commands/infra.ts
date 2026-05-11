@@ -5,13 +5,13 @@ import {
   getInfraSQL,
   applyInfra,
 } from "../services/infra-generator";
-import {getSession} from "../utils/session";
 import {testConnection} from "../services/database";
+import {resolveApplyTarget} from "../utils/apply-target";
 import type {CommandOptions} from "../../../common/types";
 
 interface InfraOptions extends CommandOptions {
   apply?: boolean;
-  target?: "local" | "remote";
+  target?: string;
 }
 
 export async function infraCommand(options: InfraOptions): Promise<void> {
@@ -51,48 +51,25 @@ export async function infraCommand(options: InfraOptions): Promise<void> {
 
     // Apply if requested
     if (options.apply) {
-      const session = await getSession();
-      let targetUrl: string | null = null;
-      let targetName: string;
+      const target = await resolveApplyTarget(options.target);
 
-      if (options.target === "remote") {
-        if (session) {
-          targetUrl = session.remoteDbUrl;
-        } else {
-          const {resolveRemote} = await import("../utils/remotes");
-          const {url} = resolveRemote();
-          targetUrl = url;
-        }
-        targetName = "remote";
-      } else {
-        if (!session || !session.active) {
-          logger.error(
-            "No active session. Cannot apply infra to local database.",
-          );
-          logger.info('Run "postkit db start" first or use --target=remote.');
-          process.exit(1);
-        }
-        targetUrl = session.localDbUrl;
-        targetName = "local";
-      }
-
-      logger.info(`Applying infra to ${targetName} database...`);
+      logger.info(`Applying infra to ${target.label} database...`);
       spinner.start("Testing connection...");
 
-      const connected = await testConnection(targetUrl);
+      const connected = await testConnection(target.url);
 
       if (!connected) {
-        spinner.fail(`Failed to connect to ${targetName} database`);
-        process.exit(1);
+        spinner.fail(`Failed to connect to ${target.label} database`);
+        throw new Error(`Could not connect to ${target.label} database`);
       }
 
-      spinner.succeed(`Connected to ${targetName} database`);
+      spinner.succeed(`Connected to ${target.label} database`);
 
       if (options.dryRun) {
         spinner.info("Dry run - skipping infra application");
       } else {
         spinner.start("Applying infra...");
-        await applyInfra(targetUrl);
+        await applyInfra(target.url);
         spinner.succeed("Infra applied successfully");
       }
     }
@@ -105,7 +82,6 @@ export async function infraCommand(options: InfraOptions): Promise<void> {
     );
   } catch (error) {
     spinner.fail("Failed to generate infra statements");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }

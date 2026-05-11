@@ -6,25 +6,42 @@ import {promptConfirm} from "../common/prompt";
 import {
   projectRoot,
   POSTKIT_CONFIG_FILE,
+  POSTKIT_SECRETS_FILE,
   POSTKIT_DIR,
   getConfigFilePath,
+  getSecretsFilePath,
   getPostkitDir,
   getPostkitAuthDir,
 } from "../common/config";
 import type {CommandOptions} from "../common/types";
-import type {PostkitConfig} from "../common/config";
+import type {PostkitPublicConfig, PostkitSecrets} from "../common/config";
 
+// Ephemeral/user-specific files are gitignored; committed migrations and auth state are tracked.
+// postkit.config.json is safe to commit.
 const GITIGNORE_ENTRIES = [
   "# Postkit",
-  ".postkit/",
-  "postkit.config.json",
+  ".postkit/db/session.json",
+  ".postkit/db/plan.sql",
+  ".postkit/db/schema.sql",
+  ".postkit/db/session/",
+  "postkit.secrets.json",
 ];
 
-const SCAFFOLD_CONFIG: PostkitConfig = {
+// Non-sensitive settings committed to git — no remotes (user/env-specific, lives in secrets)
+const SCAFFOLD_PUBLIC_CONFIG: PostkitPublicConfig = {
   db: {
-    localDbUrl: "",
     schemaPath: "schema",
     schema: "public",
+  },
+  auth: {
+    configCliImage: "adorsys/keycloak-config-cli:6.4.0-24",
+  },
+};
+
+// Sensitive credentials — gitignored
+const SCAFFOLD_SECRETS: PostkitSecrets = {
+  db: {
+    localDbUrl: "",
     remotes: {},
   },
   auth: {
@@ -39,7 +56,31 @@ const SCAFFOLD_CONFIG: PostkitConfig = {
       adminUser: "",
       adminPass: "",
     },
-    configCliImage: "adorsys/keycloak-config-cli:6.4.0-24",
+  },
+};
+
+// Example secrets template committed alongside the public config
+const SCAFFOLD_SECRETS_EXAMPLE: PostkitSecrets = {
+  db: {
+    localDbUrl: "postgres://user:pass@localhost:5432/mydb",
+    remotes: {
+      dev: {
+        url: "postgres://user:pass@dev-host:5432/mydb",
+      },
+    },
+  },
+  auth: {
+    source: {
+      url: "http://keycloak-source:8080",
+      adminUser: "admin",
+      adminPass: "changeme",
+      realm: "myrealm",
+    },
+    target: {
+      url: "http://keycloak-target:8080",
+      adminUser: "admin",
+      adminPass: "changeme",
+    },
   },
 };
 
@@ -80,8 +121,7 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     const spinner = ora("Creating .postkit/db/ directory...").start();
     const postkitDbDir = path.join(postkitDir, "db");
     fs.mkdirSync(postkitDbDir, {recursive: true});
-    // Create runtime files with proper initial content
-    // session.json is intentionally excluded — it is created only when a session starts
+    // session.json is intentionally excluded — created only when a session starts
     const runtimeFiles: Record<string, string> = {
       "committed.json": JSON.stringify({migrations: []}, null, 2),
       "plan.sql": "",
@@ -93,7 +133,6 @@ export async function initCommand(options: CommandOptions): Promise<void> {
         fs.writeFileSync(filePath, content);
       }
     }
-    // Create subdirectories
     for (const subdir of ["session", "migrations"]) {
       const subPath = path.join(postkitDbDir, subdir);
       if (!fs.existsSync(subPath)) {
@@ -110,7 +149,6 @@ export async function initCommand(options: CommandOptions): Promise<void> {
   } else {
     const spinner = ora("Creating .postkit/auth/ directory...").start();
     const postkitAuthDir = getPostkitAuthDir();
-    // Create subdirectories
     for (const subdir of ["raw", "realm"]) {
       const subPath = path.join(postkitAuthDir, subdir);
       if (!fs.existsSync(subPath)) {
@@ -120,14 +158,23 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     spinner.succeed(".postkit/auth/ directory created");
   }
 
-  // Step 3: Generate postkit.config.json
-  logger.step(3, totalSteps, "Generating postkit.config.json");
+  // Step 3: Generate config and secrets files
+  logger.step(3, totalSteps, "Generating config and secrets files");
   if (options.dryRun) {
-    logger.info(`Dry run: would create ${POSTKIT_CONFIG_FILE}`);
+    logger.info(`Dry run: would create ${POSTKIT_CONFIG_FILE} (committed) and ${POSTKIT_SECRETS_FILE} (gitignored)`);
   } else {
-    const spinner = ora("Writing postkit.config.json...").start();
-    fs.writeFileSync(configFile, JSON.stringify(SCAFFOLD_CONFIG, null, 2) + "\n");
-    spinner.succeed("postkit.config.json created");
+    const spinner = ora("Writing config files...").start();
+
+    fs.writeFileSync(configFile, JSON.stringify(SCAFFOLD_PUBLIC_CONFIG, null, 2) + "\n");
+
+    const secretsFile = getSecretsFilePath();
+    fs.writeFileSync(secretsFile, JSON.stringify(SCAFFOLD_SECRETS, null, 2) + "\n");
+
+    // Write example secrets template so teammates know the expected shape
+    const exampleFile = path.join(projectRoot, "postkit.secrets.example.json");
+    fs.writeFileSync(exampleFile, JSON.stringify(SCAFFOLD_SECRETS_EXAMPLE, null, 2) + "\n");
+
+    spinner.succeed(`${POSTKIT_CONFIG_FILE}, ${POSTKIT_SECRETS_FILE}, and postkit.secrets.example.json created`);
   }
 
   // Step 4: Update .gitignore
@@ -163,8 +210,22 @@ export async function initCommand(options: CommandOptions): Promise<void> {
   logger.blank();
   logger.success("Postkit project initialized!");
   logger.blank();
+  logger.info("What gets committed to git:");
+  logger.info(`  ${POSTKIT_CONFIG_FILE}         — schema paths, project settings`);
+  logger.info(`  postkit.secrets.example.json  — secrets template for teammates`);
+  logger.info(`  .postkit/db/migrations/       — committed migration SQL files`);
+  logger.info(`  .postkit/db/committed.json    — migration tracking index`);
+  logger.info(`  .postkit/auth/                — auth realm and raw config`);
+  logger.blank();
+  logger.info("What is gitignored:");
+  logger.info(`  ${POSTKIT_SECRETS_FILE}        — DB URLs, remotes, passwords`);
+  logger.info(`  .postkit/db/session.json      — active session state`);
+  logger.info(`  .postkit/db/plan.sql          — generated diff (ephemeral)`);
+  logger.info(`  .postkit/db/schema.sql        — generated schema (ephemeral)`);
+  logger.info(`  .postkit/db/session/          — temporary session migrations`);
+  logger.blank();
   logger.info("Next steps:");
-  logger.info(`  1. Edit ${POSTKIT_CONFIG_FILE} with your database settings`);
+  logger.info(`  1. Fill in ${POSTKIT_SECRETS_FILE} with your database credentials`);
   logger.info("  2. Add remote databases:");
   logger.info("     postkit db remote add staging \"postgres://...\"");
   logger.info("  3. Run postkit db start to begin a migration session");
