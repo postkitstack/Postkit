@@ -181,11 +181,6 @@ export function getInfraPath(): string {
   return getDbConfig().infraPath;
 }
 
-export function isPerSchemaLayout(schemaName: string): boolean {
-  const config = getDbConfig();
-  return existsSync(path.join(config.schemaPath, schemaName));
-}
-
 export function getSessionMigrationsPath(): string {
   return path.join(getPostkitDbDir(), "session");
 }

@@ -12,7 +12,6 @@ vi.mock("../../../../src/modules/db/utils/db-config", () => ({
   })),
   getGeneratedSchemaPath: vi.fn((name: string) => `/project/.postkit/db/schema_${name}.sql`),
   getPostkitDbDir: vi.fn(() => "/project/.postkit/db"),
-  isPerSchemaLayout: vi.fn(() => false),
 }));
 
 vi.mock("fs/promises", async () => {
@@ -48,7 +47,7 @@ describe("schema-generator", () => {
       vi.mocked(fs.readdir).mockImplementation(async (dir: any, opts?: any) => {
         const dirStr = String(dir);
         // Top-level: discoverSchemaSections uses {withFileTypes: true}
-        if (opts?.withFileTypes && dirStr === "/project/schema") return [
+        if (opts?.withFileTypes && dirStr === "/project/schema/public") return [
           {name: "tables", isFile: () => false, isDirectory: () => true},
           {name: "enums", isFile: () => false, isDirectory: () => true},
         ] as any;
@@ -72,7 +71,7 @@ describe("schema-generator", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(fs.readdir).mockImplementation(async (dir: any, opts?: any) => {
         const dirStr = String(dir);
-        if (opts?.withFileTypes && dirStr === "/project/schema") return [
+        if (opts?.withFileTypes && dirStr === "/project/schema/public") return [
           {name: "seeds", isFile: () => false, isDirectory: () => true},
           {name: "tables", isFile: () => false, isDirectory: () => true},
         ] as any;

@@ -2,16 +2,11 @@ import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
 import type {Ora} from "ora";
-import {getDbConfig, isPerSchemaLayout} from "../utils/db-config";
+import {getDbConfig} from "../utils/db-config";
 import {loadSqlGroup} from "../utils/sql-loader";
 import type {SeedStatement} from "../types/index";
 import {PostkitError} from "../../../common/errors";
 
-/**
- * Load seed statements. If schemaName is given, load only that schema's seeds.
- * Otherwise load seeds for all schemas in config order.
- * Backward compat: flat layout reads from db/schema/seeds/ directly.
- */
 export async function loadSeeds(schemaName?: string): Promise<SeedStatement[]> {
   const config = getDbConfig();
 
@@ -29,20 +24,9 @@ export async function loadSeeds(schemaName?: string): Promise<SeedStatement[]> {
 }
 
 async function loadSeedsForSchema(schemaPath: string, schemaName: string): Promise<SeedStatement[]> {
-  const usePerSchema = isPerSchemaLayout(schemaName);
-
-  if (usePerSchema) {
-    const seedsPath = path.join(schemaPath, schemaName, "seeds");
-    if (existsSync(seedsPath)) return loadSeedsFromDirectory(seedsPath);
-    const altPath = path.join(schemaPath, schemaName, "seed");
-    if (existsSync(altPath)) return loadSeedsFromDirectory(altPath);
-    return [];
-  }
-
-  // Flat layout — look directly under schemaPath/seeds or schemaPath/seed
-  const seedsPath = path.join(schemaPath, "seeds");
+  const seedsPath = path.join(schemaPath, schemaName, "seeds");
   if (existsSync(seedsPath)) return loadSeedsFromDirectory(seedsPath);
-  const altPath = path.join(schemaPath, "seed");
+  const altPath = path.join(schemaPath, schemaName, "seed");
   if (existsSync(altPath)) return loadSeedsFromDirectory(altPath);
   return [];
 }

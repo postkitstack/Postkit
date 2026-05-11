@@ -10,7 +10,6 @@ vi.mock("../../../../src/modules/db/utils/db-config", () => ({
     cliRoot: "/cli",
     projectRoot: "/project",
   })),
-  isPerSchemaLayout: vi.fn(() => false),
 }));
 
 vi.mock("../../../../src/modules/db/utils/sql-loader", () => ({

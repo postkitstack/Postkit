@@ -2,7 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
 import {createHash} from "crypto";
-import {getDbConfig, getGeneratedSchemaPath, isPerSchemaLayout} from "../utils/db-config";
+import {getDbConfig, getGeneratedSchemaPath} from "../utils/db-config";
 
 interface SchemaSection {
   name: string;
@@ -52,12 +52,7 @@ export async function generateSchemaSQLAndFingerprint(schemaName: string): Promi
   fingerprint: string;
 }> {
   const config = getDbConfig();
-
-  // Determine the root to read SQL from
-  const usePerSchema = isPerSchemaLayout(schemaName);
-  const readRoot = usePerSchema
-    ? path.join(config.schemaPath, schemaName)
-    : config.schemaPath;
+  const readRoot = path.join(config.schemaPath, schemaName);
 
   if (!existsSync(readRoot)) {
     throw new Error(`Schema directory not found: ${readRoot}`);
