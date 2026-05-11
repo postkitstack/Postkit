@@ -214,6 +214,7 @@ Remotes are managed via utilities in `modules/db/utils/remotes.ts`:
 | `postkit db remote use <name>` | Set default remote |
 | `postkit db infra [--apply]` | Manage infra SQL (roles, schemas, extensions) |
 | `postkit db seed [--apply]` | Apply seed data |
+| `postkit db schema add <name>` | Scaffold schema dirs + update infra + register in config |
 
 ## Common Patterns
 

@@ -75,6 +75,7 @@ The `db` module provides a **session-based database migration workflow** for saf
 | [`remote`](/docs/modules/db/commands/remote) | Manage remote databases |
 | [`infra`](/docs/modules/db/commands/infra) | Manage infrastructure SQL |
 | [`seed`](/docs/modules/db/commands/seed) | Manage seed data |
+| [`schema`](/docs/modules/db/commands/schema) | Add schemas and scaffold directory structure |
 | [`import`](/docs/modules/db/commands/import) | Import existing database as baseline |
 
 ## Important Notes
