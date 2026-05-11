@@ -107,6 +107,18 @@ export async function resolveLocalDb(
  * pg_dump  → runs inside container, connects to remote externally  (version = remote)
  * psql     → runs inside container, connects to localhost:5432      (version = remote)
  */
+/**
+ * When pg_dump runs inside a Docker container, "localhost" / "127.0.0.1" refer
+ * to the container's own loopback — not the host machine. Remap them to the
+ * Docker-internal hostname that routes back to the host on macOS/Windows/Linux.
+ */
+function toDockerHost(host: string): string {
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+    return "host.docker.internal";
+  }
+  return host;
+}
+
 export async function cloneDatabaseViaContainer(
   containerID: string,
   sourceUrl: string,
@@ -114,6 +126,7 @@ export async function cloneDatabaseViaContainer(
 ): Promise<void> {
   const src = parseConnectionUrl(sourceUrl);
   const dst = parseConnectionUrl(targetUrl);
+  const srcHost = toDockerHost(src.host);
 
   const result = await runPipedCommands(
     {
@@ -122,7 +135,7 @@ export async function cloneDatabaseViaContainer(
         "-e", `PGPASSWORD=${src.password}`,
         "-i", containerID,
         "pg_dump",
-        "-h", src.host,
+        "-h", srcHost,
         "-p", String(src.port),
         "-U", src.user,
         "-d", src.database,

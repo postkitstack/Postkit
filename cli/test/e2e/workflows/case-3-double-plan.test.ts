@@ -72,9 +72,10 @@ describe("Case 3: Double plan — start → plan → apply → add schema → pl
 
     // Install partial schema AFTER start — db start cleans the schema directory
     // Start with only core + category table
-    await installFixtureSections(project, ["infra", "core"]);
+    await installFixtureSections(project, "public", ["infra", "core"]);
     await writeTableSchema(
       project,
+      "public",
       "01_category",
       `CREATE TABLE public.category (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -121,6 +122,7 @@ CREATE INDEX idx_category_is_deleted ON public.category(is_deleted);
   it("adds product table, RLS, trigger, function, and view schema files", async () => {
     await writeTableSchema(
       project,
+      "public",
       "02_product",
       `CREATE TABLE public.product (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -144,6 +146,7 @@ CREATE INDEX idx_product_is_deleted ON public.product(is_deleted);
 
     await writeRlsFile(
       project,
+      "public",
       "02_product",
       `ALTER TABLE public.product ENABLE ROW LEVEL SECURITY;
 CREATE POLICY product_manager_all ON public.product
@@ -158,6 +161,7 @@ CREATE POLICY product_readonly_select ON public.product
 
     await writeTriggerFile(
       project,
+      "public",
       "02_product",
       `CREATE TRIGGER update_product_timestamp
     BEFORE UPDATE ON public.product FOR EACH ROW
@@ -167,6 +171,7 @@ CREATE POLICY product_readonly_select ON public.product
 
     await writeFunctionFile(
       project,
+      "public",
       "01_get_products_by_category",
       `CREATE FUNCTION public.get_products_by_category(cat_id UUID) RETURNS TABLE(
     product_id UUID,
@@ -190,6 +195,7 @@ $$;
 
     await writeViewFile(
       project,
+      "public",
       "01_products_with_category",
       `CREATE VIEW public.products_with_category WITH (security_invoker='on') AS
 SELECT
