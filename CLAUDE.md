@@ -231,6 +231,113 @@ logger.info(`Using remote: ${name}`);
 logger.debug(`Remote URL: ${maskRemoteUrl(url)}`, options.verbose);
 ```
 
+## Agent Skills
+
+PostKit ships with Claude Code agent skills that teach AI assistants how to work with PostKit workflows. They follow the Agent Skills open standard (SKILL.md files with YAML frontmatter).
+
+### Available Skills
+
+| Skill | Invoke | Auto-triggers |
+|-------|--------|---------------|
+| `postkit-migrate` | `/postkit-migrate` | Migration, deploy, schema diff, database change keywords |
+| `postkit-setup` | `/postkit-setup` | Init, config, remotes, `postkit.config.json` edits |
+| `postkit-schema` | `/postkit-schema` | Editing `db/schema/**` files, table/type/function changes |
+| `postkit-auth` | `/postkit-auth` | Keycloak, auth, SSO, identity provider keywords |
+
+### Skill Anatomy
+
+Each skill lives in its own directory under `agent/skills/`:
+
+```
+agent/skills/
+├── postkit-migrate/
+│   └── SKILL.md      # Frontmatter (name, description, allowed-tools) + markdown instructions
+├── postkit-setup/
+│   └── SKILL.md
+├── postkit-schema/
+│   └── SKILL.md
+└── postkit-auth/
+    └── SKILL.md
+```
+
+The YAML frontmatter controls how Claude discovers and uses the skill:
+
+```yaml
+---
+name: skill-name                        # Unique identifier and /invoke command
+description: What the skill does...      # Primary triggering mechanism — be specific
+argument-hint: [step]                    # Optional: hint shown when invoking via /
+paths: db/schema/**                      # Optional: auto-trigger when these files change
+allowed-tools: Bash(postkit *)           # Tool allowlist for the skill
+---
+```
+
+Key frontmatter fields:
+- **name** — Skill identifier, also used as the `/skill-name` invoke command
+- **description** — The primary auto-trigger mechanism. Include what the skill does and when to use it, covering synonyms and edge cases
+- **argument-hint** — Shown to the user when invoking the skill via `/`
+- **paths** — Glob patterns that auto-trigger the skill when matching files are edited
+- **allowed-tools** — Restricts which tools the skill can use
+
+### Installing Skills in Your Project
+
+Use the [skills CLI](https://github.com/vercel-labs/skills) to install PostKit skills into your project:
+
+```bash
+# Install all PostKit skills (interactive)
+npx skills add appritechnologies/Postkit
+
+# List available skills first
+npx skills add appritechnologies/Postkit --list
+
+# Install specific skills only
+npx skills add appritechnologies/Postkit --skill postkit-migrate --skill postkit-schema
+
+# Install for a specific agent (e.g., Claude Code)
+npx skills add appritechnologies/Postkit -a claude-code
+
+# Non-interactive (CI/CD friendly)
+npx skills add appritechnologies/Postkit --all -y
+```
+
+The CLI auto-detects which coding agents you have installed and places skills in the correct directory for each agent. By default, skills are symlinked (single source of truth, easy to update). Use `--copy` for independent copies.
+
+| Scope | Flag | Use Case |
+|-------|------|----------|
+| **Project** (default) | | Committed with your project, shared with team |
+| **Global** | `-g` | Available across all your projects |
+
+Update skills later:
+
+```bash
+npx skills update              # Update all installed skills
+npx skills update postkit-auth # Update a specific skill
+```
+
+### Adding a New Skill
+
+Create `agent/skills/<skill-name>/SKILL.md`:
+
+```yaml
+---
+name: skill-name
+description: When and what this skill does — be specific about trigger contexts
+allowed-tools: Bash(postkit *)
+---
+```
+
+Skills can optionally include bundled resources for more complex workflows:
+
+```
+agent/skills/<skill-name>/
+├── SKILL.md           # Required — skill instructions
+├── scripts/           # Optional — executable scripts for repetitive tasks
+├── references/        # Optional — reference docs loaded into context as needed
+└── assets/            # Optional — templates, icons, and other static files
+```
+
+When a skill grows beyond ~500 lines, split domain-specific content into `references/` files and point to them from SKILL.md.
+
 ## Important Notes
 
 - All paths in `common/config.ts` are resolved relative to either `cliRoot` (the CLI installation) or `projectRoot` (where the user runs commands).
