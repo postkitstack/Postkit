@@ -17,6 +17,7 @@ import {
   remoteRemoveCommand,
   remoteUseCommand,
 } from "./commands/remote";
+import {schemaAddCommand} from "./commands/schema";
 
 export function registerDbModule(program: Command): void {
   const db = program
@@ -197,6 +198,21 @@ export function registerDbModule(program: Command): void {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};
         await remoteUseCommand(options, name);
+      });
+    });
+
+  // Schema command group
+  const schemaCmd = db.command("schema")
+    .description("Manage PostgreSQL schemas");
+
+  schemaCmd.command("add")
+    .description("Scaffold a new schema directory and register it in config")
+    .argument("<name>", "Schema name (lowercase letters, digits, underscores)")
+    .option("-f, --force", "Re-scaffold if directory already exists")
+    .action(async (name, cmdOptions) => {
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await schemaAddCommand(options, name);
       });
     });
 }
