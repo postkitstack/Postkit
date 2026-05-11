@@ -3,6 +3,7 @@ import path from "path";
 import {existsSync} from "fs";
 import {createHash} from "crypto";
 import {getDbConfig, getGeneratedSchemaPath} from "../utils/db-config";
+import {getInfraSQL} from "./infra-generator";
 
 interface SchemaSection {
   name: string;
@@ -84,13 +85,23 @@ export async function generateSchemaSQLAndFingerprint(schemaName: string): Promi
     }
   }
 
-  const fullSchema = parts.join("\n");
+  // Fingerprint covers only schema source files — infra changes don't invalidate it
+  const fingerprint = hash.digest("hex");
+
+  // Prepend infra SQL so pgschema's internal temp schema has roles/extensions
+  // available when it processes GRANT and CREATE POLICY statements
+  const infraSQL = await getInfraSQL();
+  const infraPrefix = infraSQL === "-- No infra files found"
+    ? ""
+    : `-- ============================================\n-- INFRA (roles, schemas, extensions)\n-- ============================================\n${infraSQL}\n\n`;
+
+  const fullSchema = infraPrefix + parts.join("\n");
 
   // Write to per-schema generated file
   const outputPath = getGeneratedSchemaPath(schemaName);
   await fs.writeFile(outputPath, fullSchema, "utf-8");
 
-  return {schemaFile: outputPath, fingerprint: hash.digest("hex")};
+  return {schemaFile: outputPath, fingerprint};
 }
 
 async function discoverSchemaSections(

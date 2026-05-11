@@ -4,6 +4,7 @@ import {requireActiveSession, assertLocalConnection, updatePendingChanges} from 
 import {toRelativePath, getDbConfig, getPlanFilePath} from "../utils/db-config";
 import {generateSchemaSQLAndFingerprint} from "../services/schema-generator";
 import {runPgschemaplan} from "../services/pgschema";
+import {applyInfraStep} from "../services/infra-generator";
 import {parseConnectionUrl} from "../services/database";
 import {runSpawnCommand} from "../../../common/shell";
 import type {CommandOptions} from "../../../common/types";
@@ -17,9 +18,16 @@ export async function planCommand(options: CommandOptions): Promise<void> {
 
     logger.heading("Generating Migration Plan");
 
+    const totalSteps = config.schemas.length + 3;
+
     // Step 1: Test local connection
-    logger.step(1, config.schemas.length + 2, "Testing local database connection...");
+    logger.step(1, totalSteps, "Testing local database connection...");
     await assertLocalConnection(session, spinner);
+
+    // Step 2: Apply infra so schema namespaces (CREATE SCHEMA) and roles exist
+    // before pgschema plan runs — required for non-public schemas like "app"
+    logger.step(2, totalSteps, "Applying infrastructure to local database...");
+    await applyInfraStep(spinner, session.localDbUrl);
 
     const planFiles: Record<string, string | null> = {};
     const schemaFingerprints: Record<string, string | null> = {};
@@ -28,8 +36,7 @@ export async function planCommand(options: CommandOptions): Promise<void> {
 
     for (let i = 0; i < config.schemas.length; i++) {
       const schemaName = config.schemas[i]!;
-      const stepNum = i + 2;
-      const totalSteps = config.schemas.length + 2;
+      const stepNum = i + 3;
 
       // Generate schema SQL
       logger.step(stepNum, totalSteps, `Schema "${schemaName}": generating SQL...`);

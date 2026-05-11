@@ -12,6 +12,11 @@ vi.mock("../../../../src/modules/db/utils/db-config", () => ({
   })),
   getGeneratedSchemaPath: vi.fn((name: string) => `/project/.postkit/db/schema_${name}.sql`),
   getPostkitDbDir: vi.fn(() => "/project/.postkit/db"),
+  MIGRATIONS_TABLE: "postkit.schema_migrations",
+}));
+
+vi.mock("../../../../src/modules/db/services/infra-generator", () => ({
+  getInfraSQL: vi.fn(async () => "-- No infra files found"),
 }));
 
 vi.mock("fs/promises", async () => {
