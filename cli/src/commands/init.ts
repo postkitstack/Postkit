@@ -12,6 +12,7 @@ import {
   getSecretsFilePath,
   getPostkitDir,
   getPostkitAuthDir,
+  getStackDir,
 } from "../common/config";
 import type {CommandOptions} from "../common/types";
 import type {PostkitPublicConfig, PostkitSecrets} from "../common/config";
@@ -24,6 +25,7 @@ const GITIGNORE_ENTRIES = [
   ".postkit/db/plan.sql",
   ".postkit/db/schema.sql",
   ".postkit/db/session/",
+  ".postkit/stack/",
   "postkit.secrets.json",
 ];
 
@@ -36,6 +38,7 @@ const SCAFFOLD_PUBLIC_CONFIG: PostkitPublicConfig = {
   auth: {
     configCliImage: "adorsys/keycloak-config-cli:6.4.0-24",
   },
+  stack: {},
 };
 
 // Sensitive credentials — gitignored
@@ -57,6 +60,7 @@ const SCAFFOLD_SECRETS: PostkitSecrets = {
       adminPass: "",
     },
   },
+  stack: {},
 };
 
 // Example secrets template committed alongside the public config
@@ -80,6 +84,19 @@ const SCAFFOLD_SECRETS_EXAMPLE: PostkitSecrets = {
       url: "http://keycloak-target:8080",
       adminUser: "admin",
       adminPass: "changeme",
+    },
+  },
+  stack: {
+    postgres: {
+      user: "postgres",
+      password: "changeme",
+    },
+    keycloak: {
+      adminUser: "admin",
+      adminPassword: "changeme",
+    },
+    postgrest: {
+      jwtSecret: "changeme-to-a-long-random-secret",
     },
   },
 };
@@ -111,7 +128,7 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     }
   }
 
-  const totalSteps = 5;
+  const totalSteps = 6;
 
   // Step 1: Create .postkit/db/ directory
   logger.step(1, totalSteps, "Creating .postkit/db/ directory");
@@ -158,8 +175,19 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     spinner.succeed(".postkit/auth/ directory created");
   }
 
-  // Step 3: Generate config and secrets files
-  logger.step(3, totalSteps, "Generating config and secrets files");
+  // Step 3: Create .postkit/stack/ directory
+  logger.step(3, totalSteps, "Creating .postkit/stack/ directory");
+  if (options.dryRun) {
+    logger.info(`Dry run: would create ${POSTKIT_DIR}/stack/`);
+  } else {
+    const spinner = ora("Creating .postkit/stack/ directory...").start();
+    const stackDir = getStackDir();
+    fs.mkdirSync(stackDir, {recursive: true});
+    spinner.succeed(".postkit/stack/ directory created");
+  }
+
+  // Step 4: Generate config and secrets files
+  logger.step(4, totalSteps, "Generating config and secrets files");
   if (options.dryRun) {
     logger.info(`Dry run: would create ${POSTKIT_CONFIG_FILE} (committed) and ${POSTKIT_SECRETS_FILE} (gitignored)`);
   } else {
@@ -177,8 +205,8 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     spinner.succeed(`${POSTKIT_CONFIG_FILE}, ${POSTKIT_SECRETS_FILE}, and postkit.secrets.example.json created`);
   }
 
-  // Step 4: Update .gitignore
-  logger.step(4, totalSteps, "Updating .gitignore");
+  // Step 5: Update .gitignore
+  logger.step(5, totalSteps, "Updating .gitignore");
   const gitignorePath = path.join(projectRoot, ".gitignore");
   if (options.dryRun) {
     logger.info("Dry run: would update .gitignore with Postkit entries");
@@ -205,8 +233,8 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     }
   }
 
-  // Step 5: Summary
-  logger.step(5, totalSteps, "Done");
+  // Step 6: Summary
+  logger.step(6, totalSteps, "Done");
   logger.blank();
   logger.success("Postkit project initialized!");
   logger.blank();
@@ -228,5 +256,7 @@ export async function initCommand(options: CommandOptions): Promise<void> {
   logger.info(`  1. Fill in ${POSTKIT_SECRETS_FILE} with your database credentials`);
   logger.info("  2. Add remote databases:");
   logger.info("     postkit db remote add staging \"postgres://...\"");
-  logger.info("  3. Run postkit db start to begin a migration session");
+  logger.info("  3. Start the local backend stack:");
+  logger.info("     postkit stack up");
+  logger.info("  4. Or run postkit db start to begin a migration session");
 }
