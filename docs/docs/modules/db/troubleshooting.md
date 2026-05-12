@@ -77,7 +77,7 @@ The container ID is stored in `.postkit/db/session.json` under `containerID` if 
 
 ### `Import: column does not exist during local apply`
 
-**Solution:** Infrastructure SQL (roles, schemas) must be applied to the local database before dbmate runs the baseline migration. Ensure `schema/infra/` files exist and are valid. The import command applies infra automatically — if this fails, check the role/schema SQL for syntax errors.
+**Solution:** Infrastructure SQL (roles, schemas) must be applied to the local database before dbmate runs the baseline migration. Ensure `db/infra/` files exist and are valid. The import command applies infra automatically — if this fails, check the role/schema SQL for syntax errors.
 
 ### `Import: relation does not exist during pgschema plan`
 

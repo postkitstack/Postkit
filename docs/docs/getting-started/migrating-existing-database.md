@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 4
 ---
 
 # Migrating an Existing Database
@@ -16,7 +16,7 @@ If you have an existing PostgreSQL database that is not yet managed by PostKit, 
 
 - PostgreSQL client tools (`psql`, `pg_dump`) installed
 - Access to the source database (connection URL)
-- A `postkit.config.json` configured with a `localDbUrl`
+- A `postkit.secrets.json` configured with a `localDbUrl` (or Docker installed for auto-container)
 
 If you haven't set up PostKit yet, run `postkit init` first. See [Installation](/docs/getting-started/installation) and [Configuration](/docs/getting-started/configuration).
 

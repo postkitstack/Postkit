@@ -1,5 +1,5 @@
 ---
-sidebar_position: 15
+sidebar_position: 17
 ---
 
 # Plan Command Limitations
@@ -126,42 +126,88 @@ postkit db commit
 
 ### Creating Extensions
 
+**Preferred — add to `db/infra/`:**
+
+```sql
+-- db/infra/003_extensions.sql
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+```
+
+**Fallback — one-off manual migration:**
+
 ```bash
 postkit db migration add_uuid_extension
 ```
 
 ```sql
--- Enable UUID extension
+-- migrate:up
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- migrate:down
+DROP EXTENSION IF EXISTS "uuid-ossp";
 ```
 
 ### Creating Schemas
+
+**Preferred — add to `db/infra/`:**
+
+```sql
+-- db/infra/002_schemas.sql
+CREATE SCHEMA IF NOT EXISTS audit;
+CREATE SCHEMA IF NOT EXISTS analytics;
+```
+
+Also update `db.schemas` in `postkit.config.json` so PostKit manages the schema's SQL files:
+
+```json
+{ "db": { "schemas": ["public", "audit", "analytics"] } }
+```
+
+**Fallback — one-off manual migration:**
 
 ```bash
 postkit db migration create_custom_schemas
 ```
 
 ```sql
--- Create custom schemas
+-- migrate:up
 CREATE SCHEMA IF NOT EXISTS audit;
 CREATE SCHEMA IF NOT EXISTS analytics;
+-- migrate:down
+DROP SCHEMA IF EXISTS audit;
+DROP SCHEMA IF EXISTS analytics;
 ```
 
 ### Creating Roles
+
+**Preferred — add to `db/infra/`:**
+
+```sql
+-- db/infra/001_roles.sql
+CREATE ROLE app_read;
+CREATE ROLE app_write;
+CREATE ROLE app_admin;
+GRANT app_read TO app_write;
+GRANT app_write TO app_admin;
+```
+
+**Fallback — one-off manual migration:**
 
 ```bash
 postkit db migration create_app_roles
 ```
 
 ```sql
--- Create application roles
+-- migrate:up
 CREATE ROLE app_read;
 CREATE ROLE app_write;
 CREATE ROLE app_admin;
-
--- Grant privileges
 GRANT app_read TO app_write;
 GRANT app_write TO app_admin;
+-- migrate:down
+DROP ROLE IF EXISTS app_admin;
+DROP ROLE IF EXISTS app_write;
+DROP ROLE IF EXISTS app_read;
 ```
 
 ## Key Takeaway

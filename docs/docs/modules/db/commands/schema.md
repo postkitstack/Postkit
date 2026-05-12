@@ -131,4 +131,4 @@ postkit db deploy
 
 - [`infra`](/docs/modules/db/commands/infra) — Apply infrastructure SQL (including CREATE SCHEMA)
 - [`plan`](/docs/modules/db/commands/plan) — Generate schema diff across all schemas
-- [Multi-Schema Support](/docs/modules/db/overview#multi-schema-support) — How multiple schemas work together
+- [DB Module Overview](/docs/modules/db/overview#schema-directory-structure) — How multiple schemas work together

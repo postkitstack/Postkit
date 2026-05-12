@@ -13,49 +13,53 @@ The `db` module provides a **session-based database migration workflow** for saf
 │                      STREAMLINED MIGRATION FLOW                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│   $ postkit db start                 $ postkit db plan                       │
-│   ┌──────────────────┐            ┌──────────────────┐                       │
-│   │ 1. Clone remote  │            │ 3. Generate      │                       │
-│   │    to local DB   │            │    schema.sql    │                       │
-│   │ 2. Start session │            │ 4. Run pgschema  │                       │
-│   │    (track state) │            │    plan (diff)   │                       │
-│   └────────┬─────────┘            │ 5. Save schema   │                       │
-│            │                      │    fingerprint   │                       │
-│            ▼                      └────────┬─────────┘                       │
-│   ┌──────────────────┐                     │                                 │
-│   │ User modifies    │                     ▼                                 │
-│   │ schema files     │            ┌──────────────────┐                       │
-│   │ (db/schema/*)    │            │ Shows changes    │                       │
-│   └──────────────────┘            │ to apply         │                       │
-│                                   └──────────────────┘                       │
-│   $ postkit db apply                       │                                 │
-│   ┌──────────────────┐                     ▼                                 │
-│   │ 6. Validate      │            ┌──────────────────┐                       │
-│   │    fingerprint   │            │ 7. Apply infra   │                       │
-│   │ 7. Apply infra   │            │ 8. Create dbmate │                       │
-│   │ 8. Create dbmate │            │    migration     │                       │
-│   │    migration     │            │ 9. Run dbmate    │                       │
-│   │ 9. Run dbmate    │            │    on local DB   │                       │
-│   │    on local DB   │            │ 10. Apply seeds  │                       │
-│   │ 10. Apply seeds  │            └────────┬─────────┘                       │
-│   └────────┬─────────┘                     │                                 │
-│            │                               ▼                                 │
+│   $ postkit db start                                                         │
+│   ┌────────────────────────────────────────────┐                             │
+│   │ 1. Detect remote PostgreSQL version        │                             │
+│   │ 2. Clone remote DB to local (or Docker)    │                             │
+│   │ 3. Start session (track state)             │                             │
+│   └────────────────────┬───────────────────────┘                             │
+│                        │                                                     │
+│                        ▼  (edit db/schema/<name>/ files)                    │
+│                                                                              │
+│   $ postkit db plan                                                          │
+│   ┌────────────────────────────────────────────┐                             │
+│   │ 4.  Apply infra (roles, schemas, exts)     │                             │
+│   │ 5.  Combine schema files → schema_*.sql    │                             │
+│   │ 6.  Run pgschema diff per schema           │                             │
+│   │ 7.  Intermediate apply between schemas     │                             │
+│   │ 8.  Save plan_*.sql + fingerprints         │                             │
+│   └────────────────────┬───────────────────────┘                             │
+│                        │                                                     │
+│                        ▼  (review printed diff)                              │
+│                                                                              │
+│   $ postkit db apply                                                         │
+│   ┌────────────────────────────────────────────┐                             │
+│   │ 9.  Validate schema fingerprints           │                             │
+│   │ 10. Apply infra to local DB                │                             │
+│   │ 11. Wrap plan SQL → dbmate migration file  │                             │
+│   │ 12. Run dbmate on local DB                 │                             │
+│   │ 13. Apply seeds                            │                             │
+│   └────────────────────┬───────────────────────┘                             │
+│                        │                                                     │
+│                        ▼  (verify locally)                                  │
+│                                                                              │
 │   $ postkit db commit                                                        │
-│   ┌──────────────────┐            ┌──────────────────┐                       │
-│   │ 12. Copy staging │            │ 13. Copy session │                       │
-│   │     migrations   │            │     migrations   │                       │
-│   │ 13. Update state │            │     to .postkit  │                       │
-│   │ 14. Track for    │            │     /db/migrations│                      │
-│   │     deploy       │            │ 15. Update state │                       │
-│   └──────────────────┘            └──────────────────┘                       │
+│   ┌────────────────────────────────────────────┐                             │
+│   │ 14. Copy session migrations → .postkit/db/ │                             │
+│   │     migrations/                            │                             │
+│   │ 15. Register in committed.json             │                             │
+│   │ 16. Clear session state                    │                             │
+│   └────────────────────┬───────────────────────┘                             │
+│                        │                                                     │
+│                        ▼                                                     │
 │                                                                              │
 │   $ postkit db deploy                                                        │
-│   ┌──────────────────┐            ┌──────────────────┐                       │
-│   │ 15. Dry run on   │            │ 16. Deploy to    │                       │
-│   │     local clone  │───────────►│     remote DB    │                       │
-│   │                  │            │ 17. Mark as      │                       │
-│   │                  │            │     deployed     │                       │
-│   └──────────────────┘            └──────────────────┘                       │
+│   ┌────────────────────────────────────────────┐                             │
+│   │ 17. Dry run on fresh local clone           │                             │
+│   │ 18. Deploy to remote DB via dbmate         │                             │
+│   │ 19. Mark migrations as deployed            │                             │
+│   └────────────────────────────────────────────┘                             │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
