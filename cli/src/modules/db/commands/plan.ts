@@ -43,7 +43,7 @@ export async function planCommand(options: CommandOptions): Promise<void> {
       // Skip schemas with no directory — treat as not yet set up
       const schemaDir = path.join(config.schemaPath, schemaName);
       if (!existsSync(schemaDir)) {
-        logger.debug(`Schema "${schemaName}" directory not found — skipping`, options.verbose);
+        logger.warn(`Schema "${schemaName}" has no directory at ${schemaDir} — skipping. Run "postkit db schema add ${schemaName}" to scaffold it.`);
         planFiles[schemaName] = null;
         schemaFingerprints[schemaName] = null;
         continue;

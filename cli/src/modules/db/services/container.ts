@@ -58,7 +58,7 @@ export async function startSessionContainer(pgVersion: number): Promise<Containe
   }
 
   const containerID = result.stdout.trim();
-  const localDbUrl = `postgres://${DB_USER}:${DB_PASSWORD}@localhost:${port}/${DB_NAME}`;
+  const localDbUrl = `postgres://${DB_USER}:${DB_PASSWORD}@localhost:${port}/${DB_NAME}?sslmode=disable`;
 
   await waitForPostgres(localDbUrl);
   return {containerID, localDbUrl, port, pgVersion};
