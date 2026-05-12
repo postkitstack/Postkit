@@ -44,6 +44,7 @@ const sidebars: SidebarsConfig = {
             'modules/db/commands/import',
           ],
         },
+        'modules/db/cross-schema-migrations',
         'modules/db/troubleshooting',
         'modules/db/plan-limitations',
       ],

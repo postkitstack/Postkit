@@ -539,6 +539,109 @@ Session migrations are staged in `.postkit/db/session/` and committed migrations
 
 ---
 
+## 🔀 Cross-Schema Migrations
+
+When your project uses multiple schemas (e.g. `public` and `app`), some changes cannot be expressed inside a single schema's SQL files — specifically anything that **references objects in another schema**. This section explains the limitation and the correct approach.
+
+---
+
+### What NOT to do
+
+**Do not add cross-schema foreign keys inside pgschema-managed schema files.**
+
+pgschema plans each schema independently. When it processes `db/schema/app/tables/order_item.sql`, it creates a temporary internal schema to analyse the desired state. That temporary environment does not contain `public.product` or any other schema's objects, so a FK like:
+
+```sql
+-- db/schema/app/tables/order_item.sql  ← DO NOT do this
+CREATE TABLE app.order_item (
+    product_id UUID NOT NULL REFERENCES public.product(id)  -- ❌ will fail pgschema plan
+);
+```
+
+will fail with:
+
+```
+ERROR: relation "public.product" does not exist
+```
+
+Similarly, **do not write cross-schema views, functions, or triggers inside schema files** if they reference objects from another schema — pgschema cannot resolve them during planning.
+
+---
+
+### The correct approach — manual migration
+
+Use `postkit db migration` to write a plain SQL migration that runs after both schemas exist. Manual migrations bypass pgschema entirely and are applied directly by dbmate, so all schemas and their objects are already present when the SQL executes.
+
+**Step-by-step:**
+
+```bash
+# 1. Start a session as normal
+postkit db start
+
+# 2. Plan and apply your per-schema structural changes first
+#    (tables, types, functions — without cross-schema refs)
+postkit db plan
+postkit db apply
+
+# 3. Create a manual migration for the cross-schema constraint
+postkit db migration add_cross_schema_fk
+```
+
+PostKit opens the migration file for you. Write the cross-schema SQL in the `-- migrate:up` section:
+
+```sql
+-- migrate:up
+
+-- FK from app.order_item → public.product (added after both schemas exist)
+ALTER TABLE app.order_item
+    ADD CONSTRAINT fk_order_item_product
+    FOREIGN KEY (product_id) REFERENCES public.product(id) ON DELETE RESTRICT;
+
+-- Cross-schema view in app referencing public.product
+CREATE VIEW app.order_summary AS
+SELECT oi.id, p.name AS product_name, oi.quantity
+FROM app.order_item oi
+JOIN public.product p ON p.id = oi.product_id;
+
+-- migrate:down
+ALTER TABLE app.order_item DROP CONSTRAINT IF EXISTS fk_order_item_product;
+DROP VIEW IF EXISTS app.order_summary;
+```
+
+```bash
+# 4. Apply the manual migration (dbmate runs it; all schemas are in place)
+postkit db apply
+
+# 5. Commit and deploy as normal
+postkit db commit
+postkit db deploy
+```
+
+---
+
+### What belongs where
+
+| Change type | Where to put it | Applied by |
+|-------------|-----------------|------------|
+| Tables, indexes, types, enums in one schema | `db/schema/<name>/tables/` etc. | pgschema → dbmate |
+| RLS policies, grants in one schema | `db/schema/<name>/policies/` etc. | pgschema → dbmate |
+| Cross-schema FK constraints | Manual migration (`postkit db migration`) | dbmate only |
+| Cross-schema views / functions | Manual migration (`postkit db migration`) | dbmate only |
+| Schema namespace creation (`CREATE SCHEMA`) | `db/infra/` | infra step (psql) |
+| Role creation / extensions | `db/infra/` | infra step (psql) |
+
+---
+
+### Why the intermediate apply exists (and its limit)
+
+During `postkit db plan`, each schema's plan is applied to the local database immediately after it is generated (called the *intermediate apply*). This means by the time `pgschema` plans schema `app`, the objects from schema `public` already exist in the local DB.
+
+However, the *pgschema planning step itself* still fails on cross-schema FK references because pgschema analyses the schema file in its own isolated temporary environment — not the live local DB. The intermediate apply only helps with the **final apply step**, not the plan generation step.
+
+This is why cross-schema constraints must be written as manual migrations rather than inline FK references in schema files.
+
+---
+
 ## 🐛 Troubleshooting
 
 | Issue | Solution |
@@ -559,3 +662,5 @@ Session migrations are staged in `.postkit/db/session/` and committed migrations
 | `Import: Could not insert migration tracking record` | Non-fatal. The local DB migration succeeded but the source DB tracking record failed. Manually insert the version into `postkit.schema_migrations` on the source DB. |
 | `Import: column does not exist during local apply` | Infrastructure SQL (roles, schemas) may not have been applied to the local database before dbmate. Ensure `schema/infra/` files exist and are valid. |
 | `Import: relation does not exist during pgschema plan` | The `pgschema dump` ordering may not account for foreign key or policy dependencies. This is handled by pgschema internally. |
+| `Plan: relation "other_schema.table" does not exist` | A schema file contains a cross-schema reference (e.g. `REFERENCES public.product(id)` inside `db/schema/app/`). pgschema cannot resolve cross-schema refs during planning. Remove the FK from the schema file and add it as a manual migration — see **Cross-Schema Migrations** above. |
+| `Plan: Schema "public" has no directory — skipping` | The schema is listed in `db.schemas` in config but `db/schema/public/` does not exist on disk. Run `postkit db schema add public` to scaffold it, or remove `"public"` from `db.schemas` if you don't need it. |
