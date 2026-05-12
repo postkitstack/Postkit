@@ -22,6 +22,7 @@ import {
   syncMigrationState,
   applyInfraToDatabase,
 } from "../services/schema-importer";
+import {addSchemaToConfig} from "../services/schema-scaffold";
 import type {CommandOptions} from "../../../common/types";
 
 interface ImportOptions extends CommandOptions {
@@ -199,6 +200,14 @@ export async function importCommand(options: ImportOptions): Promise<void> {
           logger.info(`  Created: ${f}`);
         }
       }
+    }
+
+    // Update postkit.config.json schemas array with every imported schema
+    for (const schemaName of schemasToImport) {
+      await addSchemaToConfig(schemaName, options.dryRun ?? false);
+    }
+    if (!options.dryRun) {
+      logger.info(`  Updated postkit.config.json schemas: [${schemasToImport.join(", ")}]`);
     }
 
     // Step 6: Resolve local DB URL
