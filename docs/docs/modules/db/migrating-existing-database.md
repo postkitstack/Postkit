@@ -114,9 +114,10 @@ The import process performs these steps automatically:
 3. Adds numeric prefixes to SQL files based on dependency order
 4. Normalizes the dump into PostKit's directory structure
 5. Extracts roles, schemas, and extensions into `db/infra/`
-6. Creates a baseline migration and registers it in `committed.json`
-7. Sets up the local database with the imported schema
-8. Syncs migration state back to the source database
+6. **Updates `postkit.config.json`** — adds all imported schema names to `db.schemas`
+7. Creates a baseline migration and registers it in `committed.json`
+8. Sets up the local database with the imported schema
+9. Syncs migration state back to the source database
 
 For the full technical details, see [`db import`](/docs/modules/db/commands/import).
 

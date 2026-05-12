@@ -88,8 +88,9 @@ Contains only non-sensitive project settings. Remotes are user/environment-speci
 ```json
 {
   "db": {
+    "infraPath": "db/infra",
     "schemaPath": "db/schema",
-    "schema": "public"
+    "schemas": ["public"]
   }
 }
 ```
@@ -123,8 +124,9 @@ Contains all credentials and remote configurations.
 | Property | File | Description | Required |
 |----------|------|-------------|----------|
 | `db.localDbUrl` | secrets | PostgreSQL URL for local clone database. Leave empty to use auto Docker container. | No |
-| `db.schemaPath` | config | Path to schema files (relative to project root) | No |
-| `db.schema` | config | Database schema name | No |
+| `db.schemaPath` | config | Root path for per-schema subdirectories (relative to project root). Default: `"db/schema"` | No |
+| `db.schemas` | config | Ordered array of schema names to manage. Array position = execution order. Default: `["public"]` | No |
+| `db.infraPath` | config | Path to DB-level infra directory (roles, extensions, CREATE SCHEMA). Default: `"db/infra"` | No |
 | `db.pgSchemaBin` | config | Path to pgschema binary | No |
 | `db.dbmateBin` | config | Path to dbmate binary | No |
 | `db.remotes` | secrets | Named remote database configurations | Yes (at least one) |
@@ -171,43 +173,35 @@ Bundled binaries are included for: `darwin-arm64`, `darwin-amd64`, `linux-arm64`
 
 ### Schema Directory Structure
 
-The tool expects schema files organized in `db/schema/`:
+The tool expects schema files in per-schema subdirectories under `db/schema/`, with DB-level infra at `db/infra/`:
 
 ```
-db/schema/
-├── infra/                    # Pre-migration infrastructure (roles, schemas, extensions)
+db/
+├── infra/                    # DB-level infrastructure (roles, extensions, CREATE SCHEMA)
 │   ├── 001_roles.sql
 │   ├── 002_schemas.sql
 │   └── 003_extensions.sql
-├── extensions/
-│   └── uuid.sql
-├── types/
-│   └── custom_types.sql
-├── enums/
-│   └── status_enum.sql
-├── tables/
-│   ├── users.sql
-│   ├── posts.sql
-│   └── comments.sql
-├── views/
-│   └── user_stats.sql
-├── materialized_views/
-│   └── dashboard_summary.sql
-├── functions/
-│   └── helpers.sql
-├── triggers/
-│   └── updated_at.sql
-├── indexes/
-│   └── performance.sql
-├── grants/                   # Grant statements (managed by pgschema)
-│   └── app_user.sql
-└── seeds/                    # Post-migration seed data
-    └── default_roles.sql
+└── schema/                   # Per-schema SQL files
+    ├── public/               # Schema: "public"
+    │   ├── types/
+    │   ├── enums/
+    │   ├── tables/
+    │   │   ├── users.sql
+    │   │   └── posts.sql
+    │   ├── views/
+    │   ├── functions/
+    │   ├── triggers/
+    │   ├── policies/
+    │   ├── grants/           # Grant statements (managed by pgschema)
+    │   └── seeds/            # Post-migration seed data
+    └── app/                  # Schema: "app" (optional)
+        ├── tables/
+        └── seeds/
 ```
 
-**Execution ordering:** infra (pre-migration) → pgschema-managed schema (extensions → types → enums → domains → sequences → tables → views → materialized_views → functions → triggers → indexes → constraints → policies → grants) → seeds (post-migration)
+**Execution ordering:** `db/infra/` (pre-migration, DB-level) → for each schema in `config.schemas` order: extensions → types → enums → domains → sequences → functions → tables → views → materialized_views → triggers → indexes → constraints → policies → grants → `seeds/` (post-migration per schema)
 
-**Note:** `infra/` and `seeds/` directories are excluded from pgschema processing and handled as separate steps. `grants/` is managed by pgschema.
+**Note:** `db/infra/` and `seeds/` are excluded from pgschema processing and applied as separate steps. `grants/` is managed by pgschema. Use `postkit db schema add <name>` to scaffold a new schema directory.
 
 ### PostKit Directory Structure
 
@@ -396,45 +390,45 @@ postkit db abort -f          # Skip confirmation
 
 ---
 
-### `postkit db import [--url <url>] [--schema <schema>] [--name <name>]`
+### `postkit db import [--url <url>] [--schemas <list>] [--name <name>]`
 
 Import an existing database into PostKit as a baseline migration. Use when onboarding a database not previously managed by PostKit.
 
 ```bash
-postkit db import                                          # Import from localDbUrl in config
-postkit db import --url "postgres://user:pass@host/myapp" # Import from specific URL
-postkit db import --schema myschema --name initial_baseline
+postkit db import                                           # Import all schemas from config
+postkit db import --url "postgres://user:pass@host/myapp"  # Import from specific URL
+postkit db import --schemas "public,app" --name initial_baseline
 ```
 
 **What it does:**
 1. Checks prerequisites (pgschema, dbmate, no active session)
 2. Connects to target database, reports table count
 3. Warns about existing schema/migration files (both directories will be **cleared and replaced**), prompts confirmation
-4. Runs `pgschema dump --multi-file` into a temp directory
-5. Clears existing schema directory and resets `committed.json`, then normalizes dump into PostKit schema directory structure:
-   - Roles queried directly from `pg_roles` → `infra/001_roles.sql` (idempotent `DO $$ IF NOT EXISTS $$`)
-   - Schemas queried directly from `pg_namespace` → `infra/002_schemas.sql` (`CREATE SCHEMA IF NOT EXISTS`)
+4. Runs `pgschema dump --multi-file` per schema into a temp directory
+5. Clears existing schema directory, then normalizes dump into PostKit structure:
+   - Object files copied into `db/schema/<name>/<section>/` with numeric prefix ordering
+   - Roles queried from `pg_roles` → `db/infra/001_roles.sql` (idempotent `DO $$ IF NOT EXISTS $$`)
+   - Schemas queried from `pg_namespace` → `db/infra/002_schemas.sql` (`CREATE SCHEMA IF NOT EXISTS`)
    - Extensions parsed from `schema.sql` → `extensions/imported_extensions.sql`
    - Privileges consolidated into `grants/<schema>.sql` (managed by pgschema)
-   - All SQL files are prefixed with numeric ordering (`001_filename.sql`) based on `schema.sql` `\i` directives
-6. Clears existing migrations directory and generates baseline DDL via `pgschema plan` against an empty temp database
-7. For non-public schemas, prepends `SET search_path TO "<schema>"` to the baseline migration
-8. Creates local database, applies infrastructure SQL (roles, schemas), then applies baseline migration via `dbmate`
-9. After successful local apply, inserts baseline version into `postkit.schema_migrations` on the source database
-10. Updates `committed.json` to track the baseline migration
-11. Cleans up temp directory, plan file, and generated schema file
+   - **Updates `postkit.config.json`** — adds all imported schema names to `db.schemas` array (idempotent)
+6. Clears existing migrations directory and generates baseline DDL via `pgschema plan` (all schemas in order, with intermediate apply between schemas)
+7. Creates local database, applies `db/infra/` SQL, then applies baseline migration via `dbmate`
+8. After successful local apply, inserts baseline version into `postkit.schema_migrations` on the source database
+9. Updates `committed.json` to track the baseline migration
+10. Cleans up temp directory, plan file, and generated schema files
 
 **Why roles/schemas are queried from DB directly:**
 `pgschema dump` does not emit `CREATE SCHEMA` or `CREATE ROLE` statements. PostKit queries `pg_catalog.pg_namespace` and `pg_catalog.pg_roles` instead to reliably capture infra.
 
 **Why infra SQL is applied before dbmate:**
-The baseline migration contains `ALTER DEFAULT PRIVILEGES` and other statements that reference roles. These roles must exist in the local database before dbmate runs the migration. The infra SQL (from `schema/infra/`) is applied to the local database first to create those roles.
+The baseline migration may contain `ALTER DEFAULT PRIVILEGES` and other statements that reference roles. These roles must exist in the local database before dbmate runs the migration. `db/infra/` is applied first to create those roles.
 
 ---
 
 ### `postkit db infra [--apply] [--target <local|remote>]`
 
-Manage infrastructure SQL (roles, schemas, extensions) from `db/schema/infra/`.
+Manage infrastructure SQL (roles, schemas, extensions) from `db/infra/`.
 
 ```bash
 postkit db infra                          # Show infra statements

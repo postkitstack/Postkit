@@ -47,10 +47,11 @@ postkit db import
 4. **Schema dump** — Runs `pgschema dump --multi-file` into a temp directory (`.postkit/db/tmp-import/`), then adds numeric prefixes (`001_`, `002_`, etc.) to all SQL files based on the `\i` directive order in `schema.sql`
 5. **Normalize** — Clears existing schema directory and maps the dump into PostKit's schema directory structure:
    - Object directories (`tables/`, `views/`, `functions/`, etc.) copied with numeric prefix ordering into `db/schema/<name>/<section>/`
-   - Roles queried from `pg_roles` → written to `db/infra/roles.sql` using idempotent `DO $$ IF NOT EXISTS $$` blocks
-   - Schemas queried from `pg_namespace` → written to `db/infra/schemas.sql` as `CREATE SCHEMA IF NOT EXISTS`
+   - Roles queried from `pg_roles` → written to `db/infra/001_roles.sql` using idempotent `DO $$ IF NOT EXISTS $$` blocks
+   - Schemas queried from `pg_namespace` → written to `db/infra/002_schemas.sql` as `CREATE SCHEMA IF NOT EXISTS`
    - Extensions parsed from `schema.sql` → written to `extensions/imported_extensions.sql`
    - Privileges consolidated into `grants/<schema>.sql` (managed by pgschema)
+   - **Updates `postkit.config.json`** — adds each imported schema name to the `db.schemas` array (idempotent)
 6. **Baseline migration** — Clears existing migrations directory, runs `pgschema plan` against an empty temp database to generate full CREATE DDL, writes it to `.postkit/db/migrations/`, and updates `committed.json`
 7. **Local setup** — Creates the local database, applies infrastructure SQL (roles, schemas), then applies the baseline migration via `dbmate`
 8. **Sync migration state** — After successful local apply, inserts the baseline version into `schema_migrations` on the source database
@@ -85,6 +86,9 @@ System roles (`pg_*`, `postgres`) and system schemas (`pg_*`, `information_schem
 | Location | Content |
 |----------|---------|
 | `db/schema/<name>/` | Normalized schema files with numeric prefix ordering (e.g. `001_users.sql`, `002_posts.sql`) |
+| `db/infra/001_roles.sql` | Extracted roles (idempotent `DO $$ ... $$` blocks) |
+| `db/infra/002_schemas.sql` | Extracted `CREATE SCHEMA IF NOT EXISTS` statements |
+| `postkit.config.json` | `db.schemas` array updated with all imported schema names |
 | `.postkit/db/migrations/` | Baseline migration SQL file |
 | `.postkit/db/committed.json` | Tracking entry for the baseline migration (`deployed: false`) |
 | Source database | `schema_migrations` row for the baseline version |
