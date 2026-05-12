@@ -69,7 +69,7 @@ export async function tableExists(url: string, tableName: string): Promise<boole
  * Get the number of rows in a table.
  */
 export async function getTableRowCount(url: string, tableName: string): Promise<number> {
-  const rows = await queryDatabase(url, `SELECT COUNT(*)::int AS count FROM "${tableName}"`);
+  const rows = await queryDatabase<{count: number}>(url, `SELECT COUNT(*)::int AS count FROM "${tableName}"`);
   return rows[0]?.count ?? 0;
 }
 
@@ -77,7 +77,7 @@ export async function getTableRowCount(url: string, tableName: string): Promise<
  * Get the count of user tables in the public schema.
  */
 export async function getTableCount(url: string): Promise<number> {
-  const rows = await queryDatabase(
+  const rows = await queryDatabase<{count: number}>(
     url,
     "SELECT COUNT(*)::int AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'",
   );

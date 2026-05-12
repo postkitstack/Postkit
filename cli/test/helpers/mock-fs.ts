@@ -24,7 +24,7 @@ export function createMockFileSystem(
     /** Mock for fs/promises.readFile */
     readFile: vi.fn(async (path: string | Buffer | URL): Promise<string | Buffer> => {
       const pathStr = path.toString();
-      if (pathStr in state.files) return state.files[pathStr];
+      if (pathStr in state.files) return state.files[pathStr]!;
       const err = new Error(`ENOENT: no such file '${pathStr}'`) as NodeJS.ErrnoException;
       err.code = "ENOENT";
       throw err;
@@ -40,7 +40,7 @@ export function createMockFileSystem(
     /** Mock for fs/promises.readdir */
     readdir: vi.fn(async (path: string | Buffer | URL): Promise<string[]> => {
       const pathStr = path.toString();
-      if (pathStr in state.directories) return state.directories[pathStr];
+      if (pathStr in state.directories) return state.directories[pathStr]!;
       const err = new Error(`ENOENT: no such directory '${pathStr}'`) as NodeJS.ErrnoException;
       err.code = "ENOENT";
       throw err;
@@ -65,7 +65,7 @@ export function createMockFileSystem(
     /** Mock for fs.readFileSync */
     readFileSync: vi.fn((path: string | Buffer | URL): string => {
       const pathStr = path.toString();
-      if (pathStr in state.files) return state.files[pathStr];
+      if (pathStr in state.files) return state.files[pathStr]!;
       throw new Error(`ENOENT: no such file '${pathStr}'`);
     }),
 
