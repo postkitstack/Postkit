@@ -3,6 +3,7 @@ slug: schema-as-code-vs-hand-written-migrations
 title: "Schema as Code vs Hand-Written Migrations: Why the Diff Approach Wins"
 authors: [postkit_team]
 tags: [migrations, pgschema, postgres, developer-experience]
+image: /img/blog/schema-as-code.png
 ---
 
 There are two schools of thought on database migrations. The first says: write every `ALTER TABLE` by hand, accumulate them as numbered files, and replay them in order. The second says: declare the desired schema state, let a tool figure out what SQL to generate. PostKit uses the second approach. Here's why.

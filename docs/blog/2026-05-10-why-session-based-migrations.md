@@ -3,6 +3,7 @@ slug: why-session-based-migrations
 title: "Why We Clone the Database Before Every Migration"
 authors: [postkit_team]
 tags: [migrations, workflow, postgres, best-practices]
+image: /img/blog/session-based-migrations.jpg
 ---
 
 Most database migration tools work the same way: write some SQL, run it against the database, hope for the best. PostKit takes a different approach — before any migration runs, we clone the production database to a local copy and work against that. It sounds like extra overhead. In practice, it catches a category of bugs that no amount of unit testing can find.

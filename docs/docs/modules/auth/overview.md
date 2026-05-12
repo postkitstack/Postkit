@@ -4,6 +4,8 @@ sidebar_position: 1
 
 # Auth Module
 
+![PostKit — Auth Module](/img/postkit-cover-light.webp)
+
 The `auth` module provides **Keycloak realm configuration management** — export, clean, and import realm configs between Keycloak instances.
 
 ## Workflow

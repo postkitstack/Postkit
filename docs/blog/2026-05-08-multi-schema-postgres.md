@@ -3,6 +3,7 @@ slug: managing-multiple-postgres-schemas
 title: "Managing Multiple PostgreSQL Schemas Without the Pain"
 authors: [postkit_team]
 tags: [schemas, postgres, multi-tenant, architecture]
+image: /img/blog/multi-schema-postgres.jpg
 ---
 
 PostgreSQL schemas are namespaces inside a single database. Most applications start with just `public` and never think about it again. But as applications grow — multi-tenant SaaS, microservices sharing a database, strict separation between application and audit data — you eventually want multiple schemas. And then the tooling usually falls apart.

@@ -3,6 +3,7 @@ slug: migrating-from-supabase-to-postkit
 title: "Migrating from Supabase to PostKit: A Practical Guide"
 authors: [postkit_team]
 tags: [migration, supabase, postgres, workflow]
+image: /img/blog/supabase-to-postkit.jpg
 ---
 
 Supabase is a great way to get a PostgreSQL database running in minutes. But as your project grows, you often outgrow the auto-generated migrations and want more control over exactly what SQL runs against your database. PostKit gives you that control — full schema-as-code, session-based migrations, and a deploy pipeline you can reason about.
