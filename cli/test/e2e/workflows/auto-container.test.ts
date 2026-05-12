@@ -89,7 +89,7 @@ describe.skipIf(!dockerAvailable)(
     });
 
     it("schema files were created for the imported table", () => {
-      const tablesDir = path.join(project.schemaPath, "tables");
+      const tablesDir = path.join(project.schemaPath, "public", "tables");
       expect(fs.existsSync(tablesDir)).toBe(true);
       const files = fs.readdirSync(tablesDir).filter((f) => f.endsWith(".sql"));
       expect(files.length).toBeGreaterThan(0);

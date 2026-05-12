@@ -239,7 +239,7 @@ export async function writeCoreFile(
 export const FIXTURE_TABLES = ["category", "product"] as const;
 
 /** Tables created by the app fixture schema */
-export const FIXTURE_APP_TABLES = ["order", "order_item"] as const;
+export const FIXTURE_APP_TABLES = ["orders", "order_item"] as const;
 
 /** Roles created by the fixture infra */
 export const FIXTURE_ROLES = ["api_user", "readonly", "editor", "manager"] as const;

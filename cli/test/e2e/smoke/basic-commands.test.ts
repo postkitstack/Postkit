@@ -104,8 +104,7 @@ describe("init command — detailed tests (no Docker)", () => {
 
       // Runtime files
       expect(fs.existsSync(path.join(tmpDir, ".postkit", "db", "committed.json"))).toBe(true);
-      expect(fs.existsSync(path.join(tmpDir, ".postkit", "db", "plan.sql"))).toBe(true);
-      expect(fs.existsSync(path.join(tmpDir, ".postkit", "db", "schema.sql"))).toBe(true);
+      // plan_*.sql and schema_*.sql are ephemeral — created on demand, not by init
 
     } finally {
       await cleanupDir(tmpDir);
@@ -125,8 +124,8 @@ describe("init command — detailed tests (no Docker)", () => {
       );
 
       // postkit.config.json — non-sensitive project settings only (no remotes, no localDbUrl)
-      expect(config.db.schemaPath).toBe("schema");
-      expect(config.db.schema).toBe("public");
+      expect(config.db.schemaPath).toBe("db/schema");
+      expect(config.db.schemas).toEqual(["public"]);
       expect(config.db.localDbUrl).toBeUndefined();
       expect(config.db.remotes).toBeUndefined();
 
@@ -165,8 +164,8 @@ describe("init command — detailed tests (no Docker)", () => {
       const gitignore = fs.readFileSync(path.join(tmpDir, ".gitignore"), "utf-8");
       // Ephemeral/session-specific paths are gitignored
       expect(gitignore).toContain(".postkit/db/session.json");
-      expect(gitignore).toContain(".postkit/db/plan.sql");
-      expect(gitignore).toContain(".postkit/db/schema.sql");
+      expect(gitignore).toContain(".postkit/db/plan_*.sql");
+      expect(gitignore).toContain(".postkit/db/schema_*.sql");
       expect(gitignore).toContain(".postkit/db/session/");
       expect(gitignore).toContain("postkit.secrets.json");
       // Committed files must NOT be gitignored

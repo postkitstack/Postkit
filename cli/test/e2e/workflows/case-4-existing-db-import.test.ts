@@ -161,7 +161,7 @@ describe("Case 4: Existing DB — import → verify → plan → apply → commi
   });
 
   it("adds a new view schema file to trigger a diff", async () => {
-    const viewDir = path.join(project.schemaPath, "views");
+    const viewDir = path.join(project.schemaPath, "public", "views");
     fs.mkdirSync(viewDir, {recursive: true});
     fs.writeFileSync(
       path.join(viewDir, "01_products_with_category.view.sql"),

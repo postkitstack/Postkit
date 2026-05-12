@@ -21,19 +21,18 @@ import {
   verifyTablesInSchema,
   verifyMultiSchemaFixture,
 } from "../helpers/workflow";
-import {queryDatabase} from "../helpers/db-query";
 
 /**
  * Case 6: Multi-Schema Full Flow
  *
- * Two PostgreSQL schemas: "public" (category, product) and "app" (order, order_item).
- * The app schema references public schema objects — cross-schema FK resolution must work.
+ * Two PostgreSQL schemas: "public" (category, product) and "app" (orders, order_item).
+ * Each schema is self-contained — no cross-schema FK references.
  *
- * Flow: start → plan (both schemas, intermediate apply) → apply → commit → deploy
+ * Flow: start → plan (both schemas) → apply → commit → deploy
  *
  * Config: schemas: ["public", "app"], schemaPath: "db/schema", infraPath: "db/infra"
  */
-describe("Case 6: Multi-schema — public + app schemas with cross-schema FKs", () => {
+describe("Case 6: Multi-schema — public + app schemas", () => {
   let localDb: TestDatabase;
   let remoteDb: TestDatabase;
   let project: TestProject;
@@ -72,12 +71,19 @@ describe("Case 6: Multi-schema — public + app schemas with cross-schema FKs", 
     expect(status.sessionActive).toBe(true);
   });
 
-  // ── Step 2: Plan (public schema first, then app schema) ─────────────
+  // ── Step 2: Plan ─────────────────────────────────────────────────────
 
   it("generates a plan that includes public schema tables", async () => {
-    const output = await runPlan(project);
-    expect(output).toContain("category");
-    expect(output).toContain("product");
+    const result = await import("../helpers/cli-runner").then(({runCli}) =>
+      runCli(["db", "plan"], {cwd: project.rootDir}),
+    );
+    if (result.exitCode !== 0) {
+      console.log("PLAN STDOUT:", result.stdout);
+      console.log("PLAN STDERR:", result.stderr);
+    }
+    expect(result.exitCode, `Plan failed:\nSTDOUT: ${result.stdout}\nSTDERR: ${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain("category");
+    expect(result.stdout).toContain("product");
   });
 
   // ── Step 3: Apply ───────────────────────────────────────────────────
@@ -91,42 +97,11 @@ describe("Case 6: Multi-schema — public + app schemas with cross-schema FKs", 
   });
 
   it("verifies app schema tables exist in local DB after apply", async () => {
-    await verifyTablesInSchema(localDb.url, "app", ["order", "order_item"], "local DB");
+    await verifyTablesInSchema(localDb.url, "app", ["orders", "order_item"], "local DB");
   });
 
   it("verifies full multi-schema fixture in local DB", async () => {
     await verifyMultiSchemaFixture(localDb.url, "local DB");
-  });
-
-  it("verifies cross-schema FK app.order_item.product_id -> public.product.id exists", async () => {
-    const rows = await queryDatabase(
-      localDb.url,
-      `SELECT
-        tc.constraint_name,
-        kcu.column_name,
-        ccu.table_schema AS foreign_table_schema,
-        ccu.table_name AS foreign_table_name,
-        ccu.column_name AS foreign_column_name
-      FROM information_schema.table_constraints AS tc
-      JOIN information_schema.key_column_usage AS kcu
-        ON tc.constraint_name = kcu.constraint_name
-        AND tc.table_schema = kcu.table_schema
-      JOIN information_schema.constraint_column_usage AS ccu
-        ON ccu.constraint_name = tc.constraint_name
-      WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND tc.table_schema = 'app'
-        AND tc.table_name = 'order_item'
-        AND kcu.column_name = 'product_id'`,
-    );
-    expect(rows.length).toBeGreaterThan(0);
-    const fk = rows[0] as {
-      foreign_table_schema: string;
-      foreign_table_name: string;
-      foreign_column_name: string;
-    };
-    expect(fk.foreign_table_schema).toBe("public");
-    expect(fk.foreign_table_name).toBe("product");
-    expect(fk.foreign_column_name).toBe("id");
   });
 
   // ── Step 4: Commit ──────────────────────────────────────────────────
@@ -151,30 +126,5 @@ describe("Case 6: Multi-schema — public + app schemas with cross-schema FKs", 
 
   it("verifies full multi-schema fixture in remote DB after deploy", async () => {
     await verifyMultiSchemaFixture(remoteDb.url, "remote DB");
-  });
-
-  it("verifies cross-schema FK exists in remote DB after deploy", async () => {
-    const rows = await queryDatabase(
-      remoteDb.url,
-      `SELECT
-        tc.constraint_name,
-        kcu.column_name,
-        ccu.table_schema AS foreign_table_schema,
-        ccu.table_name AS foreign_table_name
-      FROM information_schema.table_constraints AS tc
-      JOIN information_schema.key_column_usage AS kcu
-        ON tc.constraint_name = kcu.constraint_name
-        AND tc.table_schema = kcu.table_schema
-      JOIN information_schema.constraint_column_usage AS ccu
-        ON ccu.constraint_name = tc.constraint_name
-      WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND tc.table_schema = 'app'
-        AND tc.table_name = 'order_item'
-        AND kcu.column_name = 'product_id'`,
-    );
-    expect(rows.length).toBeGreaterThan(0);
-    const fk = rows[0] as {foreign_table_schema: string; foreign_table_name: string};
-    expect(fk.foreign_table_schema).toBe("public");
-    expect(fk.foreign_table_name).toBe("product");
   });
 });

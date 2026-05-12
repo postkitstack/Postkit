@@ -1,4 +1,6 @@
 import ora from "ora";
+import path from "path";
+import {existsSync} from "fs";
 import {logger} from "../../../common/logger";
 import {requireActiveSession, assertLocalConnection, updatePendingChanges} from "../utils/session";
 import {toRelativePath, getDbConfig, getPlanFilePath} from "../utils/db-config";
@@ -37,6 +39,15 @@ export async function planCommand(options: CommandOptions): Promise<void> {
     for (let i = 0; i < config.schemas.length; i++) {
       const schemaName = config.schemas[i]!;
       const stepNum = i + 3;
+
+      // Skip schemas with no directory — treat as not yet set up
+      const schemaDir = path.join(config.schemaPath, schemaName);
+      if (!existsSync(schemaDir)) {
+        logger.debug(`Schema "${schemaName}" directory not found — skipping`, options.verbose);
+        planFiles[schemaName] = null;
+        schemaFingerprints[schemaName] = null;
+        continue;
+      }
 
       // Generate schema SQL
       logger.step(stepNum, totalSteps, `Schema "${schemaName}": generating SQL...`);
@@ -155,10 +166,27 @@ async function applyPlanToLocalDb(dbUrl: string, planFilePath: string): Promise<
   const sql = await fs.readFile(planFilePath, "utf-8");
   if (!sql.trim()) return;
 
+  // Strip non-structural statements — policies/grants aren't needed for cross-schema
+  // reference resolution and would cause duplicate errors when apply re-runs them.
+  const structuralSQL = sql
+    .split("\n")
+    .filter((line) => {
+      const upper = line.trim().toUpperCase();
+      return (
+        !upper.startsWith("CREATE POLICY") &&
+        !upper.startsWith("DROP POLICY") &&
+        !upper.startsWith("GRANT ") &&
+        !upper.startsWith("REVOKE ")
+      );
+    })
+    .join("\n");
+
+  if (!structuralSQL.trim()) return;
+
   const dbInfo = parseConnectionUrl(dbUrl);
   const result = await runSpawnCommand(
     ["psql", "-h", dbInfo.host, "-p", String(dbInfo.port), "-U", dbInfo.user, "-d", dbInfo.database, "-v", "ON_ERROR_STOP=1"],
-    {input: sql, env: {PGPASSWORD: dbInfo.password}},
+    {input: structuralSQL, env: {PGPASSWORD: dbInfo.password}},
   );
 
   if (result.exitCode !== 0) {
