@@ -1,30 +1,215 @@
 /**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
+ * PostKit Documentation Theme
+ * Primary: #F59E0B (amber-500) — matches logo accent
  */
 
-/* You can override the default Infima variables here. */
+/* ─── Infima color tokens ───────────────────────────────────────────────── */
 :root {
-  --ifm-color-primary: #F59E0B;
-  --ifm-color-primary-dark: #D97706;
-  --ifm-color-primary-darker: #B45309;
-  --ifm-color-primary-darkest: #92400E;
-  --ifm-color-primary-light: #FBBF24;
-  --ifm-color-primary-lighter: #FCD34D;
+  --ifm-color-primary:          #F59E0B;
+  --ifm-color-primary-dark:     #D97706;
+  --ifm-color-primary-darker:   #B45309;
+  --ifm-color-primary-darkest:  #92400E;
+  --ifm-color-primary-light:    #FBBF24;
+  --ifm-color-primary-lighter:  #FCD34D;
   --ifm-color-primary-lightest: #FDE68A;
+
   --ifm-code-font-size: 95%;
   --docusaurus-highlighted-code-line-bg: rgba(245, 158, 11, 0.1);
+
+  /* PostKit custom tokens */
+  --pk-amber:        #F59E0B;
+  --pk-amber-dark:   #D97706;
+  --pk-amber-glow:   rgba(245, 158, 11, 0.15);
+  --pk-amber-border: rgba(245, 158, 11, 0.35);
+  --pk-card-bg:      #ffffff;
+  --pk-card-shadow:  0 2px 12px rgba(245, 158, 11, 0.12);
+  --pk-card-shadow-hover: 0 6px 24px rgba(245, 158, 11, 0.28);
+  --pk-cover-radius: 10px;
 }
 
-/* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
-  --ifm-color-primary: #F59E0B;
-  --ifm-color-primary-dark: #D97706;
-  --ifm-color-primary-darker: #B45309;
-  --ifm-color-primary-darkest: #92400E;
-  --ifm-color-primary-light: #FBBF24;
-  --ifm-color-primary-lighter: #FCD34D;
+  --ifm-color-primary:          #F59E0B;
+  --ifm-color-primary-dark:     #D97706;
+  --ifm-color-primary-darker:   #B45309;
+  --ifm-color-primary-darkest:  #92400E;
+  --ifm-color-primary-light:    #FBBF24;
+  --ifm-color-primary-lighter:  #FCD34D;
   --ifm-color-primary-lightest: #FDE68A;
+
   --docusaurus-highlighted-code-line-bg: rgba(245, 158, 11, 0.2);
+
+  --pk-card-bg:      #1c1c1e;
+  --pk-card-shadow:  0 2px 12px rgba(0, 0, 0, 0.4);
+  --pk-card-shadow-hover: 0 6px 28px rgba(245, 158, 11, 0.22);
+}
+
+/* ─── Cover images ──────────────────────────────────────────────────────── */
+.postkit-cover {
+  width: 100%;
+  border-radius: var(--pk-cover-radius);
+  margin-bottom: 2rem;
+  display: block;
+}
+
+/* ─── Feature card grid ─────────────────────────────────────────────────── */
+.postkit-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.postkit-card-link {
+  text-decoration: none !important;
+  color: inherit;
+}
+
+.postkit-card {
+  background: var(--pk-card-bg);
+  border: 1.5px solid var(--pk-amber-border);
+  border-radius: 14px;
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: box-shadow 0.22s ease, border-color 0.22s ease, transform 0.18s ease;
+  box-shadow: var(--pk-card-shadow);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.postkit-card:hover {
+  box-shadow: var(--pk-card-shadow-hover);
+  border-color: var(--pk-amber);
+  transform: translateY(-3px);
+}
+
+.postkit-card img {
+  width: 75%;
+  max-width: 200px;
+  margin-bottom: 1.25rem;
+  object-fit: contain;
+}
+
+.postkit-card h3 {
+  color: var(--pk-amber);
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.6rem;
+  margin-top: 0;
+}
+
+.postkit-card p {
+  color: var(--ifm-font-color-base);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  margin: 0;
+  opacity: 0.85;
+}
+
+/* ─── Navbar ────────────────────────────────────────────────────────────── */
+.navbar {
+  border-bottom: 2px solid var(--pk-amber-border);
+}
+
+.navbar__link--active,
+.navbar__link:hover {
+  color: var(--pk-amber) !important;
+}
+
+/* ─── Sidebar active item ───────────────────────────────────────────────── */
+.menu__link--active {
+  border-left: 3px solid var(--pk-amber);
+  padding-left: calc(var(--ifm-menu-link-padding-horizontal) - 3px);
+}
+
+/* ─── Admonitions — remap to amber palette ──────────────────────────────── */
+.alert--info {
+  --ifm-alert-background-color: rgba(245, 158, 11, 0.08);
+  --ifm-alert-border-color: var(--pk-amber);
+  --ifm-alert-color: var(--ifm-font-color-base);
+}
+
+.alert--success {
+  --ifm-alert-background-color: rgba(245, 158, 11, 0.06);
+  --ifm-alert-border-color: var(--pk-amber-dark);
+}
+
+/* ─── Tables ────────────────────────────────────────────────────────────── */
+table thead tr {
+  background-color: var(--pk-amber-glow);
+  border-bottom: 2px solid var(--pk-amber-border);
+}
+
+table thead th {
+  color: var(--pk-amber-dark);
+  font-weight: 700;
+}
+
+table tbody tr:hover {
+  background-color: var(--pk-amber-glow);
+}
+
+/* ─── Inline code ───────────────────────────────────────────────────────── */
+code {
+  background-color: var(--pk-amber-glow);
+  border: 1px solid var(--pk-amber-border);
+  border-radius: 4px;
+}
+
+/* ─── Code block title bar ──────────────────────────────────────────────── */
+.codeBlockTitle_node_modules-\@docusaurus-theme-classic-lib-theme-CodeBlock-Content-styles-module {
+  border-bottom: 1px solid var(--pk-amber-border) !important;
+  color: var(--pk-amber) !important;
+}
+
+/* ─── Scrollbar (webkit) ────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--pk-amber-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--pk-amber);
+}
+
+/* ─── Footer ────────────────────────────────────────────────────────────── */
+.footer {
+  border-top: 2px solid var(--pk-amber-border);
+}
+
+.footer__link-item:hover {
+  color: var(--pk-amber) !important;
+}
+
+/* ─── Pagination nav ────────────────────────────────────────────────────── */
+.pagination-nav__link {
+  border-color: var(--pk-amber-border);
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+
+.pagination-nav__link:hover {
+  border-color: var(--pk-amber);
+  box-shadow: 0 0 0 2px var(--pk-amber-glow);
+}
+
+/* ─── Doc page cover image (ThemedImage wrapper) ─────────────────────────── */
+.theme-doc-markdown img:first-of-type {
+  border-radius: var(--pk-cover-radius);
+  margin-bottom: 1.5rem;
+}
+
+/* ─── Blog post card images ─────────────────────────────────────────────── */
+.blogPostCardImage_node_modules-\@docusaurus-theme-classic-lib-theme-BlogPostCard-styles-module {
+  border-radius: 8px;
 }
