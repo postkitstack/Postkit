@@ -8,6 +8,8 @@ image: /img/blog/schema-as-code.png
 
 There are two schools of thought on database migrations. The first says: write every `ALTER TABLE` by hand, accumulate them as numbered files, and replay them in order. The second says: declare the desired schema state, let a tool figure out what SQL to generate. PostKit uses the second approach. Here's why.
 
+![Schema as Code vs Hand-Written Migrations](/img/blog/schema-as-code.png)
+
 <!-- truncate -->
 
 ## The Traditional Approach

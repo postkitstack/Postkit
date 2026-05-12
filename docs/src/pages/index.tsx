@@ -1,25 +1,28 @@
 import type {ReactNode} from 'react';
-import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
-import Heading from '@theme/Heading';
+import ThemedIdealImage from '@site/src/components/ThemedIdealImage';
+
+import lightHeroImg from '../img/postkit-hero-light.png';
+import darkHeroImg from '../img/postkit-hero-dark.png';
 
 import styles from './index.module.css';
 
-function HomepageHeader() {
-  const {siteConfig} = useDocusaurusContext();
+function HomepageHero() {
   return (
-    <header className={clsx('hero hero--primary', styles.heroBanner)}>
-      <div className="container">
-        <Heading as="h1" className="hero__title">
-          {siteConfig.title}
-        </Heading>
-        <p className="hero__subtitle">{siteConfig.tagline}</p>
+    <section className={styles.heroBanner}>
+      <div className={styles.heroImageWrapper}>
+        <ThemedIdealImage
+          lightImg={lightHeroImg}
+          darkImg={darkHeroImg}
+          alt="PostKit — SQL schema management for modern teams"
+          className={styles.heroCover}
+        />
         <div className={styles.buttons}>
           <Link
-            className="button button--secondary button--lg"
+            className="button button--primary button--lg"
             to="/docs/getting-started/installation">
             Get Started
           </Link>
@@ -31,7 +34,7 @@ function HomepageHeader() {
           </Link>
         </div>
       </div>
-    </header>
+    </section>
   );
 }
 
@@ -41,8 +44,8 @@ export default function Home(): ReactNode {
     <Layout
       title={`${siteConfig.title} - Developer Toolkit`}
       description="PostKit - A framework for backend development with database migrations, auth management, and more.">
-      <HomepageHeader />
       <main>
+        <HomepageHero />
         <HomepageFeatures />
       </main>
     </Layout>

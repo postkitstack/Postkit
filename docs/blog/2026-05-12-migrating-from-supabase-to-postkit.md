@@ -10,6 +10,8 @@ Supabase is a great way to get a PostgreSQL database running in minutes. But as 
 
 This guide walks you through bringing a Supabase project into PostKit's migration workflow without disrupting your existing data.
 
+![Migrating from Supabase to PostKit](/img/blog/supabase-to-postkit.jpg)
+
 <!-- truncate -->
 
 ## What Changes (and What Doesn't)

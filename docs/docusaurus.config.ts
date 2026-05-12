@@ -35,6 +35,19 @@ const config: Config = {
     locales: ['en'],
   },
 
+  plugins: [
+    [
+      '@docusaurus/plugin-ideal-image',
+      {
+        quality: 90,
+        max: 1640,
+        min: 640,
+        steps: 3,
+        disableInDev: false,
+      },
+    ],
+  ],
+
   presets: [
     [
       'classic',

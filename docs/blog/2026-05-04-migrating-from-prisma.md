@@ -8,6 +8,8 @@ image: /img/blog/prisma-to-postkit.jpg
 
 Prisma is an excellent ORM and Prisma Migrate is a good solution for teams that want to stay in TypeScript and never write SQL. But some teams reach a point where they want direct SQL control — complex views, functions, triggers, RLS policies, custom indexes. Prisma Migrate's model makes these awkward. PostKit is built for exactly that use case.
 
+![From Prisma Migrate to PostKit](/img/blog/prisma-to-postkit.jpg)
+
 <!-- truncate -->
 
 ## When Prisma Migrate Stops Scaling

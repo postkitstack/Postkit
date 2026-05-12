@@ -1,0 +1,7 @@
+/* light mode: show light, hide dark */
+.lightImg { display: block; }
+.darkImg  { display: none;  }
+
+/* dark mode: show dark, hide light */
+[data-theme='dark'] .lightImg { display: none;  }
+[data-theme='dark'] .darkImg  { display: block; }

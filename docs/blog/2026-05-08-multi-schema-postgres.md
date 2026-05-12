@@ -10,6 +10,8 @@ PostgreSQL schemas are namespaces inside a single database. Most applications st
 
 PostKit handles multiple schemas natively, with a clear model for what goes where.
 
+![Managing Multiple PostgreSQL Schemas](/img/blog/multi-schema-postgres.jpg)
+
 <!-- truncate -->
 
 ## Why Multiple Schemas?
