@@ -209,6 +209,14 @@ code {
   margin-bottom: 1.5rem;
 }
 
+/* ─── Outline button — fix invisible text on hover in dark mode ─────────── */
+[data-theme='dark'] .button--outline:hover,
+[data-theme='dark'] .button--outline:hover:not(:disabled) {
+  color: #0f0f14 !important;
+  background-color: var(--pk-amber) !important;
+  border-color: var(--pk-amber) !important;
+}
+
 /* ─── Blog post card images ─────────────────────────────────────────────── */
 .blogPostCardImage_node_modules-\@docusaurus-theme-classic-lib-theme-BlogPostCard-styles-module {
   border-radius: 8px;
