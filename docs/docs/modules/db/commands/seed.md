@@ -4,12 +4,12 @@ sidebar_position: 12
 
 # db seed
 
-Manage seed data from `db/schema/seeds/`.
+Manage seed data from `db/schema/<name>/seeds/`.
 
 ## Usage
 
 ```bash
-postkit db seed [--apply] [--target <target>]
+postkit db seed [--apply] [--target <target>] [--schema <name>]
 ```
 
 **`<target>`**: `local` or `remote`
@@ -20,6 +20,7 @@ postkit db seed [--apply] [--target <target>]
 |--------|-------------|
 | `--apply` | Apply seed data |
 | `--target` | Target for apply: `local` or `remote` (default: local) |
+| `--schema <name>` | Apply seeds for one schema only |
 | `-v, --verbose` | Enable verbose output |
 | `--dry-run` | Show what would be done without making changes |
 | `--json` | Output as JSON |
@@ -35,13 +36,16 @@ postkit db seed --apply
 
 # Apply to remote database
 postkit db seed --apply --target=remote
+
+# Apply seeds for app schema only
+postkit db seed --apply --schema app
 ```
 
 ## What It Does
 
-Without `--apply`, displays the seed data SQL that would be run.
+Without `--apply`, displays seed SQL across all schemas (or the specified schema).
 
-With `--apply`, executes the seed data SQL on the target database.
+With `--apply`, executes seed SQL for each schema in config order (or just `--schema <name>` if specified).
 
 ## Related
 

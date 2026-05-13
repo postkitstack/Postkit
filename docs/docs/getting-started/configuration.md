@@ -22,8 +22,9 @@ Contains only non-sensitive project settings. Remotes are user/environment-speci
 ```json
 {
   "db": {
+    "infraPath": "db/infra",
     "schemaPath": "db/schema",
-    "schema": "public"
+    "schemas": ["public"]
   }
 }
 ```
@@ -59,9 +60,15 @@ PostgreSQL connection URL for your local clone database. **Leave empty** to have
 
 Path to your schema files, relative to project root. Default: `"db/schema"`.
 
-### `db.schema` (optional)
+### `db.schemas` (optional)
 
-Database schema name. Default: `"public"`.
+Ordered array of schema names to manage. Array position determines execution order — schemas that others depend on must appear first. Default: `["public"]`.
+
+Backward compat: setting `"schemas": ["public"]` with a flat `db/schema/` layout (no `db/schema/public/` subdirectory) continues to work unchanged.
+
+### `db.infraPath` (optional)
+
+Path to the DB-level infra directory (roles, extensions, CREATE SCHEMA), relative to project root. Default: `"db/infra"`.
 
 ### `db.remotes` (required)
 

@@ -26,12 +26,12 @@ describe("db-config path helpers", () => {
     expect(getSessionFilePath()).toBe("/project/.postkit/db/session.json");
   });
 
-  it("getPlanFilePath() returns plan.sql path", () => {
-    expect(getPlanFilePath()).toBe("/project/.postkit/db/plan.sql");
+  it("getPlanFilePath(schemaName) returns plan_<name>.sql path", () => {
+    expect(getPlanFilePath("public")).toBe("/project/.postkit/db/plan_public.sql");
   });
 
-  it("getGeneratedSchemaPath() returns schema.sql path", () => {
-    expect(getGeneratedSchemaPath()).toBe("/project/.postkit/db/schema.sql");
+  it("getGeneratedSchemaPath(schemaName) returns schema_<name>.sql path", () => {
+    expect(getGeneratedSchemaPath("public")).toBe("/project/.postkit/db/schema_public.sql");
   });
 
   it("getSessionMigrationsPath() returns session dir", () => {

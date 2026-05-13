@@ -37,7 +37,8 @@ const RemoteConfigInputSchema = z.object({
 const DbConfigInputSchema = z.object({
   localDbUrl: z.string().default(""),
   schemaPath: z.string().optional(),
-  schema: z.string().optional(),
+  schemas: z.array(z.string()).optional(),
+  infraPath: z.string().optional(),
   remotes: z.record(z.string(), RemoteConfigInputSchema).optional(),
 });
 
@@ -137,10 +138,16 @@ export function getDbConfig(): DbConfig {
     ? path.resolve(projectRoot, db.schemaPath)
     : path.resolve(projectRoot, "schema");
 
+  const schemas = db.schemas && db.schemas.length > 0 ? db.schemas : ["public"];
+  const infraPath = db.infraPath
+    ? path.resolve(projectRoot, db.infraPath)
+    : path.resolve(projectRoot, "db/infra");
+
   return {
     localDbUrl: db.localDbUrl,
     schemaPath,
-    schema: db.schema || "public",
+    schemas,
+    infraPath,
     remotes: (db.remotes || {}) as Record<string, RemoteInputConfig>,
     pgSchemaBin: resolvePgSchemaBin(),
     dbmateBin: resolveDbmateBin(),
@@ -162,12 +169,16 @@ export function getSessionFilePath(): string {
   return path.join(getPostkitDbDir(), "session.json");
 }
 
-export function getPlanFilePath(): string {
-  return path.join(getPostkitDbDir(), "plan.sql");
+export function getPlanFilePath(schemaName: string): string {
+  return path.join(getPostkitDbDir(), `plan_${schemaName}.sql`);
 }
 
-export function getGeneratedSchemaPath(): string {
-  return path.join(getPostkitDbDir(), "schema.sql");
+export function getGeneratedSchemaPath(schemaName: string): string {
+  return path.join(getPostkitDbDir(), `schema_${schemaName}.sql`);
+}
+
+export function getInfraPath(): string {
+  return getDbConfig().infraPath;
 }
 
 export function getSessionMigrationsPath(): string {

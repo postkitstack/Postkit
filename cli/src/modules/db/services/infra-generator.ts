@@ -9,13 +9,8 @@ import type {InfraStatement} from "../types/index";
 
 export async function loadInfra(): Promise<InfraStatement[]> {
   const config = getDbConfig();
-  const infraPath = path.join(config.schemaPath, "infra");
-
-  if (!existsSync(infraPath)) {
-    return [];
-  }
-
-  return loadInfraFromDirectory(infraPath);
+  if (!existsSync(config.infraPath)) return [];
+  return loadInfraFromDirectory(config.infraPath);
 }
 
 async function loadInfraFromDirectory(

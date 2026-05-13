@@ -4,7 +4,7 @@ sidebar_position: 10
 
 # db infra
 
-Manage infrastructure SQL (roles, schemas, extensions) from `db/schema/infra/`.
+Manage infrastructure SQL (roles, schemas, extensions) from `db/infra/`.
 
 ## Usage
 

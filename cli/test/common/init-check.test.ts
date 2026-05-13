@@ -16,9 +16,9 @@ import {PostkitError} from "../../src/common/errors";
 describe("withInitCheck", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(process, "exit").mockImplementation((code?: number) => {
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
       throw new Error(`process.exit(${code})`);
-    });
+    }) as typeof process.exit);
   });
 
   it("calls wrapped function when initialized", async () => {

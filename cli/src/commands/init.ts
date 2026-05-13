@@ -21,8 +21,8 @@ import type {PostkitPublicConfig, PostkitSecrets} from "../common/config";
 const GITIGNORE_ENTRIES = [
   "# Postkit",
   ".postkit/db/session.json",
-  ".postkit/db/plan.sql",
-  ".postkit/db/schema.sql",
+  ".postkit/db/plan_*.sql",
+  ".postkit/db/schema_*.sql",
   ".postkit/db/session/",
   "postkit.secrets.json",
 ];
@@ -30,8 +30,9 @@ const GITIGNORE_ENTRIES = [
 // Non-sensitive settings committed to git — no remotes (user/env-specific, lives in secrets)
 const SCAFFOLD_PUBLIC_CONFIG: PostkitPublicConfig = {
   db: {
-    schemaPath: "schema",
-    schema: "public",
+    schemaPath: "db/schema",
+    schemas: ["public"],
+    infraPath: "db/infra",
   },
   auth: {
     configCliImage: "adorsys/keycloak-config-cli:6.4.0-24",
@@ -121,17 +122,10 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     const spinner = ora("Creating .postkit/db/ directory...").start();
     const postkitDbDir = path.join(postkitDir, "db");
     fs.mkdirSync(postkitDbDir, {recursive: true});
-    // session.json is intentionally excluded — created only when a session starts
-    const runtimeFiles: Record<string, string> = {
-      "committed.json": JSON.stringify({migrations: []}, null, 2),
-      "plan.sql": "",
-      "schema.sql": "",
-    };
-    for (const [file, content] of Object.entries(runtimeFiles)) {
-      const filePath = path.join(postkitDbDir, file);
-      if (!fs.existsSync(filePath)) {
-        fs.writeFileSync(filePath, content);
-      }
+    // session.json, plan_*.sql, schema_*.sql are intentionally excluded — created on demand
+    const committedFilePath = path.join(postkitDbDir, "committed.json");
+    if (!fs.existsSync(committedFilePath)) {
+      fs.writeFileSync(committedFilePath, JSON.stringify({migrations: []}, null, 2));
     }
     for (const subdir of ["session", "migrations"]) {
       const subPath = path.join(postkitDbDir, subdir);
@@ -220,8 +214,8 @@ export async function initCommand(options: CommandOptions): Promise<void> {
   logger.info("What is gitignored:");
   logger.info(`  ${POSTKIT_SECRETS_FILE}        — DB URLs, remotes, passwords`);
   logger.info(`  .postkit/db/session.json      — active session state`);
-  logger.info(`  .postkit/db/plan.sql          — generated diff (ephemeral)`);
-  logger.info(`  .postkit/db/schema.sql        — generated schema (ephemeral)`);
+  logger.info(`  .postkit/db/plan_*.sql        — generated diffs (ephemeral, per schema)`);
+  logger.info(`  .postkit/db/schema_*.sql      — generated schemas (ephemeral, per schema)`);
   logger.info(`  .postkit/db/session/          — temporary session migrations`);
   logger.blank();
   logger.info("Next steps:");

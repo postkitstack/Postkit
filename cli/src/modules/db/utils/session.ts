@@ -42,10 +42,10 @@ export async function createSession(
     pendingChanges: {
       planned: false,
       applied: false,
-      planFile: null,
+      planFiles: {},
       migrationFiles: [],
       description: null,
-      schemaFingerprint: null,
+      schemaFingerprints: {},
       migrationApplied: false,
       seedsApplied: false,
     },

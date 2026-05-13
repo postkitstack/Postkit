@@ -10,8 +10,9 @@ export function createMockConfig(
 ): PostkitConfig {
   const defaultDb: DbInputConfig = {
     localDbUrl: "postgres://localhost:5432/postkit_local",
-    schemaPath: "schema",
-    schema: "public",
+    schemaPath: "db/schema",
+    schemas: ["public"],
+    infraPath: "db/infra",
     remotes: {
       dev: {
         url: "postgres://user:pass@dev-host:5432/postkit_dev",

@@ -51,11 +51,11 @@ This:
 
 ## 4. Make Schema Changes
 
-Edit files in `db/schema/`:
+Edit files in `db/schema/<name>/`:
 
 ```sql
--- db/schema/tables/users.sql
-CREATE TABLE users (
+-- db/schema/public/tables/users.sql
+CREATE TABLE public.users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ DEFAULT NOW()

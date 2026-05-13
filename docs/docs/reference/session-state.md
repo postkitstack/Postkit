@@ -20,10 +20,10 @@ The database module uses a session-based workflow. Session state is tracked in `
   "pendingChanges": {
     "planned": false,
     "applied": false,
-    "planFile": null,
+    "planFiles": {},
     "migrationFiles": [],
     "description": null,
-    "schemaFingerprint": null,
+    "schemaFingerprints": {},
     "migrationApplied": false,
     "seedsApplied": false
   }
@@ -49,10 +49,10 @@ The database module uses a session-based workflow. Session state is tracked in `
 |-------|-------------|
 | `planned` | Whether a plan has been generated |
 | `applied` | Whether changes have been applied |
-| `planFile` | Path to the plan file |
+| `planFiles` | Map of schema name → plan file path (e.g. `{"public": ".postkit/db/plan_public.sql"}`) |
 | `migrationFiles` | Array of migration file paths |
 | `description` | Migration description |
-| `schemaFingerprint` | SHA-256 hash of schema files |
+| `schemaFingerprints` | Map of schema name → SHA-256 hash of that schema's source files |
 | `migrationApplied` | Whether dbmate migration was applied |
 | `seedsApplied` | Whether seeds were applied |
 
@@ -70,7 +70,7 @@ The database module uses a session-based workflow. Session state is tracked in `
 |------|-------------|
 | `.postkit/db/session.json` | Current session state |
 | `.postkit/db/committed.json` | Committed migrations tracking |
-| `.postkit/db/plan.sql` | Generated migration plan |
-| `.postkit/db/schema.sql` | Generated schema from files |
+| `.postkit/db/plan_<name>.sql` | Generated migration plan per schema (e.g. `plan_public.sql`, `plan_app.sql`) |
+| `.postkit/db/schema_<name>.sql` | Generated schema artifact per schema |
 | `.postkit/db/session/` | Session migrations (temporary) |
 | `.postkit/db/migrations/` | Committed migrations (for deploy) |

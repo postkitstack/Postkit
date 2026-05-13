@@ -15,7 +15,6 @@ Before installing PostKit CLI, ensure you have the following:
 | **Node.js** | >= 18.0.0 | [nodejs.org](https://nodejs.org/) |
 | **npm** | (comes with Node.js) | [npmjs.com](https://www.npmjs.com/) |
 | **Docker** | Latest | [docker.com](https://www.docker.com/products/docker-desktop/) |
-| **Docker Compose** | (comes with Docker Desktop) | Included with Docker Desktop |
 | **PostgreSQL CLI** | `psql`, `pg_dump` | [postgresql.org/download](https://www.postgresql.org/download/) |
 
 ### Installing Prerequisites

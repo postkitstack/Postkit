@@ -74,7 +74,8 @@ Session-based migration workflow: `start → plan → apply → commit → deplo
 - **Session state** — Tracked in `.postkit/db/session.json`; includes optional `containerID` when auto Docker container is active
 - **Named remotes** — Multiple remote DBs via `db.remotes`; all remote data (url, default, addedAt) stored entirely in `postkit.secrets.json`
 - **Auto Docker container** — When `localDbUrl` is empty, `container.ts` starts a `postgres:{version}-alpine` container. Version is queried from remote via `SHOW server_version_num`. `pg_dump`/`psql` run inside the container via `docker exec` for version-matched tools.
-- **Schema directory** — User-maintained SQL files (`db/schema/`) with sections: `infra/`, `extensions/`, `types/`, `enums/`, `tables/`, `views/`, `functions/`, `triggers/`, `grants/`, `seeds/`
+- **Infra directory** — DB-level objects (roles, extensions, `CREATE SCHEMA`) in `db/infra/`; applied before any schema DDL on every `apply` and `deploy`
+- **Schema directories** — Per-schema SQL under `db/schema/<name>/` with sections: `extensions/`, `types/`, `enums/`, `tables/`, `views/`, `functions/`, `triggers/`, `grants/`, `seeds/`. Multiple schemas are declared via `schemas: string[]` in config; array position = execution order
 
 **Import sub-workflow** (`postkit db import`):
 1. pg_dump source → pgschema `dump --multi-file` → normalize → generate baseline via pgschema plan → apply locally → sync migration state
@@ -92,6 +93,74 @@ Keycloak realm configuration management: `export → clean → import`
 │ (source) │    │(strip)│    │(target)│
 └──────────┘    └───────┘    └────────┘
 ```
+
+---
+
+## Multi-Schema Support
+
+PostKit supports managing multiple PostgreSQL schemas within a single project. Schemas are declared as an ordered array in config:
+
+```json
+{ "db": { "schemas": ["public", "app"] } }
+```
+
+**Array order is execution order.** Schemas that others depend on must appear first.
+
+### Directory layout
+
+```
+db/
+├── infra/                  # DB-level objects: roles, extensions, CREATE SCHEMA
+│   ├── 001_roles.sql
+│   ├── 002_extensions.sql
+│   └── 003_schemas.sql
+└── schema/
+    ├── public/             # Schema: "public"
+    │   ├── tables/
+    │   ├── functions/
+    │   └── seeds/
+    └── app/                # Schema: "app"
+        ├── tables/
+        ├── triggers/       # may call public.fn() — fully qualified
+        └── seeds/
+```
+
+`db/infra/` holds DB-level objects (roles, extensions, `CREATE SCHEMA`) that belong to no single schema. It is applied first on every `apply` and `deploy`. Per-schema objects live under `db/schema/<name>/`.
+
+### How `plan` works across schemas
+
+`postkit db plan` loops over `config.schemas` in array order:
+1. Generate `schema_<name>.sql` from `db/schema/<name>/`
+2. Run `pgschema plan --schema <name>` → `plan_<name>.sql`
+3. Apply `plan_<name>.sql` to the local DB immediately (intermediate apply — not a real migration)
+
+Step 3 is critical: it makes schema `<name>`'s objects live in the local DB before the next schema is planned, so cross-schema references resolve correctly at plan time.
+
+### How `apply` combines plans
+
+`postkit db apply` wraps each per-schema plan with `SET search_path TO "<name>"` and combines them into a single dbmate migration file:
+
+```sql
+SET search_path TO "public";
+-- public DDL ...
+
+SET search_path TO "app";
+-- app DDL ...
+```
+
+Seeds are applied per schema in array order after the migration runs.
+
+### Cross-schema references
+
+Use fully qualified names (`public.fn()`, `REFERENCES public.users(id)`). The referenced schema must appear earlier in the `schemas` array. The owner schema holds the SQL file:
+
+- trigger on `app.orders` calling `public.audit_fn()` → file lives in `db/schema/app/triggers/`
+
+For operations pgschema cannot model (e.g., atomically renaming a function and updating all callers across schemas), use `postkit db migration <name>` to create a manual migration that bypasses pgschema entirely.
+
+### Backward compatibility
+
+If `db/schema/<name>/` subdirectory does not exist but `db/schema/` contains files directly (flat layout), PostKit falls back to the flat layout. Existing single-schema projects work without file changes; `"schemas": ["public"]` is the default when `schemas` is unset.
 
 ---
 
@@ -135,8 +204,9 @@ Loaded via `loadPostkitConfig()`, which deep-merges two files:
 // postkit.config.json (committed — no remotes)
 {
   "db": {
+    "infraPath": "db/infra",
     "schemaPath": "db/schema",
-    "schema": "public"
+    "schemas": ["public", "app"]
   }
 }
 
@@ -151,6 +221,10 @@ Loaded via `loadPostkitConfig()`, which deep-merges two files:
   }
 }
 ```
+
+**`schemas`** — Ordered array of schema names (`["public"]` by default). Array position determines execution order; schemas that other schemas depend on must appear first. Backward compat: `"schemas": ["public"]` with a flat `db/schema/` layout (no `db/schema/public/` subdirectory) continues to work unchanged.
+
+**`infraPath`** — Path to the DB-level infra directory (roles, extensions, `CREATE SCHEMA`). Defaults to `"db/infra"`.
 
 `localDbUrl` can be empty — PostKit will automatically start a Docker container (`postgres:{version}-alpine`) for the session. The container image version is detected from the remote database at runtime via `SHOW server_version_num`.
 
@@ -211,8 +285,10 @@ PostKit files in `.postkit/` are split between gitignored (ephemeral/user-specif
 .postkit/
 ├── db/
 │   ├── session.json         # GITIGNORED — active session state, local DB URL, container ID
-│   ├── plan.sql             # GITIGNORED — generated migration diff (ephemeral)
-│   ├── schema.sql           # GITIGNORED — generated schema artifact (ephemeral)
+│   ├── plan_public.sql      # GITIGNORED — generated migration diff for "public" schema (ephemeral)
+│   ├── plan_app.sql         # GITIGNORED — generated migration diff for "app" schema (ephemeral)
+│   ├── schema_public.sql    # GITIGNORED — generated schema artifact for "public" (ephemeral)
+│   ├── schema_app.sql       # GITIGNORED — generated schema artifact for "app" (ephemeral)
 │   ├── session/             # GITIGNORED — temporary in-progress migrations
 │   ├── committed.json       # COMMITTED — migration tracking index (shared)
 │   └── migrations/          # COMMITTED — committed SQL migrations for deploy (shared)
@@ -223,7 +299,7 @@ PostKit files in `.postkit/` are split between gitignored (ephemeral/user-specif
 
 `.gitignore` (written by `postkit init`) covers only the ephemeral paths:
 - `.postkit/db/session.json`
-- `.postkit/db/plan.sql`
-- `.postkit/db/schema.sql`
+- `.postkit/db/plan_*.sql`
+- `.postkit/db/schema_*.sql`
 - `.postkit/db/session/`
 - `postkit.secrets.json`

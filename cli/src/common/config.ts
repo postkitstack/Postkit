@@ -69,7 +69,8 @@ export interface AuthInputConfig {
 
 export interface DbPublicConfig {
   schemaPath?: string;
-  schema?: string;
+  schemas?: string[];
+  infraPath?: string;
 }
 
 export interface AuthPublicConfig {

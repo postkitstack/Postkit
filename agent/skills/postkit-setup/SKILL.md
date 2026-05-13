@@ -1,6 +1,6 @@
 ---
 name: postkit-setup
-description: Initialize a PostKit project and configure database remotes, local DB URL, and schema paths. Use this skill whenever the user mentions setting up PostKit, initializing a project, configuring remotes, editing postkit.config.json, adding a database remote, changing local DB URL, or first-time project setup — even if they don't explicitly name PostKit.
+description: Initialize a PostKit project and configure database remotes, local DB URL, schema paths, and multi-schema support. Use this skill whenever the user mentions setting up PostKit, initializing a project, configuring remotes, editing postkit.config.json or postkit.secrets.json, adding a database remote, changing local DB URL, or first-time project setup — even if they don't explicitly name PostKit.
 argument-hint: [action]
 paths: postkit.config.json
 allowed-tools: Bash(postkit *)
@@ -17,10 +17,12 @@ postkit init
 ```
 
 This creates:
-- `postkit.config.json` — Project configuration
-- `db/schema/` — Schema directory structure
+- `postkit.config.json` — Committed project configuration (schema paths, flags)
+- `postkit.secrets.json` — Gitignored secrets (DB URLs, remote credentials)
+- `db/schema/public/` — Default schema directory structure
+- `db/infra/` — Infrastructure SQL directory
 - `.postkit/` — Runtime directory (gitignored)
-- `.gitignore` entries for `.postkit/`
+- `.gitignore` entries for secrets and ephemeral files
 
 Add `-f` to skip confirmation prompts:
 
@@ -28,16 +30,33 @@ Add `-f` to skip confirmation prompts:
 postkit init -f
 ```
 
-## Configuration Structure
+## Configuration Files
 
-PostKit loads config from `postkit.config.json` in the project root. The database config:
+PostKit splits config across two files:
+
+### `postkit.config.json` (committed to git)
+
+```json
+{
+  "db": {
+    "schemaPath": "db/schema",
+    "schemas": ["public"],
+    "infraPath": "db/infra"
+  }
+}
+```
+
+Key fields:
+- `schemaPath` — Root path for schema directories (default: `"db/schema"`)
+- `schemas` — Array of PostgreSQL schema names; **array order = execution order** (default: `["public"]`)
+- `infraPath` — Path to DB-level infra SQL (default: `"db/infra"`)
+
+### `postkit.secrets.json` (gitignored — never commit)
 
 ```json
 {
   "db": {
     "localDbUrl": "postgres://localhost:5432/mydb",
-    "schemaPath": "schema",
-    "schema": "public",
     "remotes": {
       "dev": {
         "url": "postgres://user:pass@dev-host:5432/mydb",
@@ -53,10 +72,8 @@ PostKit loads config from `postkit.config.json` in the project root. The databas
 ```
 
 Key fields:
-- `localDbUrl` — PostgreSQL URL for the local clone (used during sessions)
-- `schemaPath` — Path to schema files relative to `db/` (default: `"schema"`)
-- `schema` — PostgreSQL schema name (default: `"public"`)
-- `remotes` — Named remote databases for cloning and deploying
+- `localDbUrl` — PostgreSQL URL for the local clone. Leave empty to have PostKit auto-start a Docker container version-matched to the remote.
+- `remotes` — Named remote databases. At least one must be configured.
 
 ## Managing Remotes
 
@@ -90,9 +107,15 @@ postkit db remote remove dev
 postkit db remote use staging
 ```
 
-## Schema Directory
+## Multi-Schema Setup
 
-After init, the schema directory is at `db/schema/`. See the `postkit-schema` skill for the full directory structure and how to work with schema files.
+To add a second PostgreSQL schema to your project:
+
+```bash
+postkit db schema add app
+```
+
+This scaffolds `db/schema/app/`, adds `CREATE SCHEMA app;` to `db/infra/`, and appends `"app"` to the `schemas` array in `postkit.config.json`. Schemas are migrated in array order.
 
 ## Common Setup Issues
 
@@ -104,9 +127,9 @@ At least one remote must be configured before running `postkit db start`. Add on
 postkit db remote add dev "postgres://..." --default
 ```
 
-### Missing localDbUrl
+### Auto Docker (empty localDbUrl)
 
-The `localDbUrl` must point to a PostgreSQL database accessible from the local machine. This is where the remote DB is cloned during sessions.
+Leave `localDbUrl` empty and PostKit will automatically start a `postgres:{version}-alpine` Docker container, version-matched to your remote DB. The container is started on `db start` and cleaned up on `db abort`.
 
 ### Not initialized
 

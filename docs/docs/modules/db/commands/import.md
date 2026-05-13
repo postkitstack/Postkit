@@ -9,7 +9,7 @@ Import an existing database into PostKit as a baseline migration. Use this comma
 ## Usage
 
 ```bash
-postkit db import [--url <url>] [--schema <schema>] [--name <name>]
+postkit db import [--url <url>] [--schemas <schemas>] [--name <name>]
 ```
 
 ## Options
@@ -17,7 +17,7 @@ postkit db import [--url <url>] [--schema <schema>] [--name <name>]
 | Option | Description |
 |--------|-------------|
 | `--url <url>` | Database URL to import from (default: `localDbUrl` from config) |
-| `--schema <string>` | PostgreSQL schema to import (default: `public`) |
+| `--schemas <string>` | Comma-separated list of schemas to import (default: all from config) |
 | `--name <string>` | Label for the baseline migration (default: `imported_baseline`) |
 | `-f, --force` | Skip confirmation prompts |
 | `-v, --verbose` | Enable verbose output |
@@ -32,8 +32,11 @@ postkit db import
 # Import from a specific database
 postkit db import --url "postgres://user:pass@host:5432/myapp"
 
-# Import a non-public schema with a custom migration name
-postkit db import --schema myschema --name initial_baseline
+# Import specific schemas
+postkit db import --schemas "public,app" --name initial_baseline
+
+# Import all schemas from config
+postkit db import
 ```
 
 ## What It Does
@@ -43,11 +46,12 @@ postkit db import --schema myschema --name initial_baseline
 3. **Confirmation** — Warns about existing schema/migration files (both directories will be **cleared and replaced**), prompts to proceed
 4. **Schema dump** — Runs `pgschema dump --multi-file` into a temp directory (`.postkit/db/tmp-import/`), then adds numeric prefixes (`001_`, `002_`, etc.) to all SQL files based on the `\i` directive order in `schema.sql`
 5. **Normalize** — Clears existing schema directory and maps the dump into PostKit's schema directory structure:
-   - Object directories (`tables/`, `views/`, `functions/`, etc.) copied with numeric prefix ordering
-   - Roles queried from `pg_roles` → written to `infra/roles.sql` using idempotent `DO $$ IF NOT EXISTS $$` blocks
-   - Schemas queried from `pg_namespace` → written to `infra/schemas.sql` as `CREATE SCHEMA IF NOT EXISTS`
+   - Object directories (`tables/`, `views/`, `functions/`, etc.) copied with numeric prefix ordering into `db/schema/<name>/<section>/`
+   - Roles queried from `pg_roles` → written to `db/infra/001_roles.sql` using idempotent `DO $$ IF NOT EXISTS $$` blocks
+   - Schemas queried from `pg_namespace` → written to `db/infra/002_schemas.sql` as `CREATE SCHEMA IF NOT EXISTS`
    - Extensions parsed from `schema.sql` → written to `extensions/imported_extensions.sql`
    - Privileges consolidated into `grants/<schema>.sql` (managed by pgschema)
+   - **Updates `postkit.config.json`** — adds each imported schema name to the `db.schemas` array (idempotent)
 6. **Baseline migration** — Clears existing migrations directory, runs `pgschema plan` against an empty temp database to generate full CREATE DDL, writes it to `.postkit/db/migrations/`, and updates `committed.json`
 7. **Local setup** — Creates the local database, applies infrastructure SQL (roles, schemas), then applies the baseline migration via `dbmate`
 8. **Sync migration state** — After successful local apply, inserts the baseline version into `schema_migrations` on the source database
@@ -81,7 +85,10 @@ System roles (`pg_*`, `postgres`) and system schemas (`pg_*`, `information_schem
 
 | Location | Content |
 |----------|---------|
-| `<schemaPath>/` | Normalized schema files with numeric prefix ordering (e.g. `001_users.sql`, `002_posts.sql`) |
+| `db/schema/<name>/` | Normalized schema files with numeric prefix ordering (e.g. `001_users.sql`, `002_posts.sql`) |
+| `db/infra/001_roles.sql` | Extracted roles (idempotent `DO $$ ... $$` blocks) |
+| `db/infra/002_schemas.sql` | Extracted `CREATE SCHEMA IF NOT EXISTS` statements |
+| `postkit.config.json` | `db.schemas` array updated with all imported schema names |
 | `.postkit/db/migrations/` | Baseline migration SQL file |
 | `.postkit/db/committed.json` | Tracking entry for the baseline migration (`deployed: false`) |
 | Source database | `schema_migrations` row for the baseline version |
@@ -92,27 +99,27 @@ System roles (`pg_*`, `postgres`) and system schemas (`pg_*`, `information_schem
 After import, the schema directory is populated from the database dump:
 
 ```
-db/schema/
+db/
 ├── infra/
 │   ├── roles.sql                          # Idempotent CREATE ROLE statements
 │   └── schemas.sql                        # CREATE SCHEMA IF NOT EXISTS statements
-├── functions/
-│   ├── 001_function_a.sql                 # Numeric prefix from pgschema dump order
-│   └── 002_function_b.sql
-├── tables/
-│   ├── 001_app_config.sql
-│   ├── 002_app_user.sql
-│   ├── 003_client_org.sql
-│   └── ...
-├── views/
-│   └── 001_user_stats.sql
-├── materialized_views/
-│   └── 001_dashboard_summary.sql
-├── extensions/
-│   └── imported_extensions.sql
-├── grants/                                  # Managed by pgschema
-│   └── public.sql                         # Consolidated privileges
-└── .pgschemaignore                         # Excludes schema_migrations table
+└── schema/
+    └── public/
+        ├── functions/
+        │   ├── 001_function_a.sql         # Numeric prefix from pgschema dump order
+        │   └── 002_function_b.sql
+        ├── tables/
+        │   ├── 001_app_config.sql
+        │   ├── 002_app_user.sql
+        │   ├── 003_client_org.sql
+        │   └── ...
+        ├── views/
+        │   └── 001_user_stats.sql
+        ├── materialized_views/
+        │   └── 001_dashboard_summary.sql
+        ├── grants/                        # Managed by pgschema
+        │   └── public.sql                 # Consolidated privileges
+        └── .pgschemaignore                # Excludes schema_migrations table
 ```
 
 ## Next Steps

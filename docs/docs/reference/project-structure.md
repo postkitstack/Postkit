@@ -9,32 +9,33 @@ sidebar_position: 2
 ```
 my-project/
 ├── db/                       # User's database code (git tracked)
-│   └── schema/               # Schema definitions
-│       ├── infra/            # Roles, schemas, extensions
-│       │   ├── roles.sql
-│       │   └── schemas.sql
-│       ├── extensions/
-│       ├── types/
-│       ├── enums/
-│       ├── tables/
-│       │   ├── 001_app_config.sql    # Numeric prefix (from import)
-│       │   ├── 002_app_user.sql
-│       │   └── ...
-│       ├── views/
-│       ├── materialized_views/
-│       ├── functions/
-│       │   ├── 001_get_current_user.sql
-│       │   └── ...
-│       ├── triggers/
-│       ├── indexes/
-│       ├── grants/           # Grant statements (managed by pgschema)
-│       └── seeds/            # Seed data
+│   ├── infra/                # DB-level: roles, extensions, CREATE SCHEMA
+│   │   ├── 001_roles.sql
+│   │   ├── 002_extensions.sql
+│   │   └── 003_schemas.sql
+│   └── schema/               # Per-schema SQL files
+│       ├── public/           # Schema: "public"
+│       │   ├── tables/
+│       │   │   ├── 001_users.sql
+│       │   │   └── ...
+│       │   ├── views/
+│       │   ├── functions/
+│       │   ├── triggers/
+│       │   ├── types/
+│       │   ├── enums/
+│       │   ├── grants/
+│       │   └── seeds/
+│       └── app/              # Schema: "app" (optional)
+│           ├── tables/
+│           └── seeds/
 ├── .postkit/                 # PostKit runtime (gitignored)
 │   ├── db/                   # All DB runtime files
 │   │   ├── session.json      # Session state
 │   │   ├── committed.json    # Committed migrations tracking
-│   │   ├── plan.sql          # Generated plan
-│   │   ├── schema.sql        # Generated schema
+│   │   ├── plan_public.sql   # Generated plan per schema
+│   │   ├── plan_app.sql
+│   │   ├── schema_public.sql # Generated schema artifact per schema
+│   │   ├── schema_app.sql
 │   │   ├── session/          # Session migrations (temporary)
 │   │   └── migrations/       # Committed migrations (for deploy)
 │   └── auth/                 # Auth module runtime files
@@ -49,34 +50,36 @@ my-project/
 
 ## Schema Directory
 
-The `db/schema/` directory is organized into three categories:
+The `db/` directory is organized into infrastructure and per-schema sections:
 
 ### Infrastructure (Handled Separately)
 
 | Directory | Description | Processed By |
 |-----------|-------------|--------------|
-| `infra/` | Pre-migration: roles, schemas, extensions | Applied separately (excluded from pgschema) |
+| `db/infra/` | DB-level: roles, extensions, CREATE SCHEMA | Applied separately (excluded from pgschema) |
 
 ### Schema Objects (Processed by `postkit db plan`)
 
+Each schema has its own subdirectory under `db/schema/<name>/`:
+
 | Directory | Description | Supported by pgschema |
 |-----------|-------------|---------------------|
-| `types/` | Custom types | ✅ Yes |
-| `enums/` | ENUM types | ✅ Yes |
-| `tables/` | Table definitions | ✅ Yes |
-| `views/` | View definitions | ✅ Yes |
-| `functions/` | Function definitions | ✅ Yes |
-| `triggers/` | Trigger definitions | ✅ Yes |
-| `indexes/` | Index definitions | ✅ Yes |
+| `db/schema/<name>/types/` | Custom types | ✅ Yes |
+| `db/schema/<name>/enums/` | ENUM types | ✅ Yes |
+| `db/schema/<name>/tables/` | Table definitions | ✅ Yes |
+| `db/schema/<name>/views/` | View definitions | ✅ Yes |
+| `db/schema/<name>/functions/` | Function definitions | ✅ Yes |
+| `db/schema/<name>/triggers/` | Trigger definitions | ✅ Yes |
+| `db/schema/<name>/indexes/` | Index definitions | ✅ Yes |
 
 ### Post-Migration (Handled Separately)
 
 | Directory | Description | Processed By |
 |-----------|-------------|--------------|
-| `grants/` | Grant statements | Managed by pgschema |
-| `seeds/` | Seed data | Applied separately |
+| `db/schema/<name>/grants/` | Grant statements | Managed by pgschema |
+| `db/schema/<name>/seeds/` | Seed data | Applied separately |
 
-**Note:** Cluster and database level commands (CREATE DATABASE, CREATE ROLE, CREATE EXTENSION, etc.) are not supported by pgschema. Use `db/schema/infra/` or manual migrations instead.
+**Note:** Cluster and database level commands (CREATE DATABASE, CREATE ROLE, CREATE EXTENSION, etc.) are not supported by pgschema. Use `db/infra/` or manual migrations instead.
 
 ## PostKit Runtime Directory
 
@@ -88,8 +91,8 @@ The `.postkit/` directory contains runtime files that are **not** tracked by git
 |----------------|-------------|
 | `session.json` | Current session state |
 | `committed.json` | Committed migrations tracking |
-| `plan.sql` | Generated migration plan |
-| `schema.sql` | Generated schema from files |
+| `plan_<name>.sql` | Generated migration plan per schema (e.g. `plan_public.sql`, `plan_app.sql`) |
+| `schema_<name>.sql` | Generated schema artifact per schema (e.g. `schema_public.sql`) |
 | `session/` | Session migrations (temporary, cleared on commit) |
 | `migrations/` | Committed migrations (for deployment) |
 
@@ -102,36 +105,18 @@ The `.postkit/` directory contains runtime files that are **not** tracked by git
 
 ## Config File
 
-`postkit.config.json` in your project root:
+`postkit.config.json` in your project root (committed, non-sensitive settings only):
 
 ```json
 {
   "db": {
-    "localDbUrl": "postgres://user:pass@localhost:5432/myapp_local",
+    "infraPath": "db/infra",
     "schemaPath": "db/schema",
-    "schema": "public",
-    "remotes": {
-      "dev": {
-        "url": "postgres://user:pass@host:5432/myapp",
-        "default": true
-      }
-    }
-  },
-  "auth": {
-    "source": {
-      "url": "https://keycloak-dev.example.com",
-      "adminUser": "admin",
-      "adminPass": "password",
-      "realm": "myapp-realm"
-    },
-    "target": {
-      "url": "https://keycloak-staging.example.com",
-      "adminUser": "admin",
-      "adminPass": "password"
-    },
-    "configCliImage": "adorsys/keycloak-config-cli:6.4.0-24"
+    "schemas": ["public"]
   }
 }
 ```
+
+Credentials and remote configurations belong in `postkit.secrets.json` (gitignored). See [Configuration](/docs/getting-started/configuration) for the full reference.
 
 Run `postkit init` to create the `.postkit/` directory structure.

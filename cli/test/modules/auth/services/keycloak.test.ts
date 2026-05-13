@@ -78,7 +78,7 @@ describe("keycloak", () => {
 
     it("removes client secrets", () => {
       const cleaned = cleanRealmConfig({clients: [{clientId: "app", secret: "abc"}]} as any);
-      expect(cleaned.clients![0].secret).toBeUndefined();
+      expect(cleaned.clients![0]!.secret).toBeUndefined();
     });
 
     it("strips id fields recursively", () => {
