@@ -53,6 +53,8 @@ const KeycloakPublicSchema = z.object({
   image: z.string().min(1).optional(),
   realm: z.string().min(1).optional(),
   volume: z.string().min(1).optional(),
+  clientRealm: z.string().min(1).optional(),
+  clients: z.array(z.string()).optional(),
 });
 
 const PostgrestPublicSchema = z.object({
@@ -161,15 +163,19 @@ export function getStackConfig(): StackConfig {
     volume: (pgPub.volume as string) ?? "postkit-pgdata",
   };
 
+  const kcRealm = (kcPub.realm as string) ?? "postkit";
   const keycloak: StackKeycloakConfig = {
     image: (kcPub.image as string) ?? DEFAULT_KEYCLOAK_IMAGE,
     enabled: (kcPub.enabled as boolean) ?? true,
     port: (kcPub.port as number) ?? DEFAULT_KEYCLOAK_PORT,
     adminUser: (pg.adminUser as string) ?? "admin",
     adminPassword: (pg.adminPassword as string) ?? "",
-    realm: (kcPub.realm as string) ?? "postkit",
+    realm: kcRealm,
+    clientRealm: (kcPub.clientRealm as string) ?? kcRealm,
     volume: (kcPub.volume as string) ?? "postkit-keycloak-data",
   };
+
+  const keycloakClients: string[] = (kcPub.clients as string[]) ?? [];
 
   const postgrest: StackPostgrestConfig = {
     image: (prPub.image as string) ?? DEFAULT_POSTGREST_IMAGE,
@@ -206,6 +212,7 @@ export function getStackConfig(): StackConfig {
     jwks,
     jwk,
     clients,
+    keycloakClients,
   };
 }
 

@@ -5,6 +5,7 @@ import {downCommand} from "./commands/down";
 import {statusCommand} from "./commands/status";
 import {logsCommand} from "./commands/logs";
 import {restartCommand} from "./commands/restart";
+import {keysCommand} from "./commands/keys";
 
 export function registerStackModule(program: Command): void {
   const stack = program
@@ -17,6 +18,7 @@ export function registerStackModule(program: Command): void {
     .description("Start all or selected backend services")
     .argument("[services...]", "Services to start (postgres, keycloak, postgrest)")
     .option("--no-wait", "Skip health check waiting")
+    .option("--no-keys", "Skip auto-fetching Keycloak JWKs after startup")
     .action(async (services: string[], cmdOptions: Record<string, unknown>) => {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};
@@ -71,6 +73,19 @@ export function registerStackModule(program: Command): void {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};
         await restartCommand(options as never, service);
+      });
+    });
+
+  // Keys command
+  stack
+    .command("keys")
+    .description("Fetch JWKs and client credentials from Keycloak into secrets")
+    .option("--restart", "Restart PostgREST after updating secrets")
+    .option("--clients <names>", "Comma-separated client names to fetch (overrides config)")
+    .action(async (cmdOptions: Record<string, unknown>) => {
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await keysCommand(options as never);
       });
     });
 }

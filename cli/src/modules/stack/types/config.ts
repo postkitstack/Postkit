@@ -24,6 +24,7 @@ export interface StackKeycloakConfig {
   adminUser: string;
   adminPassword: string;
   realm: string;
+  clientRealm: string;
   volume: string;
 }
 
@@ -80,6 +81,7 @@ export interface StackConfig {
   jwks: StackJwksSecrets;
   jwk?: StackJwkKey;
   clients?: Record<string, StackClientSecrets>;
+  keycloakClients: string[];
 }
 
 // ============================================
@@ -101,6 +103,8 @@ export interface StackKeycloakPublicConfig {
   image?: string;
   realm?: string;
   volume?: string;
+  clientRealm?: string;
+  clients?: string[];
 }
 
 export interface StackPostgrestPublicConfig {
@@ -109,11 +113,6 @@ export interface StackPostgrestPublicConfig {
   image?: string;
   dbSchema?: string;
   dbAnonRole?: string;
-}
-
-export interface StackKeycloakPublicConfigExtended extends StackKeycloakPublicConfig {
-  clientRealm?: string;
-  clients?: string[];
 }
 
 export interface StackTraefikPublicConfig {

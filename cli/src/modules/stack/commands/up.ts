@@ -8,6 +8,7 @@ import {waitForAllServices} from "../services/health";
 
 export interface UpOptions extends CommandOptions {
   wait?: boolean;
+  keysRun?: boolean;
 }
 
 export async function upCommand(
@@ -58,7 +59,27 @@ export async function upCommand(
     }
   }
 
-  // Step 7: Print summary
+  // Step 7: Auto-fetch keys from Keycloak (unless --no-keys)
+  if (options.keysRun !== false && selected.includes("keycloak")) {
+    const keysSpinner = ora("Fetching JWKs and client credentials from Keycloak...").start();
+    try {
+      const {fetchAndMergeKeys, writeKeysToSecrets} = await import("../services/keycloak-keys");
+      const result = await fetchAndMergeKeys(config, keysSpinner);
+      writeKeysToSecrets(result);
+      // Regenerate compose with new jwks and recreate postgrest
+      if (selected.includes("postgrest")) {
+        const updatedConfig = getStackConfig();
+        const newComposeFile = writeComposeFile(updatedConfig, selected);
+        await composeUp(newComposeFile, ["postgrest"]);
+      }
+      keysSpinner.succeed("Keycloak JWKs fetched and PostgREST updated");
+    } catch (error) {
+      keysSpinner.warn(`Could not fetch Keycloak keys: ${(error as Error).message}`);
+      logger.warn("Run 'postkit stack keys' after Keycloak is configured.");
+    }
+  }
+
+  // Step 8: Print summary
   logger.blank();
   logger.success("Stack is running!");
   logger.blank();
