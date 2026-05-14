@@ -178,14 +178,14 @@ describe("db import — seed DB → import → verify all artifacts", () => {
   // ── Step 2: Verify schema directory structure ───────────────────────
 
   it("creates tables/ directory with SQL files", () => {
-    const dir = path.join(project.schemaPath, "tables");
+    const dir = path.join(project.schemaPath, "public", "tables");
     expect(fs.existsSync(dir)).toBe(true);
     const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
     expect(files.length).toBeGreaterThan(0);
   });
 
   it("creates functions/ directory with SQL files", () => {
-    const dir = path.join(project.schemaPath, "functions");
+    const dir = path.join(project.schemaPath, "public", "functions");
     expect(fs.existsSync(dir)).toBe(true);
     const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
     expect(files.length).toBeGreaterThan(0);
@@ -193,7 +193,7 @@ describe("db import — seed DB → import → verify all artifacts", () => {
 
   it("creates triggers/ directory or includes triggers in tables", () => {
     // pgschema dump may put triggers in a separate triggers/ dir or inline in tables/
-    const triggerDir = path.join(project.schemaPath, "triggers");
+    const triggerDir = path.join(project.schemaPath, "public", "triggers");
     if (fs.existsSync(triggerDir)) {
       const files = fs.readdirSync(triggerDir).filter((f) => f.endsWith(".sql"));
       expect(files.length).toBeGreaterThan(0);
@@ -205,7 +205,7 @@ describe("db import — seed DB → import → verify all artifacts", () => {
   });
 
   it("creates views/ directory with SQL files", () => {
-    const dir = path.join(project.schemaPath, "views");
+    const dir = path.join(project.schemaPath, "public", "views");
     expect(fs.existsSync(dir)).toBe(true);
     const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
     expect(files.length).toBeGreaterThan(0);
@@ -214,7 +214,7 @@ describe("db import — seed DB → import → verify all artifacts", () => {
   // ── Step 3: Verify schema file content ──────────────────────────────
 
   it("table files contain category and product DDL", () => {
-    const dir = path.join(project.schemaPath, "tables");
+    const dir = path.join(project.schemaPath, "public", "tables");
     const allSql = fs
       .readdirSync(dir)
       .filter((f) => f.endsWith(".sql"))
@@ -225,7 +225,7 @@ describe("db import — seed DB → import → verify all artifacts", () => {
   });
 
   it("function files contain update_updated_at", () => {
-    const dir = path.join(project.schemaPath, "functions");
+    const dir = path.join(project.schemaPath, "public", "functions");
     const allSql = fs
       .readdirSync(dir)
       .filter((f) => f.endsWith(".sql"))
@@ -241,7 +241,7 @@ describe("db import — seed DB → import → verify all artifacts", () => {
   });
 
   it("view files contain products_with_category", () => {
-    const dir = path.join(project.schemaPath, "views");
+    const dir = path.join(project.schemaPath, "public", "views");
     const allSql = fs
       .readdirSync(dir)
       .filter((f) => f.endsWith(".sql"))

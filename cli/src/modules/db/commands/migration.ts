@@ -72,7 +72,7 @@ export async function migrationCommand(options: MigrateOptions, name?: string): 
 
     const config = getDbConfig();
     const sessionMigrationsDir = getSessionMigrationsPath();
-    const template = getMigrationTemplate(config.schema);
+    const template = getMigrationTemplate(config.schemas[0] ?? "public");
 
     const migrationFile = await createMigrationFile(
       migrationName,

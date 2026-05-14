@@ -17,6 +17,7 @@ import {
   remoteRemoveCommand,
   remoteUseCommand,
 } from "./commands/remote";
+import {schemaAddCommand} from "./commands/schema";
 
 export function registerDbModule(program: Command): void {
   const db = program
@@ -118,6 +119,7 @@ export function registerDbModule(program: Command): void {
     .description("Show and apply seed data")
     .option("--apply", "Apply seeds to database")
     .option("--target <target>", "Target database: local or remote", "local")
+    .option("--schema <name>", "Filter seeds to a specific schema")
     .action(async (cmdOptions) => {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};
@@ -142,7 +144,8 @@ export function registerDbModule(program: Command): void {
   db.command("import")
     .description("Import an existing database into PostKit as a baseline migration")
     .option("--url <string>", "Database URL to import from (default: localDbUrl from config)")
-    .option("--schema <string>", "PostgreSQL schema to import", "public")
+    .option("--schema <string>", "Single PostgreSQL schema to import (use --schemas for multiple)")
+    .option("--schemas <list>", "Comma-separated list of schemas to import (e.g. public,app)")
     .option("--name <string>", "Label for the baseline migration", "imported_baseline")
     .option("-f, --force", "Skip confirmation prompts")
     .action(async (cmdOptions) => {
@@ -195,6 +198,21 @@ export function registerDbModule(program: Command): void {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};
         await remoteUseCommand(options, name);
+      });
+    });
+
+  // Schema command group
+  const schemaCmd = db.command("schema")
+    .description("Manage PostgreSQL schemas");
+
+  schemaCmd.command("add")
+    .description("Scaffold a new schema directory and register it in config")
+    .argument("<name>", "Schema name (lowercase letters, digits, underscores)")
+    .option("-f, --force", "Re-scaffold if directory already exists")
+    .action(async (name, cmdOptions) => {
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await schemaAddCommand(options, name);
       });
     });
 }

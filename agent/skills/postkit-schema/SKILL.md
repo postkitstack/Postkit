@@ -1,45 +1,66 @@
 ---
 name: postkit-schema
-description: Work with PostKit schema files — understand the directory structure, add or modify tables, types, enums, functions, and manage infra, grants, and seeds. Use this skill whenever editing files under db/schema/, creating or modifying SQL table definitions, adding columns, changing indexes, writing PostgreSQL functions or triggers, or managing grants and seed data — even if the user doesn't mention PostKit explicitly.
-paths: db/schema/**
+description: Work with PostKit schema files — understand the directory structure, add or modify tables, types, enums, functions, manage infra, seeds, and multiple schemas. Use this skill whenever editing files under db/schema/ or db/infra/, creating or modifying SQL table definitions, adding columns, changing indexes, writing PostgreSQL functions or triggers, managing seeds, or adding a new PostgreSQL schema — even if the user doesn't mention PostKit explicitly.
+paths: db/schema/**,db/infra/**
 allowed-tools: Bash(postkit *)
 ---
 
 # PostKit Schema File Management
 
-Guide for working with PostKit schema files in `db/schema/`.
+Guide for working with PostKit schema files. PostKit supports multiple PostgreSQL schemas in a single project.
 
-## Schema Directory Structure
+## Directory Structure
 
 ```
-db/schema/
-├── infra/         — Roles, schemas, extensions (pre-migration)
-├── extensions/    — PostgreSQL extensions
-├── types/         — Custom composite types
-├── enums/         — Enum types
-├── tables/        — Table definitions (columns, constraints)
-├── functions/     — Functions and stored procedures
-├── triggers/      — Trigger definitions
-├── views/         — View definitions
-├── indexes/       — Index definitions
-├── grants/        — GRANT statements (post-migration)
-└── seeds/         — Seed data (post-migration)
+db/
+├── infra/                  — DB-level objects (pre-migration, NOT pgschema-managed)
+│   ├── 001_roles.sql       — CREATE ROLE, CREATE USER
+│   ├── 002_schemas.sql     — CREATE SCHEMA
+│   └── 003_extensions.sql  — CREATE EXTENSION
+│
+└── schema/
+    └── <schema-name>/      — One directory per PostgreSQL schema (e.g. public, app)
+        ├── types/              — Custom composite types
+        ├── enums/              — ENUM types
+        ├── tables/             — Table definitions
+        ├── views/              — View definitions
+        ├── materialized_views/ — Materialized views
+        ├── functions/          — Functions and stored procedures
+        ├── triggers/           — Trigger definitions
+        ├── indexes/            — Index definitions
+        ├── constraints/        — Additional constraints
+        └── seeds/              — Seed data (post-migration)
 ```
+
+## Adding a New PostgreSQL Schema
+
+Use the scaffold command to create the directory structure and register it in config:
+
+```bash
+postkit db schema add <name>
+```
+
+For example:
+
+```bash
+postkit db schema add app
+```
+
+This creates `db/schema/app/` with all subdirectories, updates `db/infra/` with a `CREATE SCHEMA app;` statement, and adds `"app"` to the `schemas` array in `postkit.config.json`. Array order = execution order.
 
 ## What pgschema Manages
 
-The `pgschema` tool generates SQL from schema files and detects changes. It manages these directories:
+The `pgschema` tool generates SQL diffs from schema files. It manages these directories per schema:
 
-- `extensions/`, `types/`, `enums/`, `tables/`, `functions/`, `triggers/`, `views/`, `indexes/`
+- `types/`, `enums/`, `tables/`, `views/`, `materialized_views/`, `functions/`, `triggers/`, `indexes/`, `constraints/`
 
 These are **excluded** from pgschema and managed separately:
-- `infra/` — Applied before migrations via `postkit db infra`
-- `grants/` — Applied after migrations via `postkit db grants`
-- `seeds/` — Applied after migrations via `postkit db seed`
+- `db/infra/` — Applied before migrations via `postkit db infra`
+- `db/schema/<name>/seeds/` — Applied after migrations via `postkit db seed`
 
 ## Adding a New Table
 
-1. Create a SQL file in `db/schema/tables/` (e.g., `users.sql`):
+1. Create a SQL file in `db/schema/<name>/tables/` (e.g., `db/schema/public/tables/users.sql`):
 
 ```sql
 CREATE TABLE users (
@@ -50,7 +71,7 @@ CREATE TABLE users (
 );
 ```
 
-2. After adding or modifying schema files, run the migration workflow:
+2. Run the migration workflow:
 
 ```bash
 postkit db plan    # See the generated diff
@@ -59,23 +80,11 @@ postkit db apply   # Apply to local DB
 
 ## Modifying an Existing Table
 
-Edit the SQL file in `db/schema/tables/` directly. pgschema will detect the change and generate the appropriate `ALTER TABLE` statements.
-
-For example, to add a column, update the `CREATE TABLE` statement:
-
-```sql
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email TEXT NOT NULL UNIQUE,
-  name TEXT,
-  status TEXT NOT NULL DEFAULT 'active',  -- New column
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-```
+Edit the SQL file directly — pgschema detects the change and generates the appropriate `ALTER TABLE` statements automatically.
 
 ## Working with Enums
 
-Create a file in `db/schema/enums/` (e.g., `user_status.sql`):
+Create a file in `db/schema/<name>/enums/` (e.g., `db/schema/public/enums/user_status.sql`):
 
 ```sql
 CREATE TYPE user_status AS ENUM ('active', 'inactive', 'suspended');
@@ -83,7 +92,7 @@ CREATE TYPE user_status AS ENUM ('active', 'inactive', 'suspended');
 
 ## Working with Functions
 
-Create a file in `db/schema/functions/` (e.g., `update_timestamp.sql`):
+Create a file in `db/schema/<name>/functions/` (e.g., `db/schema/public/functions/update_timestamp.sql`):
 
 ```sql
 CREATE OR REPLACE FUNCTION update_timestamp()
@@ -95,9 +104,13 @@ END;
 $$ LANGUAGE plpgsql;
 ```
 
+## Cross-Schema References
+
+When a table in one schema references another schema (e.g., `app.users`), PostKit handles this automatically during `postkit db plan` — it applies intermediate migrations between schemas so foreign key references resolve correctly.
+
 ## Infrastructure (Roles, Schemas, Extensions)
 
-These go in `db/schema/infra/` and are applied **before** migrations:
+DB-level objects go in `db/infra/` and are applied **before** migrations:
 
 ```bash
 # View infra statements
@@ -110,21 +123,9 @@ postkit db infra --apply
 postkit db infra --apply --target remote
 ```
 
-## Grants
-
-Grant statements go in `db/schema/grants/` and are applied **after** migrations:
-
-```bash
-# View grant statements
-postkit db grants
-
-# Apply to local DB
-postkit db grants --apply
-```
-
 ## Seed Data
 
-Seed data goes in `db/schema/seeds/` and is applied **after** migrations:
+Seed data goes in `db/schema/<name>/seeds/` and is applied **after** migrations:
 
 ```bash
 # View seed statements
@@ -132,11 +133,14 @@ postkit db seed
 
 # Apply to local DB
 postkit db seed --apply
+
+# Apply seeds for a specific schema only
+postkit db seed --schema app --apply
 ```
 
 ## Important Notes
 
 - Schema files use `CREATE` statements (not `ALTER`). pgschema computes the diff automatically.
-- File names should be descriptive (e.g., `users.sql`, `orders.sql`).
-- Order matters within a directory — pgschema processes files alphabetically.
+- File names are sorted alphabetically within each directory — naming matters for dependency order.
 - After editing any schema file, always run `postkit db plan` to verify the generated diff before applying.
+- `db/infra/` is for cluster/database-level SQL only. Never put table or function definitions there.

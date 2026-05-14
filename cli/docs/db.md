@@ -88,8 +88,9 @@ Contains only non-sensitive project settings. Remotes are user/environment-speci
 ```json
 {
   "db": {
+    "infraPath": "db/infra",
     "schemaPath": "db/schema",
-    "schema": "public"
+    "schemas": ["public"]
   }
 }
 ```
@@ -123,8 +124,9 @@ Contains all credentials and remote configurations.
 | Property | File | Description | Required |
 |----------|------|-------------|----------|
 | `db.localDbUrl` | secrets | PostgreSQL URL for local clone database. Leave empty to use auto Docker container. | No |
-| `db.schemaPath` | config | Path to schema files (relative to project root) | No |
-| `db.schema` | config | Database schema name | No |
+| `db.schemaPath` | config | Root path for per-schema subdirectories (relative to project root). Default: `"db/schema"` | No |
+| `db.schemas` | config | Ordered array of schema names to manage. Array position = execution order. Default: `["public"]` | No |
+| `db.infraPath` | config | Path to DB-level infra directory (roles, extensions, CREATE SCHEMA). Default: `"db/infra"` | No |
 | `db.pgSchemaBin` | config | Path to pgschema binary | No |
 | `db.dbmateBin` | config | Path to dbmate binary | No |
 | `db.remotes` | secrets | Named remote database configurations | Yes (at least one) |
@@ -171,43 +173,35 @@ Bundled binaries are included for: `darwin-arm64`, `darwin-amd64`, `linux-arm64`
 
 ### Schema Directory Structure
 
-The tool expects schema files organized in `db/schema/`:
+The tool expects schema files in per-schema subdirectories under `db/schema/`, with DB-level infra at `db/infra/`:
 
 ```
-db/schema/
-├── infra/                    # Pre-migration infrastructure (roles, schemas, extensions)
+db/
+├── infra/                    # DB-level infrastructure (roles, extensions, CREATE SCHEMA)
 │   ├── 001_roles.sql
 │   ├── 002_schemas.sql
 │   └── 003_extensions.sql
-├── extensions/
-│   └── uuid.sql
-├── types/
-│   └── custom_types.sql
-├── enums/
-│   └── status_enum.sql
-├── tables/
-│   ├── users.sql
-│   ├── posts.sql
-│   └── comments.sql
-├── views/
-│   └── user_stats.sql
-├── materialized_views/
-│   └── dashboard_summary.sql
-├── functions/
-│   └── helpers.sql
-├── triggers/
-│   └── updated_at.sql
-├── indexes/
-│   └── performance.sql
-├── grants/                   # Grant statements (managed by pgschema)
-│   └── app_user.sql
-└── seeds/                    # Post-migration seed data
-    └── default_roles.sql
+└── schema/                   # Per-schema SQL files
+    ├── public/               # Schema: "public"
+    │   ├── types/
+    │   ├── enums/
+    │   ├── tables/
+    │   │   ├── users.sql
+    │   │   └── posts.sql
+    │   ├── views/
+    │   ├── functions/
+    │   ├── triggers/
+    │   ├── policies/
+    │   ├── grants/           # Grant statements (managed by pgschema)
+    │   └── seeds/            # Post-migration seed data
+    └── app/                  # Schema: "app" (optional)
+        ├── tables/
+        └── seeds/
 ```
 
-**Execution ordering:** infra (pre-migration) → pgschema-managed schema (extensions → types → enums → domains → sequences → tables → views → materialized_views → functions → triggers → indexes → constraints → policies → grants) → seeds (post-migration)
+**Execution ordering:** `db/infra/` (pre-migration, DB-level) → for each schema in `config.schemas` order: extensions → types → enums → domains → sequences → functions → tables → views → materialized_views → triggers → indexes → constraints → policies → grants → `seeds/` (post-migration per schema)
 
-**Note:** `infra/` and `seeds/` directories are excluded from pgschema processing and handled as separate steps. `grants/` is managed by pgschema.
+**Note:** `db/infra/` and `seeds/` are excluded from pgschema processing and applied as separate steps. `grants/` is managed by pgschema. Use `postkit db schema add <name>` to scaffold a new schema directory.
 
 ### PostKit Directory Structure
 
@@ -396,45 +390,45 @@ postkit db abort -f          # Skip confirmation
 
 ---
 
-### `postkit db import [--url <url>] [--schema <schema>] [--name <name>]`
+### `postkit db import [--url <url>] [--schemas <list>] [--name <name>]`
 
 Import an existing database into PostKit as a baseline migration. Use when onboarding a database not previously managed by PostKit.
 
 ```bash
-postkit db import                                          # Import from localDbUrl in config
-postkit db import --url "postgres://user:pass@host/myapp" # Import from specific URL
-postkit db import --schema myschema --name initial_baseline
+postkit db import                                           # Import all schemas from config
+postkit db import --url "postgres://user:pass@host/myapp"  # Import from specific URL
+postkit db import --schemas "public,app" --name initial_baseline
 ```
 
 **What it does:**
 1. Checks prerequisites (pgschema, dbmate, no active session)
 2. Connects to target database, reports table count
 3. Warns about existing schema/migration files (both directories will be **cleared and replaced**), prompts confirmation
-4. Runs `pgschema dump --multi-file` into a temp directory
-5. Clears existing schema directory and resets `committed.json`, then normalizes dump into PostKit schema directory structure:
-   - Roles queried directly from `pg_roles` → `infra/001_roles.sql` (idempotent `DO $$ IF NOT EXISTS $$`)
-   - Schemas queried directly from `pg_namespace` → `infra/002_schemas.sql` (`CREATE SCHEMA IF NOT EXISTS`)
+4. Runs `pgschema dump --multi-file` per schema into a temp directory
+5. Clears existing schema directory, then normalizes dump into PostKit structure:
+   - Object files copied into `db/schema/<name>/<section>/` with numeric prefix ordering
+   - Roles queried from `pg_roles` → `db/infra/001_roles.sql` (idempotent `DO $$ IF NOT EXISTS $$`)
+   - Schemas queried from `pg_namespace` → `db/infra/002_schemas.sql` (`CREATE SCHEMA IF NOT EXISTS`)
    - Extensions parsed from `schema.sql` → `extensions/imported_extensions.sql`
    - Privileges consolidated into `grants/<schema>.sql` (managed by pgschema)
-   - All SQL files are prefixed with numeric ordering (`001_filename.sql`) based on `schema.sql` `\i` directives
-6. Clears existing migrations directory and generates baseline DDL via `pgschema plan` against an empty temp database
-7. For non-public schemas, prepends `SET search_path TO "<schema>"` to the baseline migration
-8. Creates local database, applies infrastructure SQL (roles, schemas), then applies baseline migration via `dbmate`
-9. After successful local apply, inserts baseline version into `postkit.schema_migrations` on the source database
-10. Updates `committed.json` to track the baseline migration
-11. Cleans up temp directory, plan file, and generated schema file
+   - **Updates `postkit.config.json`** — adds all imported schema names to `db.schemas` array (idempotent)
+6. Clears existing migrations directory and generates baseline DDL via `pgschema plan` (all schemas in order, with intermediate apply between schemas)
+7. Creates local database, applies `db/infra/` SQL, then applies baseline migration via `dbmate`
+8. After successful local apply, inserts baseline version into `postkit.schema_migrations` on the source database
+9. Updates `committed.json` to track the baseline migration
+10. Cleans up temp directory, plan file, and generated schema files
 
 **Why roles/schemas are queried from DB directly:**
 `pgschema dump` does not emit `CREATE SCHEMA` or `CREATE ROLE` statements. PostKit queries `pg_catalog.pg_namespace` and `pg_catalog.pg_roles` instead to reliably capture infra.
 
 **Why infra SQL is applied before dbmate:**
-The baseline migration contains `ALTER DEFAULT PRIVILEGES` and other statements that reference roles. These roles must exist in the local database before dbmate runs the migration. The infra SQL (from `schema/infra/`) is applied to the local database first to create those roles.
+The baseline migration may contain `ALTER DEFAULT PRIVILEGES` and other statements that reference roles. These roles must exist in the local database before dbmate runs the migration. `db/infra/` is applied first to create those roles.
 
 ---
 
 ### `postkit db infra [--apply] [--target <local|remote>]`
 
-Manage infrastructure SQL (roles, schemas, extensions) from `db/schema/infra/`.
+Manage infrastructure SQL (roles, schemas, extensions) from `db/infra/`.
 
 ```bash
 postkit db infra                          # Show infra statements
@@ -545,6 +539,109 @@ Session migrations are staged in `.postkit/db/session/` and committed migrations
 
 ---
 
+## 🔀 Cross-Schema Migrations
+
+When your project uses multiple schemas (e.g. `public` and `app`), some changes cannot be expressed inside a single schema's SQL files — specifically anything that **references objects in another schema**. This section explains the limitation and the correct approach.
+
+---
+
+### What NOT to do
+
+**Do not add cross-schema foreign keys inside pgschema-managed schema files.**
+
+pgschema plans each schema independently. When it processes `db/schema/app/tables/order_item.sql`, it creates a temporary internal schema to analyse the desired state. That temporary environment does not contain `public.product` or any other schema's objects, so a FK like:
+
+```sql
+-- db/schema/app/tables/order_item.sql  ← DO NOT do this
+CREATE TABLE app.order_item (
+    product_id UUID NOT NULL REFERENCES public.product(id)  -- ❌ will fail pgschema plan
+);
+```
+
+will fail with:
+
+```
+ERROR: relation "public.product" does not exist
+```
+
+Similarly, **do not write cross-schema views, functions, or triggers inside schema files** if they reference objects from another schema — pgschema cannot resolve them during planning.
+
+---
+
+### The correct approach — manual migration
+
+Use `postkit db migration` to write a plain SQL migration that runs after both schemas exist. Manual migrations bypass pgschema entirely and are applied directly by dbmate, so all schemas and their objects are already present when the SQL executes.
+
+**Step-by-step:**
+
+```bash
+# 1. Start a session as normal
+postkit db start
+
+# 2. Plan and apply your per-schema structural changes first
+#    (tables, types, functions — without cross-schema refs)
+postkit db plan
+postkit db apply
+
+# 3. Create a manual migration for the cross-schema constraint
+postkit db migration add_cross_schema_fk
+```
+
+PostKit opens the migration file for you. Write the cross-schema SQL in the `-- migrate:up` section:
+
+```sql
+-- migrate:up
+
+-- FK from app.order_item → public.product (added after both schemas exist)
+ALTER TABLE app.order_item
+    ADD CONSTRAINT fk_order_item_product
+    FOREIGN KEY (product_id) REFERENCES public.product(id) ON DELETE RESTRICT;
+
+-- Cross-schema view in app referencing public.product
+CREATE VIEW app.order_summary AS
+SELECT oi.id, p.name AS product_name, oi.quantity
+FROM app.order_item oi
+JOIN public.product p ON p.id = oi.product_id;
+
+-- migrate:down
+ALTER TABLE app.order_item DROP CONSTRAINT IF EXISTS fk_order_item_product;
+DROP VIEW IF EXISTS app.order_summary;
+```
+
+```bash
+# 4. Apply the manual migration (dbmate runs it; all schemas are in place)
+postkit db apply
+
+# 5. Commit and deploy as normal
+postkit db commit
+postkit db deploy
+```
+
+---
+
+### What belongs where
+
+| Change type | Where to put it | Applied by |
+|-------------|-----------------|------------|
+| Tables, indexes, types, enums in one schema | `db/schema/<name>/tables/` etc. | pgschema → dbmate |
+| RLS policies, grants in one schema | `db/schema/<name>/policies/` etc. | pgschema → dbmate |
+| Cross-schema FK constraints | Manual migration (`postkit db migration`) | dbmate only |
+| Cross-schema views / functions | Manual migration (`postkit db migration`) | dbmate only |
+| Schema namespace creation (`CREATE SCHEMA`) | `db/infra/` | infra step (psql) |
+| Role creation / extensions | `db/infra/` | infra step (psql) |
+
+---
+
+### Why the intermediate apply exists (and its limit)
+
+During `postkit db plan`, each schema's plan is applied to the local database immediately after it is generated (called the *intermediate apply*). This means by the time `pgschema` plans schema `app`, the objects from schema `public` already exist in the local DB.
+
+However, the *pgschema planning step itself* still fails on cross-schema FK references because pgschema analyses the schema file in its own isolated temporary environment — not the live local DB. The intermediate apply only helps with the **final apply step**, not the plan generation step.
+
+This is why cross-schema constraints must be written as manual migrations rather than inline FK references in schema files.
+
+---
+
 ## 🐛 Troubleshooting
 
 | Issue | Solution |
@@ -565,3 +662,5 @@ Session migrations are staged in `.postkit/db/session/` and committed migrations
 | `Import: Could not insert migration tracking record` | Non-fatal. The local DB migration succeeded but the source DB tracking record failed. Manually insert the version into `postkit.schema_migrations` on the source DB. |
 | `Import: column does not exist during local apply` | Infrastructure SQL (roles, schemas) may not have been applied to the local database before dbmate. Ensure `schema/infra/` files exist and are valid. |
 | `Import: relation does not exist during pgschema plan` | The `pgschema dump` ordering may not account for foreign key or policy dependencies. This is handled by pgschema internally. |
+| `Plan: relation "other_schema.table" does not exist` | A schema file contains a cross-schema reference (e.g. `REFERENCES public.product(id)` inside `db/schema/app/`). pgschema cannot resolve cross-schema refs during planning. Remove the FK from the schema file and add it as a manual migration — see **Cross-Schema Migrations** above. |
+| `Plan: Schema "public" has no directory — skipping` | The schema is listed in `db.schemas` in config but `db/schema/public/` does not exist on disk. Run `postkit db schema add public` to scaffold it, or remove `"public"` from `db.schemas` if you don't need it. |

@@ -15,8 +15,8 @@ Guide Claude through PostKit's session-based migration workflow. The user may wa
 PostKit uses a **session-based migration model**:
 
 1. **Start** — Clone the remote DB to local, begin a session
-2. **Plan** — Generate a schema diff (what changed vs. remote baseline)
-3. **Apply** — Apply the migration to the local cloned DB
+2. **Plan** — Generate a schema diff per schema (what changed vs. remote baseline)
+3. **Apply** — Apply the combined migration to the local cloned DB
 4. **Commit** — Merge session migrations into a committed migration
 5. **Deploy** — Deploy committed migrations to the remote DB
 
@@ -46,13 +46,13 @@ postkit db start --remote staging
 
 ### Step 2: Plan the Migration
 
-After making schema file changes in `db/schema/`, generate the diff:
+After making schema file changes in `db/schema/<name>/`, generate the diff:
 
 ```bash
 postkit db plan
 ```
 
-This reads all schema files, generates the SQL diff, and saves it to `.postkit/db/plan.sql`. Review the plan output before proceeding.
+PostKit runs pgschema per schema in config order, with intermediate applies between schemas to resolve cross-schema references. Each schema produces a `plan_<name>.sql` file in `.postkit/db/`. Review the plan output before proceeding.
 
 ### Step 3: Apply to Local
 
@@ -60,7 +60,7 @@ This reads all schema files, generates the SQL diff, and saves it to `.postkit/d
 postkit db apply
 ```
 
-Applies the planned migration to the local cloned database. This creates a dbmate migration file in `.postkit/db/session/`.
+Validates fingerprints, wraps all per-schema plan files into a single dbmate migration file, and applies it to the local cloned database. Creates the migration file in `.postkit/db/session/`.
 
 ### Step 4: Commit the Session
 
@@ -109,8 +109,8 @@ This cancels the session and cleans up local resources.
 ### Quick schema change cycle
 
 ```bash
-# Edit schema files in db/schema/tables/ etc.
-postkit db plan        # See what changed
+# Edit schema files in db/schema/<name>/tables/ etc.
+postkit db plan        # See what changed across all schemas
 postkit db apply       # Apply locally
 postkit db commit      # Commit the change
 ```

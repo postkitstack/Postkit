@@ -7,7 +7,10 @@ import type {TestProject} from "./test-project";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Path to the predefined fixture schema (test/e2e/fixtures/schema/)
+// Path to the predefined fixture infra dir (test/e2e/fixtures/infra/)
+const FIXTURE_INFRA_DIR = path.resolve(__dirname, "..", "fixtures", "infra");
+
+// Path to the predefined fixture schema dir (test/e2e/fixtures/schema/)
 const FIXTURE_SCHEMA_DIR = path.resolve(__dirname, "..", "fixtures", "schema");
 
 // ---------------------------------------------------------------------------
@@ -15,29 +18,68 @@ const FIXTURE_SCHEMA_DIR = path.resolve(__dirname, "..", "fixtures", "schema");
 // ---------------------------------------------------------------------------
 
 /**
- * Copy the entire predefined fixture schema into the test project's schema dir.
- * This mirrors the real test-proj/schema structure with:
- *   infra/, core/, tables/, rls/, grants/, seed/, trigger/, function/, view/
+ * Copy the public schema fixture + infra into the test project.
+ * Copies:
+ *   fixtures/infra/         → project.infraPath
+ *   fixtures/schema/public/ → project.schemaPath/public/
  *
- * Use this for workflow tests that need a realistic schema.
+ * Use this for workflow tests that need a realistic single-schema setup.
  */
 export async function installFixtureSchema(project: TestProject): Promise<void> {
-  await copyDirRecursive(FIXTURE_SCHEMA_DIR, project.schemaPath);
+  // Copy infra files
+  if (fsSync.existsSync(FIXTURE_INFRA_DIR)) {
+    await copyDirRecursive(FIXTURE_INFRA_DIR, project.infraPath);
+  }
+  // Copy public schema files
+  const publicSrc = path.join(FIXTURE_SCHEMA_DIR, "public");
+  if (fsSync.existsSync(publicSrc)) {
+    await copyDirRecursive(publicSrc, path.join(project.schemaPath, "public"));
+  }
 }
 
 /**
- * Copy a subset of the fixture schema (only the named sections).
- * Sections: 'infra', 'core', 'tables', 'rls', 'grants', 'seed', 'trigger', 'function', 'view'
+ * Copy all schema subdirs (public, app, etc.) + infra into the test project.
+ * Use this for multi-schema workflow tests.
+ */
+export async function installMultiSchemaFixture(project: TestProject): Promise<void> {
+  // Copy infra
+  if (fsSync.existsSync(FIXTURE_INFRA_DIR)) {
+    await copyDirRecursive(FIXTURE_INFRA_DIR, project.infraPath);
+  }
+  // Copy all schema subdirs (public, app, etc.)
+  const entries = await fs.readdir(FIXTURE_SCHEMA_DIR, {withFileTypes: true});
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      await copyDirRecursive(
+        path.join(FIXTURE_SCHEMA_DIR, entry.name),
+        path.join(project.schemaPath, entry.name),
+      );
+    }
+  }
+}
+
+/**
+ * Copy a subset of the fixture schema (only the named sections) for a given schema name.
+ * Sections: 'core', 'tables', 'rls', 'grants', 'seed', 'trigger', 'function', 'view'
+ * Special: if sections includes 'infra', copies from FIXTURE_INFRA_DIR to project.infraPath.
  */
 export async function installFixtureSections(
   project: TestProject,
+  schemaName: string,
   sections: string[],
 ): Promise<void> {
   for (const section of sections) {
-    const src = path.join(FIXTURE_SCHEMA_DIR, section);
-    const dest = path.join(project.schemaPath, section);
-    if (fsSync.existsSync(src)) {
-      await copyDirRecursive(src, dest);
+    if (section === "infra") {
+      // infra lives at top-level fixtures/infra/, not inside a schema dir
+      if (fsSync.existsSync(FIXTURE_INFRA_DIR)) {
+        await copyDirRecursive(FIXTURE_INFRA_DIR, project.infraPath);
+      }
+    } else {
+      const src = path.join(FIXTURE_SCHEMA_DIR, schemaName, section);
+      const dest = path.join(project.schemaPath, schemaName, section);
+      if (fsSync.existsSync(src)) {
+        await copyDirRecursive(src, dest);
+      }
     }
   }
 }
@@ -47,14 +89,15 @@ export async function installFixtureSections(
 // ---------------------------------------------------------------------------
 
 /**
- * Write a table DDL file into schema/tables/.
+ * Write a table DDL file into schema/<schemaName>/tables/.
  */
 export async function writeTableSchema(
   project: TestProject,
+  schemaName: string,
   fileName: string,
   ddl: string,
 ): Promise<string> {
-  const dir = path.join(project.schemaPath, "tables");
+  const dir = path.join(project.schemaPath, schemaName, "tables");
   await fs.mkdir(dir, {recursive: true});
   const filePath = path.join(dir, `${fileName}.sql`);
   await fs.writeFile(filePath, ddl, "utf-8");
@@ -62,14 +105,14 @@ export async function writeTableSchema(
 }
 
 /**
- * Write an infra SQL file into schema/infra/.
+ * Write an infra SQL file into the project's infraPath (db/infra/).
  */
 export async function writeInfraFile(
   project: TestProject,
   fileName: string,
   sql: string,
 ): Promise<string> {
-  const dir = path.join(project.schemaPath, "infra");
+  const dir = project.infraPath;
   await fs.mkdir(dir, {recursive: true});
   const filePath = path.join(dir, `${fileName}.sql`);
   await fs.writeFile(filePath, sql, "utf-8");
@@ -77,15 +120,15 @@ export async function writeInfraFile(
 }
 
 /**
- * Write a grant SQL file into schema/grants/ (or schema/grants/).
+ * Write a grant SQL file into schema/<schemaName>/grants/.
  */
 export async function writeGrantFile(
   project: TestProject,
+  schemaName: string,
   fileName: string,
   sql: string,
-  subdir = "grants",
 ): Promise<string> {
-  const dir = path.join(project.schemaPath, subdir);
+  const dir = path.join(project.schemaPath, schemaName, "grants");
   await fs.mkdir(dir, {recursive: true});
   const filePath = path.join(dir, `${fileName}.sql`);
   await fs.writeFile(filePath, sql, "utf-8");
@@ -93,14 +136,15 @@ export async function writeGrantFile(
 }
 
 /**
- * Write a seed SQL file into schema/seeds/.
+ * Write a seed SQL file into schema/<schemaName>/seed/.
  */
 export async function writeSeedFile(
   project: TestProject,
+  schemaName: string,
   fileName: string,
   sql: string,
 ): Promise<string> {
-  const dir = path.join(project.schemaPath, "seeds");
+  const dir = path.join(project.schemaPath, schemaName, "seed");
   await fs.mkdir(dir, {recursive: true});
   const filePath = path.join(dir, `${fileName}.sql`);
   await fs.writeFile(filePath, sql, "utf-8");
@@ -108,14 +152,15 @@ export async function writeSeedFile(
 }
 
 /**
- * Write an RLS SQL file into schema/rls/.
+ * Write an RLS SQL file into schema/<schemaName>/rls/.
  */
 export async function writeRlsFile(
   project: TestProject,
+  schemaName: string,
   fileName: string,
   sql: string,
 ): Promise<string> {
-  const dir = path.join(project.schemaPath, "rls");
+  const dir = path.join(project.schemaPath, schemaName, "rls");
   await fs.mkdir(dir, {recursive: true});
   const filePath = path.join(dir, `${fileName}.sql`);
   await fs.writeFile(filePath, sql, "utf-8");
@@ -123,14 +168,15 @@ export async function writeRlsFile(
 }
 
 /**
- * Write a trigger SQL file into schema/trigger/.
+ * Write a trigger SQL file into schema/<schemaName>/trigger/.
  */
 export async function writeTriggerFile(
   project: TestProject,
+  schemaName: string,
   fileName: string,
   sql: string,
 ): Promise<string> {
-  const dir = path.join(project.schemaPath, "trigger");
+  const dir = path.join(project.schemaPath, schemaName, "trigger");
   await fs.mkdir(dir, {recursive: true});
   const filePath = path.join(dir, `${fileName}.sql`);
   await fs.writeFile(filePath, sql, "utf-8");
@@ -138,14 +184,15 @@ export async function writeTriggerFile(
 }
 
 /**
- * Write a function SQL file into schema/function/.
+ * Write a function SQL file into schema/<schemaName>/function/.
  */
 export async function writeFunctionFile(
   project: TestProject,
+  schemaName: string,
   fileName: string,
   sql: string,
 ): Promise<string> {
-  const dir = path.join(project.schemaPath, "function");
+  const dir = path.join(project.schemaPath, schemaName, "function");
   await fs.mkdir(dir, {recursive: true});
   const filePath = path.join(dir, `${fileName}.sql`);
   await fs.writeFile(filePath, sql, "utf-8");
@@ -153,14 +200,15 @@ export async function writeFunctionFile(
 }
 
 /**
- * Write a view SQL file into schema/view/.
+ * Write a view SQL file into schema/<schemaName>/view/.
  */
 export async function writeViewFile(
   project: TestProject,
+  schemaName: string,
   fileName: string,
   sql: string,
 ): Promise<string> {
-  const dir = path.join(project.schemaPath, "view");
+  const dir = path.join(project.schemaPath, schemaName, "view");
   await fs.mkdir(dir, {recursive: true});
   const filePath = path.join(dir, `${fileName}.sql`);
   await fs.writeFile(filePath, sql, "utf-8");
@@ -168,14 +216,15 @@ export async function writeViewFile(
 }
 
 /**
- * Write a core SQL file into schema/core/.
+ * Write a core SQL file into schema/<schemaName>/core/.
  */
 export async function writeCoreFile(
   project: TestProject,
+  schemaName: string,
   fileName: string,
   sql: string,
 ): Promise<string> {
-  const dir = path.join(project.schemaPath, "core");
+  const dir = path.join(project.schemaPath, schemaName, "core");
   await fs.mkdir(dir, {recursive: true});
   const filePath = path.join(dir, `${fileName}.sql`);
   await fs.writeFile(filePath, sql, "utf-8");
@@ -183,13 +232,16 @@ export async function writeCoreFile(
 }
 
 // ---------------------------------------------------------------------------
-// Fixture fixture table names — for test assertions
+// Fixture table names — for test assertions
 // ---------------------------------------------------------------------------
 
-/** Tables created by the fixture schema */
+/** Tables created by the public fixture schema */
 export const FIXTURE_TABLES = ["category", "product"] as const;
 
-/** Roles created by the fixture schema */
+/** Tables created by the app fixture schema */
+export const FIXTURE_APP_TABLES = ["orders", "order_item"] as const;
+
+/** Roles created by the fixture infra */
 export const FIXTURE_ROLES = ["api_user", "readonly", "editor", "manager"] as const;
 
 /** Seed category IDs from the fixture */

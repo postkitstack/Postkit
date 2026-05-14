@@ -245,7 +245,7 @@ describe("Case 5: Custom Schema — import → start → plan → apply → comm
   });
 
   it("creates schema files in PostKit structure", () => {
-    const tablesDir = path.join(project.schemaPath, "tables");
+    const tablesDir = path.join(project.schemaPath, CUSTOM_SCHEMA, "tables");
     expect(fs.existsSync(tablesDir)).toBe(true);
     const files = fs.readdirSync(tablesDir).filter((f) => f.endsWith(".sql"));
     expect(files.length).toBeGreaterThan(0);
@@ -283,7 +283,7 @@ describe("Case 5: Custom Schema — import → start → plan → apply → comm
   // ── Phase 3: Add a new table to schema files and plan ─────────────────
 
   it("adds a new table (tag) to schema files", () => {
-    const tablesDir = path.join(project.schemaPath, "tables");
+    const tablesDir = path.join(project.schemaPath, CUSTOM_SCHEMA, "tables");
     const tagSql = `
 -- Table: tag
 CREATE TABLE tag (

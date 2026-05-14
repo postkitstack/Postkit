@@ -30,7 +30,7 @@ export async function infraCommand(options: InfraOptions): Promise<void> {
       spinner.warn("No infra files found");
       logger.blank();
       logger.info("Infra files should be placed in:");
-      logger.info("  - db/schema/infra/");
+      logger.info("  - db/infra/");
       return;
     }
 

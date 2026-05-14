@@ -4,12 +4,19 @@ vi.mock("../../../../src/modules/db/utils/db-config", () => ({
   getDbConfig: vi.fn(() => ({
     localDbUrl: "postgres://localhost:5432/test",
     schemaPath: "/project/schema",
-    schema: "public",
+    schemas: ["public"],
+    infraPath: "/project/db/infra",
     remotes: {},
     cliRoot: "/cli",
     projectRoot: "/project",
   })),
-  getGeneratedSchemaPath: vi.fn(() => "/project/.postkit/db/schema.sql"),
+  getGeneratedSchemaPath: vi.fn((name: string) => `/project/.postkit/db/schema_${name}.sql`),
+  getPostkitDbDir: vi.fn(() => "/project/.postkit/db"),
+  MIGRATIONS_TABLE: "postkit.schema_migrations",
+}));
+
+vi.mock("../../../../src/modules/db/services/infra-generator", () => ({
+  getInfraSQL: vi.fn(async () => "-- No infra files found"),
 }));
 
 vi.mock("fs/promises", async () => {
@@ -45,7 +52,7 @@ describe("schema-generator", () => {
       vi.mocked(fs.readdir).mockImplementation(async (dir: any, opts?: any) => {
         const dirStr = String(dir);
         // Top-level: discoverSchemaSections uses {withFileTypes: true}
-        if (opts?.withFileTypes && dirStr === "/project/schema") return [
+        if (opts?.withFileTypes && dirStr === "/project/schema/public") return [
           {name: "tables", isFile: () => false, isDirectory: () => true},
           {name: "enums", isFile: () => false, isDirectory: () => true},
         ] as any;
@@ -57,8 +64,8 @@ describe("schema-generator", () => {
       vi.mocked(fs.stat).mockResolvedValue({isFile: () => false, isDirectory: () => true} as any);
       vi.mocked(fs.readFile).mockResolvedValue("SELECT 1;");
       vi.mocked(fs.writeFile).mockResolvedValue();
-      const {schemaFile} = await generateSchemaSQLAndFingerprint();
-      expect(schemaFile).toBe("/project/.postkit/db/schema.sql");
+      const {schemaFile} = await generateSchemaSQLAndFingerprint("public");
+      expect(schemaFile).toBe("/project/.postkit/db/schema_public.sql");
       const written = vi.mocked(fs.writeFile).mock.calls[0]![1] as string;
       const enumIdx = written.indexOf("enums");
       const tableIdx = written.indexOf("tables");
@@ -69,7 +76,7 @@ describe("schema-generator", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(fs.readdir).mockImplementation(async (dir: any, opts?: any) => {
         const dirStr = String(dir);
-        if (opts?.withFileTypes && dirStr === "/project/schema") return [
+        if (opts?.withFileTypes && dirStr === "/project/schema/public") return [
           {name: "seeds", isFile: () => false, isDirectory: () => true},
           {name: "tables", isFile: () => false, isDirectory: () => true},
         ] as any;
@@ -79,7 +86,7 @@ describe("schema-generator", () => {
       vi.mocked(fs.stat).mockResolvedValue({isFile: () => false, isDirectory: () => true} as any);
       vi.mocked(fs.readFile).mockResolvedValue("SELECT 1;");
       vi.mocked(fs.writeFile).mockResolvedValue();
-      await generateSchemaSQLAndFingerprint();
+      await generateSchemaSQLAndFingerprint("public");
       const written = vi.mocked(fs.writeFile).mock.calls[0]![1] as string;
       expect(written).not.toContain("Section: seeds");
     });
@@ -88,13 +95,13 @@ describe("schema-generator", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(fs.readdir).mockResolvedValue([]);
       vi.mocked(fs.writeFile).mockResolvedValue();
-      const {fingerprint} = await generateSchemaSQLAndFingerprint();
+      const {fingerprint} = await generateSchemaSQLAndFingerprint("public");
       expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
     });
 
     it("throws when schema directory not found", async () => {
       vi.mocked(existsSync).mockReturnValue(false);
-      await expect(generateSchemaSQLAndFingerprint()).rejects.toThrow("Schema directory not found");
+      await expect(generateSchemaSQLAndFingerprint("public")).rejects.toThrow("Schema directory not found");
     });
   });
 
@@ -103,7 +110,7 @@ describe("schema-generator", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(fs.readdir).mockResolvedValue([]);
       vi.mocked(fs.writeFile).mockResolvedValue();
-      const {fingerprint} = await generateSchemaSQLAndFingerprint();
+      const {fingerprint} = await generateSchemaSQLAndFingerprint("public");
       expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
     });
   });
@@ -111,12 +118,13 @@ describe("schema-generator", () => {
   describe("deleteGeneratedSchema()", () => {
     it("removes file when it exists", async () => {
       vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(fs.readdir).mockResolvedValue(["schema_public.sql", "schema_app.sql", "plan_public.sql"] as any);
       vi.mocked(fs.unlink).mockResolvedValue();
       await deleteGeneratedSchema();
-      expect(fs.unlink).toHaveBeenCalled();
+      expect(fs.unlink).toHaveBeenCalledTimes(2);
     });
 
-    it("is no-op when file missing", async () => {
+    it("is no-op when dbDir missing", async () => {
       vi.mocked(existsSync).mockReturnValue(false);
       await deleteGeneratedSchema();
       expect(fs.unlink).not.toHaveBeenCalled();

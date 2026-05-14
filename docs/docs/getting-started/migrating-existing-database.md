@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 4
 ---
 
 # Migrating an Existing Database
@@ -16,7 +16,7 @@ If you have an existing PostgreSQL database that is not yet managed by PostKit, 
 
 - PostgreSQL client tools (`psql`, `pg_dump`) installed
 - Access to the source database (connection URL)
-- A `postkit.config.json` configured with a `localDbUrl`
+- A `postkit.secrets.json` configured with a `localDbUrl` (or Docker installed for auto-container)
 
 If you haven't set up PostKit yet, run `postkit init` first. See [Installation](/docs/getting-started/installation) and [Configuration](/docs/getting-started/configuration).
 
@@ -37,17 +37,17 @@ See [`db remote`](/docs/modules/db/commands/remote) for more details.
 Run the import command against your existing database:
 
 ```bash
-# Import using localDbUrl from config
-postkit db import
+# Import a single schema (default)
+postkit db import --url "postgres://..."
 
-# Or point to a specific database
-postkit db import --url "postgres://user:pass@host:5432/myapp"
+# Import multiple schemas
+postkit db import --url "postgres://..." --schemas "public,app"
 ```
 
 This will:
 - Dump the schema from your database using `pgschema`
-- Organize SQL files into PostKit's schema directory structure (`tables/`, `views/`, `functions/`, etc.)
-- Extract roles and schemas into `infra/`
+- Organize SQL files into PostKit's schema directory structure (`db/schema/<name>/tables/`, `views/`, `functions/`, etc.)
+- Extract roles and schemas into `db/infra/`
 - Create a baseline migration in `.postkit/db/migrations/`
 - Set up your local database with the imported schema
 
@@ -58,19 +58,21 @@ For all available options, see the [`db import` command reference](/docs/modules
 After import, your schema directory will be populated:
 
 ```
-db/schema/
+db/
 ├── infra/
 │   ├── roles.sql              # Extracted roles
 │   └── schemas.sql            # Extracted schemas
-├── tables/
-│   ├── 001_app_config.sql     # Numeric prefix ordering
-│   ├── 002_app_user.sql
-│   └── ...
-├── views/
-├── functions/
-├── grants/                         # Managed by pgschema
-│   └── public.sql             # Consolidated privileges
-└── .pgschemaignore
+└── schema/
+    └── public/
+        ├── tables/
+        │   ├── 001_app_config.sql   # Numeric prefix ordering
+        │   ├── 002_app_user.sql
+        │   └── ...
+        ├── views/
+        ├── functions/
+        ├── grants/                  # Managed by pgschema
+        │   └── public.sql           # Consolidated privileges
+        └── .pgschemaignore
 ```
 
 Review the files to make sure everything looks correct. You can rename, split, or reorganize files as needed.
@@ -111,10 +113,11 @@ The import process performs these steps automatically:
 2. Dumps the schema using `pgschema dump --multi-file`
 3. Adds numeric prefixes to SQL files based on dependency order
 4. Normalizes the dump into PostKit's directory structure
-5. Extracts roles, schemas, and extensions into `infra/`
-6. Creates a baseline migration and registers it in `committed.json`
-7. Sets up the local database with the imported schema
-8. Syncs migration state back to the source database
+5. Extracts roles, schemas, and extensions into `db/infra/`
+6. **Updates `postkit.config.json`** — adds all imported schema names to `db.schemas`
+7. Creates a baseline migration and registers it in `committed.json`
+8. Sets up the local database with the imported schema
+9. Syncs migration state back to the source database
 
 For the full technical details, see [`db import`](/docs/modules/db/commands/import).
 
