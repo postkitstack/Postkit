@@ -9,7 +9,9 @@ export type {
   StackPublicConfig,
   StackPostgresSecrets,
   StackKeycloakSecrets,
-  StackPostgrestSecrets,
+  StackJwkKey,
+  StackJwksSecrets,
+  StackClientSecrets,
   StackSecretsConfig,
   ServiceStatus,
 } from "./config";

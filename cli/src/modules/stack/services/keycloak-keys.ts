@@ -185,7 +185,7 @@ export async function fetchClientCredentials(
   const listUrl = `${keycloakUrl}/admin/realms/${clientRealm}/clients?clientId=${encodeURIComponent(clientName)}`;
   const listBody = await httpGet(listUrl, adminToken);
   const clients = JSON.parse(listBody) as Array<{id: string}>;
-  if (!clients || clients.length === 0) {
+  if (!clients || clients.length === 0 || !clients[0]) {
     throw new Error(`Keycloak client "${clientName}" not found in realm "${clientRealm}"`);
   }
   const uuid = clients[0].id;
