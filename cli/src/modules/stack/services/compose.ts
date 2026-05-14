@@ -182,7 +182,7 @@ function renderPostgrest(config: StackConfig): string {
       PGRST_DB_URI: postgres://${pg.user}:${pg.password}@postgres:5432/${pg.database}
       PGRST_DB_SCHEMAS: ${pr.dbSchema}
       PGRST_DB_ANON_ROLE: ${pr.dbAnonRole}
-      PGRST_JWT_SECRET: ${pr.jwtSecret}
+      PGRST_JWT_JWKS: '${JSON.stringify(config.jwks)}'
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.postgrest.rule=Host(\`api.localhost\`)"

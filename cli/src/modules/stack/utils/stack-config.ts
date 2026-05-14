@@ -10,6 +10,9 @@ import type {
   StackPostgrestConfig,
   StackTraefikConfig,
   StackSecretsConfig,
+  StackJwksSecrets,
+  StackJwkKey,
+  StackClientSecrets,
 } from "../types/config";
 
 // Re-export for convenience
@@ -85,14 +88,9 @@ const KeycloakSecretsSchema = z.object({
   adminPassword: z.string().min(1).optional(),
 });
 
-const PostgrestSecretsSchema = z.object({
-  jwtSecret: z.string().min(1).optional(),
-});
-
 const StackSecretsSchema = z.object({
   postgres: PostgresSecretsSchema.optional(),
   keycloak: KeycloakSecretsSchema.optional(),
-  postgrest: PostgrestSecretsSchema.optional(),
 });
 
 // ============================================
@@ -101,6 +99,11 @@ const StackSecretsSchema = z.object({
 
 function generateSecret(length = 32): string {
   return crypto.randomBytes(length).toString("hex");
+}
+
+function generateOctJwk(kid = "postkit-signing-key"): StackJwkKey {
+  const k = crypto.randomBytes(32).toString("base64url");
+  return {kty: "oct", kid, alg: "HS256", k};
 }
 
 function formatZodErrors(error: z.ZodError): string {
@@ -174,7 +177,6 @@ export function getStackConfig(): StackConfig {
     port: (prPub.port as number) ?? DEFAULT_POSTGREST_PORT,
     dbSchema: (prPub.dbSchema as string) ?? "public",
     dbAnonRole: (prPub.dbAnonRole as string) ?? "anon",
-    jwtSecret: (pg.jwtSecret as string) ?? "",
   };
 
   const traefik: StackTraefikConfig = {
@@ -184,12 +186,26 @@ export function getStackConfig(): StackConfig {
     dashboardPort: (trPub.dashboardPort as number) ?? DEFAULT_TRAEFIK_DASHBOARD_PORT,
   };
 
+  // Read jwks / jwk / clients from secrets (populated by ensureStackSecrets / stack keys)
+  const secretsFile: Record<string, unknown> = fs.existsSync(getSecretsFilePath())
+    ? JSON.parse(fs.readFileSync(getSecretsFilePath(), "utf-8"))
+    : {};
+  const ss = ((secretsFile.stack ?? {}) as Record<string, unknown>);
+
+  const jwks: StackJwksSecrets = (ss.jwks as StackJwksSecrets) ?? {keys: []};
+  const jwk: StackJwkKey | undefined = ss.jwk as StackJwkKey | undefined;
+  const clients: Record<string, StackClientSecrets> | undefined =
+    ss.clients as Record<string, StackClientSecrets> | undefined;
+
   return {
     postgres,
     keycloak,
     postgrest,
     traefik,
     network: pub.network ?? DEFAULT_NETWORK,
+    jwks,
+    jwk,
+    clients,
   };
 }
 
@@ -249,14 +265,15 @@ export function ensureStackSecrets(config: StackConfig): StackConfig {
     config.keycloak.adminUser = ss.keycloak.adminUser;
   }
 
-  // Ensure postgrest secrets
-  if (!ss.postgrest) ss.postgrest = {};
-  if (!config.postgrest.jwtSecret) {
-    if (!ss.postgrest.jwtSecret) {
-      ss.postgrest.jwtSecret = generateSecret(32);
-      needsWrite = true;
-    }
-    config.postgrest.jwtSecret = ss.postgrest.jwtSecret;
+  // Ensure jwks — auto-generate initial oct key if absent
+  const jwksEntry = ss.jwks as {keys?: StackJwkKey[]; urlSigningKey?: StackJwkKey} | undefined;
+  if (!jwksEntry || !jwksEntry.keys || jwksEntry.keys.length === 0) {
+    const octKey = generateOctJwk("storage-url-signing-key");
+    ss.jwks = {keys: [octKey], urlSigningKey: octKey} as unknown as Record<string, string>;
+    config.jwks = {keys: [octKey], urlSigningKey: octKey};
+    needsWrite = true;
+  } else {
+    config.jwks = jwksEntry as StackJwksSecrets;
   }
 
   if (needsWrite) {

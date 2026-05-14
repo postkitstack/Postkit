@@ -33,7 +33,31 @@ export interface StackPostgrestConfig {
   port: number;
   dbSchema: string;
   dbAnonRole: string;
-  jwtSecret: string;
+}
+
+// ============================================
+// JWKS / JWK Types
+// ============================================
+
+export interface StackJwkKey {
+  kty: string;
+  kid?: string;
+  alg?: string;
+  use?: string;
+  n?: string;
+  e?: string;
+  k?: string;
+  key_ops?: string[];
+}
+
+export interface StackJwksSecrets {
+  keys: StackJwkKey[];
+  urlSigningKey?: StackJwkKey;
+}
+
+export interface StackClientSecrets {
+  secret?: string;
+  token?: string;
 }
 
 export interface StackTraefikConfig {
@@ -53,6 +77,9 @@ export interface StackConfig {
   postgrest: StackPostgrestConfig;
   traefik: StackTraefikConfig;
   network: string;
+  jwks: StackJwksSecrets;
+  jwk?: StackJwkKey;
+  clients?: Record<string, StackClientSecrets>;
 }
 
 // ============================================
@@ -84,6 +111,11 @@ export interface StackPostgrestPublicConfig {
   dbAnonRole?: string;
 }
 
+export interface StackKeycloakPublicConfigExtended extends StackKeycloakPublicConfig {
+  clientRealm?: string;
+  clients?: string[];
+}
+
 export interface StackTraefikPublicConfig {
   enabled?: boolean;
   httpPort?: number;
@@ -113,14 +145,12 @@ export interface StackKeycloakSecrets {
   adminPassword?: string;
 }
 
-export interface StackPostgrestSecrets {
-  jwtSecret?: string;
-}
-
 export interface StackSecretsConfig {
   postgres?: StackPostgresSecrets;
   keycloak?: StackKeycloakSecrets;
-  postgrest?: StackPostgrestSecrets;
+  jwks?: StackJwksSecrets;
+  jwk?: StackJwkKey;
+  clients?: Record<string, StackClientSecrets>;
 }
 
 // ============================================
