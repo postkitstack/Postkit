@@ -36,6 +36,13 @@ export interface StackPostgrestConfig {
   jwtSecret: string;
 }
 
+export interface StackTraefikConfig {
+  image: string;
+  enabled: boolean;
+  httpPort: number;
+  dashboardPort: number;
+}
+
 // ============================================
 // Fully Resolved Runtime Config
 // ============================================
@@ -44,6 +51,7 @@ export interface StackConfig {
   postgres: StackPostgresConfig;
   keycloak: StackKeycloakConfig;
   postgrest: StackPostgrestConfig;
+  traefik: StackTraefikConfig;
   network: string;
 }
 
@@ -76,10 +84,18 @@ export interface StackPostgrestPublicConfig {
   dbAnonRole?: string;
 }
 
+export interface StackTraefikPublicConfig {
+  enabled?: boolean;
+  httpPort?: number;
+  dashboardPort?: number;
+  image?: string;
+}
+
 export interface StackPublicConfig {
   postgres?: StackPostgresPublicConfig;
   keycloak?: StackKeycloakPublicConfig;
   postgrest?: StackPostgrestPublicConfig;
+  traefik?: StackTraefikPublicConfig;
   network?: string;
 }
 

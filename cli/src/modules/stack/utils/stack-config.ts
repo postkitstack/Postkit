@@ -8,6 +8,7 @@ import type {
   StackPostgresConfig,
   StackKeycloakConfig,
   StackPostgrestConfig,
+  StackTraefikConfig,
   StackSecretsConfig,
 } from "../types/config";
 
@@ -21,11 +22,14 @@ export type {StackConfig, StackSecretsConfig} from "../types/config";
 const DEFAULT_POSTGRES_IMAGE = "postgres:16-alpine";
 const DEFAULT_KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.6";
 const DEFAULT_POSTGREST_IMAGE = "postgrest/postgrest:latest";
+const DEFAULT_TRAEFIK_IMAGE = "traefik:v3.3";
 const DEFAULT_NETWORK = "postkit-net";
 
 const DEFAULT_POSTGRES_PORT = 25432;
 const DEFAULT_KEYCLOAK_PORT = 28080;
 const DEFAULT_POSTGREST_PORT = 3000;
+const DEFAULT_TRAEFIK_HTTP_PORT = 80;
+const DEFAULT_TRAEFIK_DASHBOARD_PORT = 8080;
 
 // ============================================
 // Zod Schemas
@@ -56,10 +60,18 @@ const PostgrestPublicSchema = z.object({
   dbAnonRole: z.string().min(1).optional(),
 });
 
+const TraefikPublicSchema = z.object({
+  enabled: z.boolean().optional(),
+  httpPort: z.number().int().min(1).max(65535).optional(),
+  dashboardPort: z.number().int().min(1).max(65535).optional(),
+  image: z.string().min(1).optional(),
+});
+
 const StackPublicSchema = z.object({
   postgres: PostgresPublicSchema.optional(),
   keycloak: KeycloakPublicSchema.optional(),
   postgrest: PostgrestPublicSchema.optional(),
+  traefik: TraefikPublicSchema.optional(),
   network: z.string().min(1).optional(),
 });
 
@@ -133,6 +145,7 @@ export function getStackConfig(): StackConfig {
   const pgPub = (pub.postgres ?? {}) as Record<string, unknown>;
   const kcPub = (pub.keycloak ?? {}) as Record<string, unknown>;
   const prPub = (pub.postgrest ?? {}) as Record<string, unknown>;
+  const trPub = (pub.traefik ?? {}) as Record<string, unknown>;
 
   const postgres: StackPostgresConfig = {
     image: (pgPub.image as string) ?? DEFAULT_POSTGRES_IMAGE,
@@ -164,10 +177,18 @@ export function getStackConfig(): StackConfig {
     jwtSecret: (pg.jwtSecret as string) ?? "",
   };
 
+  const traefik: StackTraefikConfig = {
+    image: (trPub.image as string) ?? DEFAULT_TRAEFIK_IMAGE,
+    enabled: (trPub.enabled as boolean) ?? true,
+    httpPort: (trPub.httpPort as number) ?? DEFAULT_TRAEFIK_HTTP_PORT,
+    dashboardPort: (trPub.dashboardPort as number) ?? DEFAULT_TRAEFIK_DASHBOARD_PORT,
+  };
+
   return {
     postgres,
     keycloak,
     postgrest,
+    traefik,
     network: pub.network ?? DEFAULT_NETWORK,
   };
 }

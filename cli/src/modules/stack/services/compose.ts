@@ -4,7 +4,7 @@ import type {StackConfig} from "../types/config";
 import {getStackDir} from "../utils/stack-config";
 
 /** All supported service names. */
-export const ALL_SERVICES = ["postgres", "keycloak", "postgrest"] as const;
+export const ALL_SERVICES = ["postgres", "keycloak", "postgrest", "traefik"] as const;
 export type ServiceName = (typeof ALL_SERVICES)[number];
 
 /**
@@ -34,9 +34,11 @@ export function getSelectedServices(
       });
 
   // Always include postgres if keycloak or postgrest are selected
+  // Always include traefik if keycloak or postgrest are selected
   const set = new Set<ServiceName>(selected as ServiceName[]);
   if (set.has("keycloak") || set.has("postgrest")) {
     set.add("postgres");
+    set.add("traefik");
   }
 
   return Array.from(set);
@@ -50,6 +52,10 @@ export function generateComposeFile(
   services: ServiceName[],
 ): string {
   const sections: string[] = ["services:"];
+
+  if (services.includes("traefik")) {
+    sections.push(renderTraefik(config));
+  }
 
   if (services.includes("postgres")) {
     sections.push(renderPostgres(config));
@@ -139,8 +145,6 @@ function renderKeycloak(config: StackConfig): string {
     image: ${kc.image}
     container_name: postkit-keycloak
     command: start-dev
-    ports:
-      - "${kc.port}:8080"
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/${pg.database}
@@ -148,6 +152,11 @@ function renderKeycloak(config: StackConfig): string {
       KC_DB_PASSWORD: ${pg.password}
       KEYCLOAK_ADMIN: ${kc.adminUser}
       KEYCLOAK_ADMIN_PASSWORD: ${kc.adminPassword}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.keycloak.rule=Host(\`keycloak.localhost\`)"
+      - "traefik.http.routers.keycloak.entrypoints=web"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -169,16 +178,41 @@ function renderPostgrest(config: StackConfig): string {
   postgrest:
     image: ${pr.image}
     container_name: postkit-postgrest
-    ports:
-      - "${pr.port}:3000"
     environment:
       PGRST_DB_URI: postgres://${pg.user}:${pg.password}@postgres:5432/${pg.database}
       PGRST_DB_SCHEMAS: ${pr.dbSchema}
       PGRST_DB_ANON_ROLE: ${pr.dbAnonRole}
       PGRST_JWT_SECRET: ${pr.jwtSecret}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.postgrest.rule=Host(\`api.localhost\`)"
+      - "traefik.http.routers.postgrest.entrypoints=web"
+      - "traefik.http.services.postgrest.loadbalancer.server.port=3000"
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - ${config.network}
+`;
+}
+
+function renderTraefik(config: StackConfig): string {
+  const tr = config.traefik;
+  return `
+  traefik:
+    image: ${tr.image}
+    container_name: postkit-traefik
+    command:
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:${tr.httpPort}"
+    ports:
+      - "${tr.httpPort}:${tr.httpPort}"
+      - "${tr.dashboardPort}:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
     networks:
       - ${config.network}
 `;

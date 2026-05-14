@@ -69,9 +69,11 @@ export async function upCommand(
         case "postgres":
           return ["PostgreSQL", `postgres://${config.postgres.user}:***@localhost:${config.postgres.port}/${config.postgres.database}`, String(config.postgres.port)];
         case "keycloak":
-          return ["Keycloak", `http://localhost:${config.keycloak.port}`, String(config.keycloak.port)];
+          return ["Keycloak", `http://keycloak.localhost`, `${config.traefik.httpPort} (Traefik)`];
         case "postgrest":
-          return ["PostgREST", `http://localhost:${config.postgrest.port}`, String(config.postgrest.port)];
+          return ["PostgREST", `http://api.localhost`, `${config.traefik.httpPort} (Traefik)`];
+        case "traefik":
+          return ["Traefik", `http://localhost:${config.traefik.dashboardPort}/dashboard/`, String(config.traefik.dashboardPort)];
         default:
           return [s, "", ""];
       }

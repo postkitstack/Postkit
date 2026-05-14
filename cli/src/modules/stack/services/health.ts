@@ -61,16 +61,23 @@ export async function waitForAllServices(
         break;
       }
       case "keycloak": {
-        const url = `http://localhost:${config.keycloak.port}/`;
+        const url = `http://keycloak.localhost/`;
         const check = waitForHttp(url, "Keycloak")
           .then(() => { spinner.text = `${spinner.text} (keycloak ready)`; });
         checks.push(check);
         break;
       }
       case "postgrest": {
-        const url = `http://localhost:${config.postgrest.port}/`;
+        const url = `http://api.localhost/`;
         const check = waitForHttp(url, "PostgREST")
           .then(() => { spinner.text = `${spinner.text} (postgrest ready)`; });
+        checks.push(check);
+        break;
+      }
+      case "traefik": {
+        const url = `http://localhost:${config.traefik.dashboardPort}/dashboard/`;
+        const check = waitForHttp(url, "Traefik")
+          .then(() => { spinner.text = `${spinner.text} (traefik ready)`; });
         checks.push(check);
         break;
       }
@@ -107,8 +114,8 @@ function httpGetOk(url: string): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const req = http.get(url, {timeout: 3000}, (res) => {
       res.resume(); // drain the response
-      // Accept any response (2xx, 3xx, 4xx) — the service is reachable
-      resolve(res.statusCode !== undefined && res.statusCode > 0);
+      // Accept 1xx–4xx; reject 5xx (e.g. Traefik 502 when backend not ready yet)
+      resolve(res.statusCode !== undefined && res.statusCode > 0 && res.statusCode < 500);
     });
     req.on("error", reject);
     req.on("timeout", () => {
