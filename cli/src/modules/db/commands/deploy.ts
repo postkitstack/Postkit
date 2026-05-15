@@ -15,7 +15,7 @@ import {
 import {runCommittedMigrate, runDbmateStatus} from "../services/dbmate";
 import {applyInfraStep} from "../services/infra-generator";
 import {applySeedsStep} from "../services/seed-generator";
-import {resolveLocalDb, stopSessionContainer, cloneDatabaseViaContainer} from "../services/container";
+import {resolveLocalDb, stopSessionContainer, cloneDatabaseViaContainer, onContainerInterrupt} from "../services/container";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import {resolveRemote, maskRemoteUrl, normalizeUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
@@ -202,12 +202,20 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       "Starting temporary container for dry-run...",
     );
 
+    let deregisterSignal: (() => void) | undefined;
+
     const cleanupLocal = async () => {
+      deregisterSignal?.();
+      deregisterSignal = undefined;
       try { await dropDatabase(localDbUrl); } catch { /* best effort */ }
       if (tempContainerID) {
         try { await stopSessionContainer(tempContainerID); } catch { /* best effort */ }
       }
     };
+
+    if (tempContainerID) {
+      deregisterSignal = onContainerInterrupt(tempContainerID);
+    }
 
     logger.step(3, totalSteps, "Cloning target database to local...");
     spinner.start("Cloning target database to local for dry-run verification...");
@@ -312,6 +320,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     logger.blank();
   } catch (error) {
     spinner.fail("Deployment failed");
+    deregisterSignal?.();
     throw error;
   }
 }

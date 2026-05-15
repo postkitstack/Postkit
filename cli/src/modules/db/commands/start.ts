@@ -15,7 +15,7 @@ import {
 } from "../services/database";
 import {runDbmateStatus} from "../services/dbmate";
 import {checkDbPrerequisites} from "../services/prerequisites";
-import {resolveLocalDb, cloneDatabaseViaContainer} from "../services/container";
+import {resolveLocalDb, cloneDatabaseViaContainer, stopSessionContainer, onContainerInterrupt} from "../services/container";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
 import {PostkitError} from "../../../common/errors";
@@ -26,6 +26,8 @@ interface StartOptions extends CommandOptions {
 
 export async function startCommand(options: StartOptions): Promise<void> {
   const spinner = ora();
+  let containerID: string | undefined;
+  let deregisterSignal: (() => void) | undefined;
 
   try {
     if (await hasActiveSession()) {
@@ -50,7 +52,6 @@ export async function startCommand(options: StartOptions): Promise<void> {
 
     // Determine whether we need an auto-container (localDbUrl is empty)
     let localDbUrl = config.localDbUrl;
-    let containerID: string | undefined;
     const needsContainer = !localDbUrl;
 
     // Total steps: 5 normally, 6 when auto-container is needed
@@ -191,6 +192,9 @@ export async function startCommand(options: StartOptions): Promise<void> {
       containerID = resolved.containerID;
       localDbUrl = resolved.url;
       logger.debug(`Local DB (container): ${maskRemoteUrl(localDbUrl)}`, options.verbose);
+      if (containerID) {
+        deregisterSignal = onContainerInterrupt(containerID);
+      }
     }
 
     // Step 5/6: Clone database
@@ -223,6 +227,8 @@ export async function startCommand(options: StartOptions): Promise<void> {
         targetRemoteName,
         containerID,
       );
+      deregisterSignal?.();
+      deregisterSignal = undefined;
       logger.success(`Session created (cloned at: ${session.clonedAt})`);
     } else {
       logger.info("Dry run - session not created");
@@ -238,6 +244,10 @@ export async function startCommand(options: StartOptions): Promise<void> {
     logger.info('  4. Run "postkit db commit <description>" when ready');
   } catch (error) {
     spinner.fail("Failed to start migration session");
+    deregisterSignal?.();
+    if (containerID) {
+      try { await stopSessionContainer(containerID); } catch { /* best effort */ }
+    }
     throw error;
   }
 }
