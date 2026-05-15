@@ -59,7 +59,20 @@ export async function upCommand(
     }
   }
 
-  // Step 7: Auto-fetch keys from Keycloak (unless --no-keys)
+  // Step 7: Import realm template (if configured) — must run before JWKs fetch
+  if (selected.includes("keycloak") && config.keycloak.realmTemplate) {
+    const realmSpinner = ora("Importing realm template into Keycloak...").start();
+    try {
+      const {importRealmTemplate} = await import("../services/realm-init");
+      await importRealmTemplate(config, realmSpinner);
+      realmSpinner.succeed(`Realm "${config.keycloak.realm}" imported`);
+    } catch (error) {
+      realmSpinner.warn(`Realm import failed: ${(error as Error).message}`);
+      logger.warn("Run 'postkit stack realm' to retry.");
+    }
+  }
+
+  // Step 8: Auto-fetch keys from Keycloak (unless --no-keys) — realm must exist first
   if (options.keysRun !== false && selected.includes("keycloak")) {
     const keysSpinner = ora("Fetching JWKs and client credentials from Keycloak...").start();
     try {
@@ -76,21 +89,6 @@ export async function upCommand(
     } catch (error) {
       keysSpinner.warn(`Could not fetch Keycloak keys: ${(error as Error).message}`);
       logger.warn("Run 'postkit stack keys' after Keycloak is configured.");
-    }
-  }
-
-  // Step 8: Import realm template (if configured)
-  if (selected.includes("keycloak") && config.keycloak.realmTemplate) {
-    const realmSpinner = ora("Importing realm template into Keycloak...").start();
-    try {
-      const {importRealmTemplate} = await import("../services/realm-init");
-      // Re-read config to get updated jwks after keys step
-      const updatedConfig = getStackConfig();
-      await importRealmTemplate(updatedConfig, realmSpinner);
-      realmSpinner.succeed(`Realm "${config.keycloak.realm}" imported`);
-    } catch (error) {
-      realmSpinner.warn(`Realm import failed: ${(error as Error).message}`);
-      logger.warn("Run 'postkit stack realm' to retry.");
     }
   }
 
