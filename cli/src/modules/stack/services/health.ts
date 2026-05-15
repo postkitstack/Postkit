@@ -61,7 +61,7 @@ export async function waitForAllServices(
         break;
       }
       case "keycloak": {
-        const url = `http://keycloak.localhost/`;
+        const url = `http://keycloak.localhost/realms/master`;
         const check = waitForHttp(url, "Keycloak")
           .then(() => { spinner.text = `${spinner.text} (keycloak ready)`; });
         checks.push(check);

@@ -36,8 +36,10 @@ export async function downCommand(options: DownOptions): Promise<void> {
   );
 
   logger.blank();
-  logger.info("Containers removed. Data preserved in Docker volumes.");
-  if (!options.volumes) {
+  if (options.volumes) {
+    logger.info("Containers and volumes removed. All data has been deleted.");
+  } else {
+    logger.info("Containers removed. Data preserved in Docker volumes.");
     logger.info("Use --volumes to remove persistent data as well.");
   }
 }

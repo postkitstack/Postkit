@@ -18,7 +18,12 @@ export async function applyStackDeploy(
   spinner.start("Running committed migrations on stack...");
   const result = await runCommittedMigrate(pgUrl);
   if (!result.success) {
-    throw new Error(`Migration failed: ${result.output}`);
+    const out = result.output ?? "";
+    if (out.toLowerCase().includes("no migration files found") || out.toLowerCase().includes("no migrations")) {
+      spinner.succeed("No committed migrations to apply");
+      return;
+    }
+    throw new Error(`Migration failed: ${out}`);
   }
   spinner.succeed("Committed migrations applied to stack");
 }
