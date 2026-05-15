@@ -5,6 +5,7 @@ import {getStackConfig, ensureStackSecrets, getComposeFilePath} from "../utils/s
 import {checkDockerComposeAvailable, composeUp} from "../services/docker-compose";
 import {writeComposeFile, getSelectedServices} from "../services/compose";
 import {waitForAllServices} from "../services/health";
+import {applyStackDeploy} from "../services/db-init";
 
 export interface UpOptions extends CommandOptions {
   wait?: boolean;
@@ -35,21 +36,59 @@ export async function upCommand(
   const composeFile = writeComposeFile(config, selected);
   composeSpinner.succeed(`Compose file written to .postkit/stack/docker-compose.yml`);
 
-  // Step 5: Start services
-  const upSpinner = ora(`Starting services: ${serviceList}`).start();
-  const result = await composeUp(composeFile, selected);
+  // Step 5: Start infrastructure services first (postgres + traefik)
+  const infraServices = ["postgres", "traefik"].filter((s) => selected.includes(s));
+  const infraList = infraServices.join(", ");
+  const infraSpinner = ora(`Starting infrastructure: ${infraList}`).start();
+  const infraResult = await composeUp(composeFile, infraServices);
 
-  if (result.exitCode !== 0) {
-    upSpinner.fail("Failed to start services");
-    logger.error(result.stderr);
+  if (infraResult.exitCode !== 0) {
+    infraSpinner.fail("Failed to start infrastructure services");
+    logger.error(infraResult.stderr);
     logger.info("Run 'postkit stack logs' for details.");
     return;
   }
-  upSpinner.succeed(`Services started: ${serviceList}`);
+  infraSpinner.succeed(`Infrastructure started: ${infraList}`);
 
-  // Step 6: Health checks
+  // Step 6: Wait for infrastructure to be healthy
+  if (options.wait !== false && infraServices.length > 0) {
+    const healthSpinner = ora("Waiting for infrastructure to become healthy...").start();
+    try {
+      await waitForAllServices(config, infraServices, healthSpinner);
+      healthSpinner.succeed("Infrastructure healthy");
+    } catch (error) {
+      healthSpinner.warn(String((error as Error).message));
+      logger.warn("Infrastructure may still be starting. Attempting DB init anyway...");
+    }
+  }
+
+  // Step 7: Apply DB infra + committed migrations (no dry-run)
+  if (infraServices.includes("postgres")) {
+    const dbDeploySpinner = ora("Deploying DB (infra + migrations)...").start();
+    try {
+      await applyStackDeploy(config, dbDeploySpinner);
+    } catch (error) {
+      dbDeploySpinner.warn(`DB deploy skipped: ${(error as Error).message}`);
+    }
+  }
+
+  // Step 8: Start all remaining selected services
+  const remainingServices = selected.filter((s) => !infraServices.includes(s));
+  if (remainingServices.length > 0) {
+    const upSpinner = ora(`Starting services: ${serviceList}`).start();
+    const result = await composeUp(composeFile, selected);
+    if (result.exitCode !== 0) {
+      upSpinner.fail("Failed to start services");
+      logger.error(result.stderr);
+      logger.info("Run 'postkit stack logs' for details.");
+      return;
+    }
+    upSpinner.succeed(`Services started: ${serviceList}`);
+  }
+
+  // Step 9: Health checks for all services
   if (options.wait !== false) {
-    const healthSpinner = ora("Waiting for services to become healthy...").start();
+    const healthSpinner = ora("Waiting for all services to become healthy...").start();
     try {
       await waitForAllServices(config, selected, healthSpinner);
       healthSpinner.succeed("All services healthy");

@@ -17,6 +17,24 @@ import {
 import type {CommandOptions} from "../common/types";
 import type {PostkitPublicConfig, PostkitSecrets} from "../common/config";
 
+const ROLES_SQL = `-- PostgREST roles — created by postkit init
+-- Edit freely; applied by 'postkit stack up' before services start.
+
+DO $\$ BEGIN CREATE ROLE anon NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $\$ BEGIN CREATE ROLE authenticated NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $\$ BEGIN CREATE ROLE service_role NOLOGIN BYPASSRLS; EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $\$ BEGIN CREATE ROLE app_user NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role, app_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, service_role, app_user;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role, app_user;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO authenticated, service_role, app_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO authenticated, service_role, app_user;
+`;
+
 // Ephemeral/user-specific files are gitignored; committed migrations and auth state are tracked.
 // postkit.config.json is safe to commit.
 const GITIGNORE_ENTRIES = [
@@ -96,9 +114,6 @@ const SCAFFOLD_SECRETS_EXAMPLE: PostkitSecrets = {
       adminUser: "admin",
       adminPassword: "changeme",
     },
-    postgrest: {
-      jwtSecret: "changeme-to-a-long-random-secret",
-    },
   },
 };
 
@@ -129,7 +144,7 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     }
   }
 
-  const totalSteps = 6;
+  const totalSteps = 7;
 
   // Step 1: Create .postkit/db/ directory
   logger.step(1, totalSteps, "Creating .postkit/db/ directory");
@@ -199,8 +214,25 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     spinner.succeed(`${POSTKIT_CONFIG_FILE}, ${POSTKIT_SECRETS_FILE}, and postkit.secrets.example.json created`);
   }
 
-  // Step 5: Update .gitignore
-  logger.step(5, totalSteps, "Updating .gitignore");
+  // Step 5: Scaffold db/infra/roles.sql
+  logger.step(5, totalSteps, "Scaffolding db/infra/roles.sql");
+  if (options.dryRun) {
+    logger.info("Dry run: would create db/infra/roles.sql with PostgREST roles");
+  } else {
+    const spinner = ora("Creating db/infra/roles.sql...").start();
+    const infraDir = path.join(projectRoot, "db", "infra");
+    const rolesFile = path.join(infraDir, "roles.sql");
+    fs.mkdirSync(infraDir, {recursive: true});
+    if (!fs.existsSync(rolesFile)) {
+      fs.writeFileSync(rolesFile, ROLES_SQL);
+      spinner.succeed("db/infra/roles.sql created");
+    } else {
+      spinner.succeed("db/infra/roles.sql already exists — skipped");
+    }
+  }
+
+  // Step 6: Update .gitignore
+  logger.step(6, totalSteps, "Updating .gitignore");
   const gitignorePath = path.join(projectRoot, ".gitignore");
   if (options.dryRun) {
     logger.info("Dry run: would update .gitignore with Postkit entries");
@@ -227,8 +259,8 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     }
   }
 
-  // Step 6: Summary
-  logger.step(6, totalSteps, "Done");
+  // Step 7: Summary
+  logger.step(7, totalSteps, "Done");
   logger.blank();
   logger.success("Postkit project initialized!");
   logger.blank();
