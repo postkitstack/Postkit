@@ -79,7 +79,22 @@ export async function upCommand(
     }
   }
 
-  // Step 8: Print summary
+  // Step 8: Import realm template (if configured)
+  if (selected.includes("keycloak") && config.keycloak.realmTemplate) {
+    const realmSpinner = ora("Importing realm template into Keycloak...").start();
+    try {
+      const {importRealmTemplate} = await import("../services/realm-init");
+      // Re-read config to get updated jwks after keys step
+      const updatedConfig = getStackConfig();
+      await importRealmTemplate(updatedConfig, realmSpinner);
+      realmSpinner.succeed(`Realm "${config.keycloak.realm}" imported`);
+    } catch (error) {
+      realmSpinner.warn(`Realm import failed: ${(error as Error).message}`);
+      logger.warn("Run 'postkit stack realm' to retry.");
+    }
+  }
+
+  // Step 9: Print summary
   logger.blank();
   logger.success("Stack is running!");
   logger.blank();

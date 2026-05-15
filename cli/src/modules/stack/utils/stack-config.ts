@@ -55,6 +55,7 @@ const KeycloakPublicSchema = z.object({
   volume: z.string().min(1).optional(),
   clientRealm: z.string().min(1).optional(),
   clients: z.array(z.string()).optional(),
+  realmTemplate: z.string().optional(),
 });
 
 const PostgrestPublicSchema = z.object({
@@ -173,6 +174,7 @@ export function getStackConfig(): StackConfig {
     realm: kcRealm,
     clientRealm: (kcPub.clientRealm as string) ?? kcRealm,
     volume: (kcPub.volume as string) ?? "postkit-keycloak-data",
+    realmTemplate: (kcPub.realmTemplate as string) ?? "",
   };
 
   const keycloakClients: string[] = (kcPub.clients as string[]) ?? [];

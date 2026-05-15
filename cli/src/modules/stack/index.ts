@@ -6,6 +6,7 @@ import {statusCommand} from "./commands/status";
 import {logsCommand} from "./commands/logs";
 import {restartCommand} from "./commands/restart";
 import {keysCommand} from "./commands/keys";
+import {realmCommand} from "./commands/realm";
 
 export function registerStackModule(program: Command): void {
   const stack = program
@@ -86,6 +87,17 @@ export function registerStackModule(program: Command): void {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};
         await keysCommand(options as never);
+      });
+    });
+
+  // Realm command
+  stack
+    .command("realm")
+    .description("Import base realm template into local Keycloak")
+    .action(async (cmdOptions: Record<string, unknown>) => {
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await realmCommand(options as never);
       });
     });
 }

@@ -26,6 +26,7 @@ export interface StackKeycloakConfig {
   realm: string;
   clientRealm: string;
   volume: string;
+  realmTemplate: string;
 }
 
 export interface StackPostgrestConfig {
@@ -105,6 +106,7 @@ export interface StackKeycloakPublicConfig {
   volume?: string;
   clientRealm?: string;
   clients?: string[];
+  realmTemplate?: string;
 }
 
 export interface StackPostgrestPublicConfig {
