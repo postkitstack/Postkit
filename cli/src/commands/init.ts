@@ -16,24 +16,7 @@ import {
 } from "../common/config";
 import type {CommandOptions} from "../common/types";
 import type {PostkitPublicConfig, PostkitSecrets} from "../common/config";
-
-const ROLES_SQL = `-- PostgREST roles — created by postkit init
--- Edit freely; applied by 'postkit stack up' before services start.
-
-DO $\$ BEGIN CREATE ROLE anon NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
-DO $\$ BEGIN CREATE ROLE authenticated NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
-DO $\$ BEGIN CREATE ROLE service_role NOLOGIN BYPASSRLS; EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
-DO $\$ BEGIN CREATE ROLE app_user NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
-
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role, app_user;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, service_role, app_user;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role, app_user;
-
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO anon;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO authenticated, service_role, app_user;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO authenticated, service_role, app_user;
-`;
+import {scaffoldDbInfra} from "../modules/db/services/scaffold";
 
 // Ephemeral/user-specific files are gitignored; committed migrations and auth state are tracked.
 // postkit.config.json is safe to commit.
@@ -55,7 +38,7 @@ const SCAFFOLD_PUBLIC_CONFIG: PostkitPublicConfig = {
     infraPath: "db/infra",
   },
   auth: {
-    configCliImage: "adorsys/keycloak-config-cli:6.4.0-24",
+    configCliImage: "adorsys/keycloak-config-cli:latest-26",
   },
   stack: {},
 };
@@ -220,15 +203,8 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     logger.info("Dry run: would create db/infra/roles.sql with PostgREST roles");
   } else {
     const spinner = ora("Creating db/infra/roles.sql...").start();
-    const infraDir = path.join(projectRoot, "db", "infra");
-    const rolesFile = path.join(infraDir, "roles.sql");
-    fs.mkdirSync(infraDir, {recursive: true});
-    if (!fs.existsSync(rolesFile)) {
-      fs.writeFileSync(rolesFile, ROLES_SQL);
-      spinner.succeed("db/infra/roles.sql created");
-    } else {
-      spinner.succeed("db/infra/roles.sql already exists — skipped");
-    }
+    const created = scaffoldDbInfra();
+    spinner.succeed(created ? "db/infra/roles.sql created" : "db/infra/roles.sql already exists — skipped");
   }
 
   // Step 6: Update .gitignore
