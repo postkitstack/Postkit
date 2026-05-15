@@ -97,6 +97,7 @@ async function runSteps(
 
 export async function deployCommand(options: DeployOptions): Promise<void> {
   const spinner = ora();
+  let deregisterSignal: (() => void) | undefined;
 
   try {
     const config = getDbConfig();
@@ -201,8 +202,6 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       spinner,
       "Starting temporary container for dry-run...",
     );
-
-    let deregisterSignal: (() => void) | undefined;
 
     const cleanupLocal = async () => {
       deregisterSignal?.();
