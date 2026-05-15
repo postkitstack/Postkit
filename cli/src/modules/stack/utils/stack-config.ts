@@ -147,7 +147,8 @@ export function getStackConfig(): StackConfig {
   // Secrets are already merged into config by loadPostkitConfig()
 
   // Build resolved configs
-  const pg = raw as Record<string, unknown>;
+  const pgSec = ((raw as Record<string, unknown>).postgres ?? {}) as Record<string, unknown>;
+  const kcSec = ((raw as Record<string, unknown>).keycloak ?? {}) as Record<string, unknown>;
   const pgPub = (pub.postgres ?? {}) as Record<string, unknown>;
   const kcPub = (pub.keycloak ?? {}) as Record<string, unknown>;
   const prPub = (pub.postgrest ?? {}) as Record<string, unknown>;
@@ -157,8 +158,8 @@ export function getStackConfig(): StackConfig {
     image: (pgPub.image as string) ?? DEFAULT_POSTGRES_IMAGE,
     enabled: (pgPub.enabled as boolean) ?? true,
     port: (pgPub.port as number) ?? DEFAULT_POSTGRES_PORT,
-    user: (pg.user as string) ?? "postgres",
-    password: (pg.password as string) ?? "",
+    user: (pgSec.user as string) ?? "postgres",
+    password: (pgSec.password as string) ?? "",
     database: (pgPub.database as string) ?? "postkit",
     pgVersion: (pgPub.pgVersion as number) ?? 16,
     volume: (pgPub.volume as string) ?? "postkit-pgdata",
@@ -169,8 +170,8 @@ export function getStackConfig(): StackConfig {
     image: (kcPub.image as string) ?? DEFAULT_KEYCLOAK_IMAGE,
     enabled: (kcPub.enabled as boolean) ?? true,
     port: (kcPub.port as number) ?? DEFAULT_KEYCLOAK_PORT,
-    adminUser: (pg.adminUser as string) ?? "admin",
-    adminPassword: (pg.adminPassword as string) ?? "",
+    adminUser: (kcSec.adminUser as string) ?? "admin",
+    adminPassword: (kcSec.adminPassword as string) ?? "",
     realm: kcRealm,
     clientRealm: (kcPub.clientRealm as string) ?? kcRealm,
     volume: (kcPub.volume as string) ?? "postkit-keycloak-data",
