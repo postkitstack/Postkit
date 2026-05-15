@@ -170,11 +170,30 @@ async function waitForPostgres(url: string, maxAttempts = 30): Promise<void> {
   throw new Error("Postgres container did not become ready within 30 seconds.");
 }
 
+/**
+ * Register SIGINT/SIGTERM handlers to stop a container when the process is interrupted.
+ * Returns a deregister function — call it once the container is no longer your responsibility.
+ */
+export function onContainerInterrupt(containerID: string): () => void {
+  const handler = () => {
+    stopSessionContainer(containerID).finally(() => process.exit(130));
+  };
+  process.once("SIGINT", handler);
+  process.once("SIGTERM", handler);
+  return () => {
+    process.off("SIGINT", handler);
+    process.off("SIGTERM", handler);
+  };
+}
+
 async function findFreePort(start: number, end: number): Promise<number> {
   for (let port = start; port <= end; port++) {
     if (await isPortFree(port)) return port;
   }
-  throw new Error(`No free port found between ${start} and ${end}.`);
+  throw new Error(
+    `No free port found between ${start} and ${end}. ` +
+    `Run: docker ps --filter name=${CONTAINER_PREFIX} to check for leftover containers.`,
+  );
 }
 
 function isPortFree(port: number): Promise<boolean> {
