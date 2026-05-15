@@ -17,6 +17,7 @@ import {
 import type {CommandOptions} from "../common/types";
 import type {PostkitPublicConfig, PostkitSecrets} from "../common/config";
 import {scaffoldDbInfra} from "../modules/db/services/scaffold";
+import {scaffoldRealmTemplate, DEFAULT_REALM_TEMPLATE_PATH} from "../modules/stack/services/scaffold";
 
 // Ephemeral/user-specific files are gitignored; committed migrations and auth state are tracked.
 // postkit.config.json is safe to commit.
@@ -40,7 +41,11 @@ const SCAFFOLD_PUBLIC_CONFIG: PostkitPublicConfig = {
   auth: {
     configCliImage: "adorsys/keycloak-config-cli:latest-26",
   },
-  stack: {},
+  stack: {
+    keycloak: {
+      realmTemplate: DEFAULT_REALM_TEMPLATE_PATH,
+    },
+  },
 };
 
 // Sensitive credentials — gitignored
@@ -127,7 +132,7 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     }
   }
 
-  const totalSteps = 7;
+  const totalSteps = 8;
 
   // Step 1: Create .postkit/db/ directory
   logger.step(1, totalSteps, "Creating .postkit/db/ directory");
@@ -207,8 +212,18 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     spinner.succeed(created ? "db/infra/roles.sql created" : "db/infra/roles.sql already exists — skipped");
   }
 
-  // Step 6: Update .gitignore
-  logger.step(6, totalSteps, "Updating .gitignore");
+  // Step 6: Scaffold realm template
+  logger.step(6, totalSteps, "Scaffolding realm template");
+  if (options.dryRun) {
+    logger.info(`Dry run: would create ${DEFAULT_REALM_TEMPLATE_PATH}`);
+  } else {
+    const spinner = ora(`Creating ${DEFAULT_REALM_TEMPLATE_PATH}...`).start();
+    const created = scaffoldRealmTemplate();
+    spinner.succeed(created ? `${DEFAULT_REALM_TEMPLATE_PATH} created` : `${DEFAULT_REALM_TEMPLATE_PATH} already exists — skipped`);
+  }
+
+  // Step 7: Update .gitignore
+  logger.step(7, totalSteps, "Updating .gitignore");
   const gitignorePath = path.join(projectRoot, ".gitignore");
   if (options.dryRun) {
     logger.info("Dry run: would update .gitignore with Postkit entries");
@@ -235,8 +250,8 @@ export async function initCommand(options: CommandOptions): Promise<void> {
     }
   }
 
-  // Step 7: Summary
-  logger.step(7, totalSteps, "Done");
+  // Step 8: Summary
+  logger.step(8, totalSteps, "Done");
   logger.blank();
   logger.success("Postkit project initialized!");
   logger.blank();

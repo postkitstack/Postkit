@@ -160,12 +160,6 @@ function renderKeycloak(config: StackConfig): string {
     depends_on:
       postgres:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ -o /dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 45s
     networks:
       - ${config.network}
 `;
