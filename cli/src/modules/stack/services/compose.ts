@@ -69,10 +69,12 @@ export function generateComposeFile(
     sections.push(renderPostgrest(config));
   }
 
-  // Network
+  // Network — explicit name prevents docker-compose project prefix,
+  // so external containers (keycloak-config-cli) can join by this exact name.
   sections.push(`
 networks:
   ${config.network}:
+    name: ${config.network}
     driver: bridge
 `);
 

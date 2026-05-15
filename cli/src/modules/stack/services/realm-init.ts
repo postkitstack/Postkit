@@ -6,7 +6,7 @@ import type {Ora} from "ora";
 import {projectRoot} from "../../../common/config";
 import {runSpawnCommand} from "../../../common/shell";
 import type {StackConfig} from "../types/config";
-import {getKeycloakUrl} from "./keycloak-keys";
+const CONFIG_CLI_IMAGE = "adorsys/keycloak-config-cli:latest-26";
 
 // ============================================
 // Built-in Keycloak clients — never import these
@@ -157,13 +157,14 @@ export async function importRealmTemplate(
     const cleanedRealmFile = path.join(tmpDir, "realm.json");
     await writeFile(cleanedRealmFile, JSON.stringify(cleaned, null, 2), {mode: 0o600});
 
-    // Build Keycloak URL
-    const keycloakUrl = getKeycloakUrl(config);
+    // Use internal Docker DNS name — keycloak-config-cli runs inside Docker,
+    // so it must reach Keycloak via the container network, not the Traefik hostname.
+    const internalKeycloakUrl = `http://keycloak:8080`;
 
     // Write env file
     const envFile = path.join(tmpDir, "realm-import.env");
     const envContent = [
-      `KEYCLOAK_URL=${keycloakUrl}/`,
+      `KEYCLOAK_URL=${internalKeycloakUrl}/`,
       `KEYCLOAK_USER=${config.keycloak.adminUser}`,
       `KEYCLOAK_PASSWORD=${config.keycloak.adminPassword}`,
       "KEYCLOAK_AVAILABILITYCHECK_ENABLED=true",
@@ -179,11 +180,10 @@ export async function importRealmTemplate(
 
     const result = await runSpawnCommand([
       "docker", "run", "--rm",
-      "--network", "host",
-      "--platform=linux/amd64",
+      "--network", config.network,
       "--env-file", envFile,
       "-v", `${cleanedRealmFile}:/config/realm.json`,
-      "adorsys/keycloak-config-cli:latest-26",
+      CONFIG_CLI_IMAGE,
     ]);
 
     if (result.exitCode !== 0) {
