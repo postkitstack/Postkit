@@ -68,12 +68,12 @@ export function registerStackModule(program: Command): void {
   // Restart command
   stack
     .command("restart")
-    .description("Restart a stack service")
-    .argument("[service]", "Service name to restart (omit for all)")
-    .action(async (service: string | undefined, cmdOptions: Record<string, unknown>) => {
+    .description("Restart all or selected stack services")
+    .argument("[services...]", "Services to restart (omit for all): postgres, keycloak, postgrest, traefik")
+    .action(async (services: string[], cmdOptions: Record<string, unknown>) => {
       await withInitCheck(async () => {
         const options = {...program.opts(), ...cmdOptions};
-        await restartCommand(options as never, service);
+        await restartCommand(options as never, services);
       });
     });
 

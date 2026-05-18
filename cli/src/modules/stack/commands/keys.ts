@@ -58,7 +58,7 @@ export async function keysCommand(options: KeysOptions): Promise<void> {
       const updatedConfig = getStackConfig();
       const {writeComposeFile, ALL_SERVICES} = await import("../services/compose");
       writeComposeFile(updatedConfig, [...ALL_SERVICES]);
-      await composeRestart(composePath, "postgrest");
+      await composeRestart(composePath, ["postgrest"]);
       await waitForAllServices(updatedConfig, ["postgrest"], restartSpinner);
       restartSpinner.succeed("PostgREST restarted with updated JWKS");
     } else {

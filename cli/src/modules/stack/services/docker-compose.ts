@@ -107,15 +107,15 @@ export async function composeLogs(
 }
 
 /**
- * Restart a specific service or all services.
+ * Restart specific services or all services.
  */
 export async function composeRestart(
   composeFile: string,
-  service?: string,
+  services?: string[],
 ): Promise<ShellResult> {
   const args = ["compose", "-f", composeFile, "restart"];
-  if (service) {
-    args.push(service);
+  if (services && services.length > 0) {
+    args.push(...services);
   }
   return runDockerCompose(args);
 }
