@@ -70,18 +70,19 @@ export async function upCommand(
     await applyStackDeploy(config, dbDeploySpinner);
   }
 
-  // Step 8: Start all remaining selected services
+  // Step 8: Start keycloak + postgrest — only after DB migrations are applied
   const remainingServices = selected.filter((s) => !infraServices.includes(s));
   if (remainingServices.length > 0) {
-    const upSpinner = ora(`Starting services: ${serviceList}`).start();
-    const result = await composeUp(composeFile, selected);
+    const remainingList = remainingServices.join(", ");
+    const upSpinner = ora(`Starting services: ${remainingList}`).start();
+    const result = await composeUp(composeFile, remainingServices);
     if (result.exitCode !== 0) {
-      upSpinner.fail("Failed to start services");
+      upSpinner.fail(`Failed to start services: ${remainingList}`);
       logger.error(result.stderr);
       logger.info("Run 'postkit stack logs' for details.");
       return;
     }
-    upSpinner.succeed(`Services started: ${serviceList}`);
+    upSpinner.succeed(`Services started: ${remainingList}`);
   }
 
   // Step 9: Health checks for all services
