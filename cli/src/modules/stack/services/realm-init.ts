@@ -22,6 +22,18 @@ const BUILTIN_CLIENTS = new Set([
 ]);
 
 // ============================================
+// PostKit default protocol mapper — injected into every non-builtin client
+// ============================================
+
+const JWT_ROLE_MAPPER = {
+  name: "JWT Role Mapper",
+  protocol: "openid-connect",
+  protocolMapper: "script-primary-role.js",
+  consentRequired: false,
+  config: {},
+};
+
+// ============================================
 // Types
 // ============================================
 
@@ -82,6 +94,13 @@ export function cleanRealmTemplate(
           client.serviceAccountRealmRoles = ["service_role", "app_user"];
         } else if (clientId === "anon") {
           client.serviceAccountRealmRoles = ["anon"];
+        }
+
+        // Inject JWT Role Mapper if not already present
+        const mappers = (client.protocolMappers ?? []) as Array<Record<string, unknown>>;
+        const hasJwtMapper = mappers.some((m) => m.name === JWT_ROLE_MAPPER.name);
+        if (!hasJwtMapper) {
+          client.protocolMappers = [...mappers, JWT_ROLE_MAPPER];
         }
 
         return client;

@@ -3,6 +3,7 @@ import path from "path";
 import type {StackConfig} from "../types/config";
 import {getStackDir} from "../utils/stack-config";
 import {getProvidersDir} from "./sync-providers";
+import {loadPostkitConfig} from "../../../common/config";
 
 /** All supported service names. */
 export const ALL_SERVICES = ["postgres", "keycloak", "postgrest", "traefik"] as const;
@@ -52,7 +53,8 @@ export function generateComposeFile(
   config: StackConfig,
   services: ServiceName[],
 ): string {
-  const sections: string[] = ["services:"];
+  const projectName = loadPostkitConfig().name ?? "postkit";
+  const sections: string[] = [`name: ${projectName}`, "services:"];
 
   if (services.includes("traefik")) {
     sections.push(renderTraefik(config));
@@ -155,6 +157,11 @@ function renderKeycloak(config: StackConfig): string {
       KC_DB_USERNAME: ${pg.user}
       KC_DB_PASSWORD: ${pg.password}
       KC_DB_SCHEMA: auth
+      KC_DB_POOL_INITIAL_SIZE: 1
+      KC_DB_POOL_MIN_SIZE: 1
+      KC_DB_POOL_MAX_SIZE: 10
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${kc.adminUser}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${kc.adminPassword}
       KEYCLOAK_ADMIN: ${kc.adminUser}
       KEYCLOAK_ADMIN_PASSWORD: ${kc.adminPassword}
     volumes:

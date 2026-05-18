@@ -117,6 +117,7 @@ export interface StackPublicConfig {
 }
 
 export interface PostkitPublicConfig {
+  name?: string;
   db?: DbPublicConfig;
   auth?: AuthPublicConfig;
   stack?: StackPublicConfig;
@@ -172,6 +173,7 @@ export interface PostkitSecrets {
 
 // PostkitConfig interface matching the JSON structure
 export interface PostkitConfig {
+  name?: string;
   db: DbInputConfig;
   auth: AuthInputConfig;
   stack?: Record<string, unknown>;

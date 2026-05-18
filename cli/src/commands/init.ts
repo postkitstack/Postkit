@@ -1,8 +1,9 @@
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import ora from "ora";
 import {logger} from "../common/logger";
-import {promptConfirm} from "../common/prompt";
+import {promptConfirm, promptInput} from "../common/prompt";
 import {
   projectRoot,
   POSTKIT_CONFIG_FILE,
@@ -18,6 +19,7 @@ import type {CommandOptions} from "../common/types";
 import type {PostkitPublicConfig, PostkitSecrets} from "../common/config";
 import {scaffoldDbInfra} from "../modules/db/services/scaffold";
 import {scaffoldRealmTemplate, DEFAULT_REALM_TEMPLATE_PATH} from "../modules/stack/services/scaffold";
+import {syncKeycloakProviders} from "../modules/stack/services/sync-providers";
 
 // Ephemeral/user-specific files are gitignored; committed migrations and auth state are tracked.
 // postkit.config.json is safe to commit.
@@ -108,6 +110,15 @@ const SCAFFOLD_SECRETS_EXAMPLE: PostkitSecrets = {
 export async function initCommand(options: CommandOptions): Promise<void> {
   logger.heading("Postkit Init");
 
+  // Prompt for project name — required
+  const rawName = await promptInput("Project name:", {
+    required: true,
+    force: options.force,
+  });
+  const randomId = crypto.randomBytes(4).toString("hex");
+  const projectName = `${rawName.trim().toLowerCase().replace(/\s+/g, "-")}_${randomId}`;
+  logger.info(`Project ID: ${projectName}`);
+
   const postkitDir = getPostkitDir();
   const configFile = getConfigFilePath();
   const alreadyInitialized =
@@ -169,6 +180,8 @@ export async function initCommand(options: CommandOptions): Promise<void> {
         fs.mkdirSync(subPath, {recursive: true});
       }
     }
+    // Copy bundled Keycloak provider JARs from cli/vendor/providers/
+    syncKeycloakProviders();
     spinner.succeed(".postkit/auth/ directory created");
   }
 
@@ -190,7 +203,8 @@ export async function initCommand(options: CommandOptions): Promise<void> {
   } else {
     const spinner = ora("Writing config files...").start();
 
-    fs.writeFileSync(configFile, JSON.stringify(SCAFFOLD_PUBLIC_CONFIG, null, 2) + "\n");
+    const publicConfig: PostkitPublicConfig = {...SCAFFOLD_PUBLIC_CONFIG, name: projectName};
+    fs.writeFileSync(configFile, JSON.stringify(publicConfig, null, 2) + "\n");
 
     const secretsFile = getSecretsFilePath();
     fs.writeFileSync(secretsFile, JSON.stringify(SCAFFOLD_SECRETS, null, 2) + "\n");
