@@ -3,6 +3,7 @@ import {Client} from "pg";
 import type {StackConfig} from "../types/config";
 import {applyInfraStep} from "../../db/services/infra-generator";
 import {runCommittedMigrate} from "../../db/services/dbmate";
+import {applySeedsStep} from "../../db/services/seed-generator";
 
 const POSTKIT_SCHEMA_SQL = `
 CREATE SCHEMA IF NOT EXISTS postkit;
@@ -20,35 +21,58 @@ export function buildPgUrl(config: StackConfig): string {
   );
 }
 
+async function connectWithRetry(pgUrl: string, retries = 10, delayMs = 2000): Promise<Client> {
+  let last: Error | undefined;
+  for (let i = 0; i < retries; i++) {
+    const client = new Client({connectionString: pgUrl});
+    try {
+      await client.connect();
+      return client;
+    } catch (err) {
+      last = err as Error;
+      await client.end().catch(() => undefined);
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw last ?? new Error("Could not connect to postgres after retries");
+}
+
 export async function applyStackDeploy(
   config: StackConfig,
   spinner: ReturnType<typeof ora>,
 ): Promise<void> {
   const pgUrl = buildPgUrl(config);
 
-  // Ensure postkit internal schema + stack_config table exist
-  spinner.start("Initialising postkit schema...");
-  const client = new Client({connectionString: pgUrl});
-  await client.connect();
+  // Wait until postgres is truly ready — pg_isready can pass before queries work
+  spinner.start("Waiting for postgres to accept connections...");
+  const client = await connectWithRetry(pgUrl);
   try {
     await client.query(POSTKIT_SCHEMA_SQL);
+    spinner.succeed("postkit schema initialised");
   } finally {
-    await client.end();
+    await client.end().catch(() => undefined);
   }
 
-  // Apply db/infra/*.sql (roles, schemas, extensions)
+  // Phase 1: Apply db/infra/*.sql (roles, schemas, extensions)
   await applyInfraStep(spinner, pgUrl, "stack");
 
-  // Apply all committed migrations — no dry-run, no cloning
-  spinner.start("Running committed migrations on stack...");
+  // Phase 2: Apply committed migrations
+  spinner.start("Running committed migrations...");
   const result = await runCommittedMigrate(pgUrl);
   if (!result.success) {
     const out = result.output ?? "";
-    if (out.toLowerCase().includes("no migration files found") || out.toLowerCase().includes("no migrations")) {
+    if (
+      out.toLowerCase().includes("no migration files found") ||
+      out.toLowerCase().includes("no migrations")
+    ) {
       spinner.succeed("No committed migrations to apply");
-      return;
+    } else {
+      throw new Error(`Migration failed: ${out}`);
     }
-    throw new Error(`Migration failed: ${out}`);
+  } else {
+    spinner.succeed("Committed migrations applied");
   }
-  spinner.succeed("Committed migrations applied to stack");
+
+  // Phase 3: Apply seeds
+  await applySeedsStep(spinner, pgUrl, "stack");
 }

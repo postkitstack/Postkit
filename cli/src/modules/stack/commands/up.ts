@@ -64,14 +64,10 @@ export async function upCommand(
     }
   }
 
-  // Step 7: Apply DB infra + committed migrations (no dry-run)
+  // Step 7: Apply DB infra + migrations + seeds — hard failure if this fails
   if (infraServices.includes("postgres")) {
-    const dbDeploySpinner = ora("Deploying DB (infra + migrations)...").start();
-    try {
-      await applyStackDeploy(config, dbDeploySpinner);
-    } catch (error) {
-      dbDeploySpinner.warn(`DB deploy skipped: ${(error as Error).message}`);
-    }
+    const dbDeploySpinner = ora("Deploying DB (infra + migrations + seeds)...").start();
+    await applyStackDeploy(config, dbDeploySpinner);
   }
 
   // Step 8: Start all remaining selected services
