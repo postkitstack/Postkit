@@ -152,6 +152,7 @@ function renderKeycloak(config: StackConfig): string {
       KC_DB_URL: jdbc:postgresql://postgres:5432/${pg.database}
       KC_DB_USERNAME: ${pg.user}
       KC_DB_PASSWORD: ${pg.password}
+      KC_DB_SCHEMA: auth
       KEYCLOAK_ADMIN: ${kc.adminUser}
       KEYCLOAK_ADMIN_PASSWORD: ${kc.adminPassword}
     labels:

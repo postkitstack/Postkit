@@ -2,36 +2,76 @@ import fs from "fs";
 import path from "path";
 import {projectRoot} from "../../../common/config";
 
-const ROLES_SQL = `-- PostgREST roles — created by postkit init
--- Edit freely; applied by 'postkit stack up' before services start.
+const ROLES_SQL = `DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'anon') THEN
+        CREATE ROLE anon NOLOGIN NOSUPERUSER INHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;
+    END IF;
+END
+$$;
 
-DO $\$ BEGIN CREATE ROLE anon NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
-DO $\$ BEGIN CREATE ROLE authenticated NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
-DO $\$ BEGIN CREATE ROLE service_role NOLOGIN BYPASSRLS; EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
-DO $\$ BEGIN CREATE ROLE app_user NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $\$;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') THEN
+        CREATE ROLE authenticated NOLOGIN NOSUPERUSER INHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;
+    END IF;
+END
+$$;
 
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role, app_user;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, service_role, app_user;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role, app_user;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'service_role') THEN
+        CREATE ROLE service_role NOLOGIN NOSUPERUSER NOINHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;
+    END IF;
+END
+$$;
 
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO anon;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO authenticated, service_role, app_user;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO authenticated, service_role, app_user;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_user') THEN
+        CREATE ROLE app_user NOLOGIN NOSUPERUSER NOINHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;
+    END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticator') THEN
+        CREATE ROLE authenticator LOGIN NOSUPERUSER NOINHERIT NOCREATEDB NOCREATEROLE NOREPLICATION;
+    END IF;
+END
+$$;
+`;
+
+const SCHEMAS_SQL = `CREATE SCHEMA IF NOT EXISTS public;
+
+CREATE SCHEMA IF NOT EXISTS auth;
+
+CREATE SCHEMA IF NOT EXISTS storage;
 `;
 
 /**
- * Scaffold db/infra/ directory and a default roles.sql for PostgREST.
+ * Scaffold db/infra/ with 001_roles.sql and 002_schemas.sql for PostgREST.
  * Safe to call multiple times — never overwrites existing files.
- * Returns true if roles.sql was created, false if it already existed.
+ * Returns true if any file was created, false if all already existed.
  */
 export function scaffoldDbInfra(): boolean {
   const infraDir = path.join(projectRoot, "db", "infra");
-  const rolesFile = path.join(infraDir, "roles.sql");
-
   fs.mkdirSync(infraDir, {recursive: true});
 
-  if (fs.existsSync(rolesFile)) return false;
-  fs.writeFileSync(rolesFile, ROLES_SQL);
-  return true;
+  let created = false;
+
+  const rolesFile = path.join(infraDir, "001_roles.sql");
+  if (!fs.existsSync(rolesFile)) {
+    fs.writeFileSync(rolesFile, ROLES_SQL);
+    created = true;
+  }
+
+  const schemasFile = path.join(infraDir, "002_schemas.sql");
+  if (!fs.existsSync(schemasFile)) {
+    fs.writeFileSync(schemasFile, SCHEMAS_SQL);
+    created = true;
+  }
+
+  return created;
 }
