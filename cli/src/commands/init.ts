@@ -163,7 +163,7 @@ export async function initCommand(options: CommandOptions): Promise<void> {
   } else {
     const spinner = ora("Creating .postkit/auth/ directory...").start();
     const postkitAuthDir = getPostkitAuthDir();
-    for (const subdir of ["raw", "realm"]) {
+    for (const subdir of ["raw", "realm", "providers"]) {
       const subPath = path.join(postkitAuthDir, subdir);
       if (!fs.existsSync(subPath)) {
         fs.mkdirSync(subPath, {recursive: true});

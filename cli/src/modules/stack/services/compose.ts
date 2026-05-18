@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import type {StackConfig} from "../types/config";
 import {getStackDir} from "../utils/stack-config";
+import {getProvidersDir} from "./sync-providers";
 
 /** All supported service names. */
 export const ALL_SERVICES = ["postgres", "keycloak", "postgrest", "traefik"] as const;
@@ -142,6 +143,7 @@ function renderPostgres(config: StackConfig): string {
 function renderKeycloak(config: StackConfig): string {
   const kc = config.keycloak;
   const pg = config.postgres;
+  const providersDir = getProvidersDir();
   return `
   keycloak:
     image: ${kc.image}
@@ -155,6 +157,8 @@ function renderKeycloak(config: StackConfig): string {
       KC_DB_SCHEMA: auth
       KEYCLOAK_ADMIN: ${kc.adminUser}
       KEYCLOAK_ADMIN_PASSWORD: ${kc.adminPassword}
+    volumes:
+      - ${providersDir}:/opt/keycloak/providers
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.keycloak.rule=Host(\`keycloak.localhost\`)"

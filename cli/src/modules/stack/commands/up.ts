@@ -8,6 +8,7 @@ import type {ServiceName} from "../services/compose";
 import {waitForAllServices} from "../services/health";
 import {applyStackDeploy} from "../services/db-init";
 import {readStackIsInitial, setStackInitialized} from "../utils/stack-state";
+import {syncKeycloakProviders} from "../services/sync-providers";
 
 export interface UpOptions extends CommandOptions {
   wait?: boolean;
@@ -68,6 +69,17 @@ export async function upCommand(
   if (infraServices.includes("postgres")) {
     const dbDeploySpinner = ora("Deploying DB (infra + migrations + seeds)...").start();
     await applyStackDeploy(config, dbDeploySpinner);
+  }
+
+  // Step 8a: Sync Keycloak providers (auth/providers/*/target/*.jar → .postkit/auth/providers/)
+  if (selected.includes("keycloak")) {
+    const providerSpinner = ora("Syncing Keycloak providers...").start();
+    syncKeycloakProviders(providerSpinner);
+    if (!providerSpinner.isSpinning) {
+      // already succeeded/informed above
+    } else {
+      providerSpinner.succeed("Keycloak providers dir ready");
+    }
   }
 
   // Step 8: Start keycloak + postgrest — only after DB migrations are applied
