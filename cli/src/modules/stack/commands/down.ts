@@ -5,7 +5,6 @@ import type {CommandOptions} from "../../../common/types";
 import {getComposeFilePath} from "../utils/stack-config";
 import {composeDown} from "../services/docker-compose";
 import {PostkitError} from "../../../common/errors";
-import {writeStackState} from "../utils/stack-state";
 
 export interface DownOptions extends CommandOptions {
   volumes?: boolean;
@@ -35,11 +34,6 @@ export async function downCommand(options: DownOptions): Promise<void> {
     ? "Stack stopped and volumes removed"
     : "Stack stopped",
   );
-
-  // Reset init state when volumes are wiped so next stack up re-initializes
-  if (options.volumes) {
-    writeStackState({isInitial: true});
-  }
 
   logger.blank();
   if (options.volumes) {

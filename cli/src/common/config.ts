@@ -96,6 +96,9 @@ export interface StackKeycloakPublicConfig {
   image?: string;
   realm?: string;
   volume?: string;
+  clientRealm?: string;
+  clients?: string[];
+  realmTemplate?: string;
 }
 
 export interface StackPostgrestPublicConfig {

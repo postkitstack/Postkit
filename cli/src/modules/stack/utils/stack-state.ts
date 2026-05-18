@@ -1,24 +1,44 @@
-import fs from "fs";
-import path from "path";
-import {getPostkitDir} from "../../../common/config";
-import type {StackState} from "../types/config";
+import {Client} from "pg";
+import type {StackConfig} from "../types/config";
+import {buildPgUrl} from "../services/db-init";
 
-function getStackStatePath(): string {
-  return path.join(getPostkitDir(), "stack", "state.json");
-}
+const KEY = "is_initial";
 
-export function readStackState(): StackState {
-  const statePath = getStackStatePath();
-  if (!fs.existsSync(statePath)) return {};
+/**
+ * Read the is_initial flag from postkit.stack_config.
+ * Returns true (treat as initial) if the table/row doesn't exist or on any error.
+ */
+export async function readStackIsInitial(config: StackConfig): Promise<boolean> {
+  const client = new Client({connectionString: buildPgUrl(config)});
   try {
-    return JSON.parse(fs.readFileSync(statePath, "utf-8")) as StackState;
+    await client.connect();
+    const res = await client.query<{value: string}>(
+      "SELECT value FROM postkit.stack_config WHERE key = $1",
+      [KEY],
+    );
+    if (res.rows.length === 0) return true;
+    return (res.rows[0]?.value ?? "true") !== "false";
   } catch {
-    return {};
+    return true;
+  } finally {
+    await client.end().catch(() => undefined);
   }
 }
 
-export function writeStackState(state: StackState): void {
-  const statePath = getStackStatePath();
-  fs.mkdirSync(path.dirname(statePath), {recursive: true});
-  fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + "\n", "utf-8");
+/**
+ * Mark the stack as initialized by setting is_initial = 'false' in the DB.
+ */
+export async function setStackInitialized(config: StackConfig): Promise<void> {
+  const client = new Client({connectionString: buildPgUrl(config)});
+  try {
+    await client.connect();
+    await client.query(
+      `INSERT INTO postkit.stack_config (key, value, updated_at)
+       VALUES ($1, 'false', now())
+       ON CONFLICT (key) DO UPDATE SET value = 'false', updated_at = now()`,
+      [KEY],
+    );
+  } finally {
+    await client.end().catch(() => undefined);
+  }
 }
