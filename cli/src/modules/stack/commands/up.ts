@@ -6,6 +6,7 @@ import {checkDockerComposeAvailable, composeUp} from "../services/docker-compose
 import {writeComposeFile, getSelectedServices} from "../services/compose";
 import {waitForAllServices} from "../services/health";
 import {applyStackDeploy} from "../services/db-init";
+import {readStackState, writeStackState} from "../utils/stack-state";
 
 export interface UpOptions extends CommandOptions {
   wait?: boolean;
@@ -98,37 +99,49 @@ export async function upCommand(
     }
   }
 
-  // Step 7: Import realm template (if configured) — must run before JWKs fetch
-  if (selected.includes("keycloak") && config.keycloak.realmTemplate) {
-    const realmSpinner = ora("Importing realm template into Keycloak...").start();
-    try {
-      const {importRealmTemplate} = await import("../services/realm-init");
-      await importRealmTemplate(config, realmSpinner);
-      realmSpinner.succeed(`Realm "${config.keycloak.realm}" imported`);
-    } catch (error) {
-      realmSpinner.warn(`Realm import failed: ${(error as Error).message}`);
-      logger.warn("Run 'postkit stack realm' to retry.");
-    }
-  }
+  // Step 7: Initial setup — realm import + JWKs fetch
+  // Only runs on first stack up (isInitial undefined or true). Skipped on normal restarts.
+  const stackState = readStackState();
+  const shouldInitialize = stackState.isInitial !== false;
 
-  // Step 8: Auto-fetch keys from Keycloak (unless --no-keys) — realm must exist first
-  if (options.keysRun !== false && selected.includes("keycloak")) {
-    const keysSpinner = ora("Fetching JWKs and client credentials from Keycloak...").start();
-    try {
-      const {fetchAndMergeKeys, writeKeysToSecrets} = await import("../services/keycloak-keys");
-      const result = await fetchAndMergeKeys(config, keysSpinner);
-      writeKeysToSecrets(result);
-      // Regenerate compose with new jwks and recreate postgrest
-      if (selected.includes("postgrest")) {
-        const updatedConfig = getStackConfig();
-        const newComposeFile = writeComposeFile(updatedConfig, selected);
-        await composeUp(newComposeFile, ["postgrest"]);
+  if (selected.includes("keycloak") && shouldInitialize) {
+    // Step 7a: Import realm template (must run before JWKs fetch)
+    if (config.keycloak.realmTemplate) {
+      const realmSpinner = ora("Importing realm template into Keycloak...").start();
+      try {
+        const {importRealmTemplate} = await import("../services/realm-init");
+        await importRealmTemplate(config, realmSpinner);
+        realmSpinner.succeed(`Realm "${config.keycloak.realm}" imported`);
+      } catch (error) {
+        realmSpinner.warn(`Realm import failed: ${(error as Error).message}`);
+        logger.warn("Run 'postkit stack init' to retry.");
       }
-      keysSpinner.succeed("Keycloak JWKs fetched and PostgREST updated");
-    } catch (error) {
-      keysSpinner.warn(`Could not fetch Keycloak keys: ${(error as Error).message}`);
-      logger.warn("Run 'postkit stack keys' after Keycloak is configured.");
     }
+
+    // Step 7b: Fetch JWKs and client credentials — realm must exist first
+    if (options.keysRun !== false) {
+      const keysSpinner = ora("Fetching JWKs and client credentials from Keycloak...").start();
+      try {
+        const {fetchAndMergeKeys, writeKeysToSecrets} = await import("../services/keycloak-keys");
+        const result = await fetchAndMergeKeys(config, keysSpinner);
+        writeKeysToSecrets(result);
+        // Regenerate compose with new jwks and recreate postgrest
+        if (selected.includes("postgrest")) {
+          const updatedConfig = getStackConfig();
+          const newComposeFile = writeComposeFile(updatedConfig, selected);
+          await composeUp(newComposeFile, ["postgrest"]);
+        }
+        keysSpinner.succeed("Keycloak JWKs fetched and PostgREST updated");
+      } catch (error) {
+        keysSpinner.warn(`Could not fetch Keycloak keys: ${(error as Error).message}`);
+        logger.warn("Run 'postkit stack keys' after Keycloak is configured.");
+      }
+    }
+
+    // Mark stack as initialized so subsequent stack up skips these steps
+    writeStackState({isInitial: false});
+  } else if (selected.includes("keycloak") && !shouldInitialize) {
+    logger.info("Stack already initialized. Run 'postkit stack init' to re-run realm import.");
   }
 
   // Step 9: Print summary

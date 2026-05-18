@@ -5,6 +5,7 @@ import type {CommandOptions} from "../../../common/types";
 import {getComposeFilePath} from "../utils/stack-config";
 import {composeDown} from "../services/docker-compose";
 import {PostkitError} from "../../../common/errors";
+import {writeStackState} from "../utils/stack-state";
 
 export interface DownOptions extends CommandOptions {
   volumes?: boolean;
@@ -35,9 +36,15 @@ export async function downCommand(options: DownOptions): Promise<void> {
     : "Stack stopped",
   );
 
+  // Reset init state when volumes are wiped so next stack up re-initializes
+  if (options.volumes) {
+    writeStackState({isInitial: true});
+  }
+
   logger.blank();
   if (options.volumes) {
     logger.info("Containers and volumes removed. All data has been deleted.");
+    logger.info("Next 'postkit stack up' will re-run realm import and key setup.");
   } else {
     logger.info("Containers removed. Data preserved in Docker volumes.");
     logger.info("Use --volumes to remove persistent data as well.");

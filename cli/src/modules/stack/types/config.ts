@@ -155,6 +155,14 @@ export interface StackSecretsConfig {
 }
 
 // ============================================
+// Stack Runtime State (.postkit/stack/state.json — gitignored)
+// ============================================
+
+export interface StackState {
+  isInitial?: boolean;
+}
+
+// ============================================
 // Docker Compose Status Types
 // ============================================
 
