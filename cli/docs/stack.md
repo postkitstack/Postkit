@@ -1,155 +1,235 @@
-# PostKit Stack Module
+# 📦 Stack Module (`postkit stack`)
 
-The `stack` module manages a local Docker-based backend environment for development. It spins up **PostgreSQL**, **Keycloak**, and **PostgREST** as Docker containers — wired together on a shared network — using a generated `docker-compose.yml` that is written to `.postkit/stack/`.
-
----
-
-## Prerequisites
-
-- Docker Desktop installed and **running**
-- Docker Compose V2 (included in Docker Desktop by default)
+A local backend stack manager. Starts and manages Postgres, Keycloak, PostgREST, and Traefik as a Docker Compose project, applies DB migrations on startup, and handles Keycloak realm initialization automatically on the first run.
 
 ---
 
-## Services
+## 🗂️ Services Overview
 
-| Service | Default Image | Default Port | Purpose |
-|---------|--------------|-------------|---------|
-| **postgres** | `postgres:16-alpine` | `25432` | PostgreSQL database |
-| **keycloak** | `quay.io/keycloak/keycloak:26.6` | `28080` | Auth / identity provider |
-| **postgrest** | `postgrest/postgrest:latest` | `3000` | Auto REST API over Postgres |
-| **traefik** | `traefik:v3.3` | `80` (HTTP) / `8080` (dashboard) | Reverse proxy + routing |
+| Service | Image | Port | Purpose |
+|---------|-------|------|---------|
+| `postgres` | `postgres:16-alpine` | 25432 (host) | Database |
+| `keycloak` | `quay.io/keycloak/keycloak:26.6` | via Traefik | Auth server (`keycloak.localhost`) |
+| `postgrest` | `postgrest/postgrest:latest` | via Traefik | REST API (`api.localhost`) |
+| `traefik` | `traefik:v3.3` | 80 (HTTP) / 8080 (dashboard) | Reverse proxy |
 
-**Dependency rule**: Keycloak and PostgREST both depend on Postgres and Traefik. Starting either one automatically includes both.
+All services share a Docker network named `postkit-net`. The network name is explicit (no Docker Compose project prefix) so external containers like `keycloak-config-cli` can join it by name.
 
-### Traefik Routing
-
-Traefik listens on port `80` and routes incoming requests by hostname:
-
-| URL | Routes to | Service |
-|-----|-----------|---------|
-| `http://keycloak.localhost` | `:8080` | Keycloak |
-| `http://api.localhost` | `:3000` | PostgREST |
-| `http://localhost:8080/dashboard/` | — | Traefik dashboard |
-
-Postgres is TCP and accessed directly on port `25432` — not routed through Traefik.
+**Dependency rule:** Selecting `keycloak` or `postgrest` automatically includes `postgres` and `traefik`.
 
 ---
 
-## Configuration
+## 🚀 `stack up` — Two-Phase Startup
 
-Stack config is split across two files:
+`stack up` enforces an ordered startup sequence: the database must be initialized before auth/API services start.
 
-### `postkit.config.json` (committed to git)
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                       stack up (two-phase)                          │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Phase 1 — Infrastructure                                           │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ Start: postgres + traefik                                     │  │
+│  │ Wait:  health checks (pg_isready, Traefik API)                │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                              │                                      │
+│                              ▼                                      │
+│  Phase 2 — DB Initialization  (hard failure stops stack up)         │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ 1. connectWithRetry → CREATE SCHEMA IF NOT EXISTS postkit     │  │
+│  │    + CREATE TABLE IF NOT EXISTS postkit.stack_config          │  │
+│  │ 2. Apply db/infra/*.sql (roles, schemas, extensions)          │  │
+│  │ 3. Run committed migrations (.postkit/db/migrations/)         │  │
+│  │ 4. Apply seeds                                                │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                              │                                      │
+│                              ▼                                      │
+│  Phase 3 — Application Services                                     │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ Start: keycloak + postgrest                                   │  │
+│  │ Wait:  health checks (Keycloak /health, PostgREST /)          │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                              │                                      │
+│                              ▼                                      │
+│  Phase 4 — Initial Setup  (first run only, skipped if initialized) │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ readStackIsInitial → true?                                    │  │
+│  │   ├─▶ importRealmTemplate (keycloak-config-cli container)     │  │
+│  │   ├─▶ fetchAndMergeKeys (JWKs + client secrets)              │  │
+│  │   ├─▶ writeComposeFile + composeUp(postgrest)  [update JWT]  │  │
+│  │   └─▶ setStackInitialized (is_initial = 'false' in DB)       │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+└────────────────────────────────────────────────────────────────────┘
+```
 
-Non-sensitive settings — ports, images, database name, realm:
+---
+
+## 🔁 `is_initial` State Management
+
+Whether to run realm import and JWKs fetch is controlled by a flag stored in the database itself — not in a file — so it resets automatically when the database volume is wiped.
+
+| State | Location | Meaning |
+|-------|----------|---------|
+| Missing row (default) | `postkit.stack_config` table | First run — executes realm import + JWKs on next `stack up` |
+| `value = 'false'` | `postkit.stack_config` table | Already initialized — Phase 4 is skipped |
+
+**Automatic reset:** `postkit stack down --volumes` wipes the Postgres volume, which drops `postkit.stack_config`. The next `stack up` finds no row and runs full initialization again.
+
+**Manual override:**
+- `postkit stack realm` — re-import realm without wiping data
+- `postkit stack keys` — re-fetch JWKs without wiping data
+
+---
+
+## 🔑 Keycloak Providers
+
+Keycloak provider JARs are mounted at `/opt/keycloak/providers` inside the container. PostKit assembles the mount source directory at `postkit init` time from two sources:
+
+| Source | Path | Notes |
+|--------|------|-------|
+| Bundled JARs | `vendor/providers/*.jar` (CLI) | Copied on `postkit init` |
+| Project-specific JARs | `auth/providers/<name>/target/*.jar` | Copied on `postkit init` |
+
+**Destination:** `.postkit/auth/providers/` — gitignored, rebuilt by `postkit init`.
+
+If you add or update a project provider, re-run `postkit init` to sync the new JAR, then restart the stack.
+
+---
+
+## 🏰 Realm Template + JWT Role Mapper
+
+On the first `stack up` (when `is_initial=true`), PostKit imports a Keycloak realm template.
+
+The template path is configured via `stack.keycloak.realmTemplate` (default: `.postkit/auth/realm/postkit.json`). Scaffolded automatically by `postkit init`.
+
+Before importing, `cleanRealmTemplate()` transforms the raw template JSON:
+
+| Transform | Detail |
+|-----------|--------|
+| Set realm name | Sets `realm` to `config.keycloak.realm`, removes top-level `id` |
+| Strip builtin clients | Removes `account`, `account-console`, `admin-cli`, `broker`, `realm-management`, `security-admin-console` |
+| Strip generated fields | Removes `id`, `secret`, `registrationAccessToken`, `client.secret.creation.time` |
+| Strip role IDs | Removes `id` from all realm roles |
+| Ensure admin role | Adds `admin` realm role if absent |
+| Inject JWT Role Mapper | Adds `script-primary-role.js` protocol mapper to every non-builtin client |
+
+The **JWT Role Mapper** (`protocolMapper: "script-primary-role.js"`) maps Keycloak realm roles into JWT claims in the format expected by PostgREST for role-based access control.
+
+Import runs via:
+```
+docker run --rm --network postkit-net \
+  adorsys/keycloak-config-cli:latest-26
+```
+targeting `http://keycloak:8080` (internal Docker DNS, bypasses Traefik).
+
+---
+
+## ⚙️ Configuration
+
+### `postkit.config.json` (committed)
 
 ```json
 {
+  "name": "myapp_a3f2b1c0",
+  "db": {
+    "schemaPath": "db/schema",
+    "schemas": ["public"],
+    "infraPath": "db/infra"
+  },
+  "auth": {
+    "configCliImage": "adorsys/keycloak-config-cli:latest-26"
+  },
   "stack": {
     "postgres": {
       "port": 25432,
-      "pgVersion": 16,
-      "database": "myapp",
-      "image": "postgres:16-alpine",
-      "volume": "postkit-pgdata"
+      "database": "postkit",
+      "pgVersion": 16
     },
     "keycloak": {
-      "port": 28080,
-      "realm": "myrealm",
-      "image": "quay.io/keycloak/keycloak:26.6",
-      "volume": "postkit-keycloak-data"
+      "realm": "postkit",
+      "realmTemplate": ".postkit/auth/realm/postkit.json",
+      "clients": ["app"]
     },
     "postgrest": {
-      "port": 3000,
       "dbSchema": "public",
       "dbAnonRole": "anon"
     },
     "traefik": {
       "httpPort": 80,
-      "dashboardPort": 8080,
-      "image": "traefik:v3.3"
+      "dashboardPort": 8080
     },
     "network": "postkit-net"
   }
 }
 ```
 
-All fields are optional — defaults are used for anything omitted.
+All `stack.*` fields are optional — defaults are applied for anything omitted.
 
 ### `postkit.secrets.json` (gitignored)
 
-Credentials only:
+Auto-generated by `postkit stack up` on first run. Missing passwords are generated as random 32-byte hex strings.
 
 ```json
 {
   "stack": {
     "postgres": {
-      "user": "myuser",
-      "password": "..."
+      "user": "postgres",
+      "password": "<auto-generated>"
     },
     "keycloak": {
       "adminUser": "admin",
-      "adminPassword": "..."
+      "adminPassword": "<auto-generated>"
     },
-    "postgrest": {
-      "jwtSecret": "..."
+    "jwks": {
+      "keys": [{ "kty": "oct", "kid": "storage-url-signing-key", "alg": "HS256", "k": "..." }],
+      "urlSigningKey": { "kty": "oct", "kid": "storage-url-signing-key", "alg": "HS256", "k": "..." }
     }
   }
 }
 ```
 
-**Auto-generation**: If passwords or the JWT secret are missing on first `stack up`, PostKit generates cryptographically random values and writes them into `postkit.secrets.json` automatically. You never need to set them manually.
+> JWKs and client secrets are populated here by `postkit stack keys` after being fetched from Keycloak.
+
+### Config Properties Reference
+
+| Property | File | Default | Description |
+|----------|------|---------|-------------|
+| `name` | config | required | Docker Compose project name — scopes containers per project |
+| `stack.postgres.port` | config | 25432 | Host port mapped to Postgres container |
+| `stack.postgres.database` | config | `postkit` | Database name |
+| `stack.postgres.pgVersion` | config | 16 | Postgres major version |
+| `stack.postgres.volume` | config | `postkit-pgdata` | Docker volume name for Postgres data |
+| `stack.keycloak.realm` | config | `postkit` | Keycloak realm name |
+| `stack.keycloak.realmTemplate` | config | `.postkit/auth/realm/postkit.json` | Path to realm template |
+| `stack.keycloak.clients` | config | `[]` | Client names to fetch secrets for via `stack keys` |
+| `stack.keycloak.volume` | config | `postkit-keycloak-data` | Docker volume name for Keycloak data |
+| `stack.postgrest.dbSchema` | config | `public` | PostgREST exposed DB schema |
+| `stack.postgrest.dbAnonRole` | config | `anon` | PostgREST anonymous role |
+| `stack.traefik.httpPort` | config | 80 | Traefik HTTP entry point (host) |
+| `stack.traefik.dashboardPort` | config | 8080 | Traefik dashboard port (host) |
+| `stack.network` | config | `postkit-net` | Docker network name |
+| `stack.postgres.password` | secrets | auto-generated | Postgres password |
+| `stack.keycloak.adminPassword` | secrets | auto-generated | Keycloak admin password |
 
 ---
 
-## Commands
+## 🚀 Commands
 
 ### `postkit stack up [services...]`
 
-Start all services or a specific subset.
+Start the full stack or selected services.
 
 ```bash
-postkit stack up                        # Start all enabled services
-postkit stack up postgres               # Postgres only
-postkit stack up postgres keycloak      # Postgres + Keycloak + Traefik (auto)
-postkit stack up traefik                # Traefik only
-postkit stack up --no-wait              # Start without waiting for health checks
+postkit stack up                          # Start all services
+postkit stack up postgres traefik         # Start only postgres + traefik
+postkit stack up postgres keycloak        # Includes traefik automatically
+postkit stack up --no-wait               # Skip health check waiting
+postkit stack up --no-keys               # Skip auto-fetching JWKs on init
 ```
 
-**What happens (step by step):**
-
-```
-1. Check Docker + Docker Compose V2 are available
-2. Load config from postkit.config.json + postkit.secrets.json
-3. Auto-generate any missing secrets → write to postkit.secrets.json
-4. Resolve which services to start
-   └─ If keycloak or postgrest selected → add postgres automatically
-5. Generate docker-compose.yml → write to .postkit/stack/docker-compose.yml
-6. Run: docker compose up -d <services>
-7. Wait for health checks (unless --no-wait):
-   └─ postgres  → TCP connection probe on port
-   └─ keycloak  → HTTP GET http://localhost:<port>/
-   └─ postgrest → HTTP GET http://localhost:<port>/
-8. Print service summary table with URLs and ports
-```
-
-**Output after success:**
-
-```
-✔ Stack is running!
-
-Service      URL                                          Port
-──────────────────────────────────────────────────────────────────────
-PostgreSQL   postgres://myuser:***@localhost:25432/myapp  25432
-Keycloak     http://localhost:28080                       28080
-PostgREST    http://localhost:3000                        3000
-Traefik      http://localhost:8080/dashboard/             8080
-
-Routing:
-  http://keycloak.localhost  →  Keycloak
-  http://api.localhost       →  PostgREST
-```
+Available service names: `postgres`, `keycloak`, `postgrest`, `traefik`
 
 ---
 
@@ -158,181 +238,181 @@ Routing:
 Stop and remove all stack containers.
 
 ```bash
-postkit stack down             # Stop containers, keep data volumes
-postkit stack down --volumes   # Stop containers AND delete persistent data
+postkit stack down             # Stop containers, keep volumes (data preserved)
+postkit stack down --volumes   # Stop containers AND delete volumes (resets is_initial)
 ```
 
-**What happens:**
-
-```
-1. Check .postkit/stack/docker-compose.yml exists
-   └─ Error if not found (stack was never started)
-2. Run: docker compose down [--volumes]
-3. Containers removed; volumes preserved unless --volumes passed
-```
-
-> **Data safety**: Without `--volumes`, PostgreSQL data and Keycloak data survive in Docker named volumes (`postkit-pgdata`, `postkit-keycloak-data`). Re-running `stack up` picks up where you left off. Use `--volumes` only when you want a clean slate.
+> Without `--volumes`, Postgres and Keycloak data survive in Docker named volumes. Use `--volumes` for a clean slate — this also resets the `is_initial` flag so the next `stack up` re-runs realm import and JWKs fetch.
 
 ---
 
 ### `postkit stack status`
 
-Show the current state of all stack containers.
+Show running services, ports, and health status.
 
 ```bash
-postkit stack status          # Human-readable table
-postkit stack status --json   # Machine-readable JSON output
+postkit stack status
 ```
-
-**Output:**
-
-```
-PostKit Stack Status
-
-Service     Container           State    Health   Ports
-────────────────────────────────────────────────────────
-postgres    postkit-postgres    running  healthy  25432:5432
-keycloak    postkit-keycloak    running  healthy  28080:8080
-postgrest   postkit-postgrest   running           3000:3000
-```
-
-With `--json`, returns the raw `ServiceStatus[]` array:
-```json
-[
-  {
-    "name": "postkit-postgres",
-    "service": "postgres",
-    "state": "running",
-    "health": "healthy",
-    "ports": "25432:5432",
-    "publisherPort": 25432
-  }
-]
-```
-
-**Error:** Throws if `.postkit/stack/docker-compose.yml` does not exist — run `stack up` first.
 
 ---
 
-### `postkit stack logs [service]`
+### `postkit stack logs [service] [-f] [-n <number>]`
 
-Tail logs from one or all services. Follows output by default (like `docker logs -f`).
+Tail logs for all services or a specific service.
 
 ```bash
-postkit stack logs                      # Follow all services
-postkit stack logs postgres             # Postgres logs only
-postkit stack logs keycloak --no-follow # Print last 100 lines and exit
-postkit stack logs postgrest -n 50      # Last 50 lines, then follow
+postkit stack logs                        # Follow all services (default)
+postkit stack logs keycloak               # Keycloak logs only
+postkit stack logs postgres --no-follow   # Print last 100 lines and exit
+postkit stack logs postgrest -n 50        # Last 50 lines, then follow
 ```
 
-**Options:**
+**Flags:**
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-f, --follow` | `true` | Stream logs continuously |
+| `-f, --follow` | true | Stream logs continuously |
 | `--no-follow` | — | Print last N lines and exit |
-| `-n, --tail <number>` | `100` | Number of lines to show |
-
-Runs until you press `Ctrl+C`. Output is piped directly to your terminal (colour, formatting preserved).
+| `-n, --tail <number>` | 100 | Number of lines to show |
 
 ---
 
-### `postkit stack restart [service]`
+### `postkit stack restart [services...]`
 
-Restart one service or all services. Waits for health checks after restart.
+Restart one or more services. Service names are validated before restarting.
 
 ```bash
-postkit stack restart             # Restart all services
-postkit stack restart keycloak    # Restart Keycloak only
-postkit stack restart postgres    # Restart Postgres only
+postkit stack restart                     # Restart all services
+postkit stack restart keycloak            # Restart keycloak only
+postkit stack restart keycloak postgrest  # Restart multiple services
 ```
 
-**What happens:**
+Invalid service names produce an error listing valid options (`postgres`, `keycloak`, `postgrest`, `traefik`).
 
-```
-1. Check .postkit/stack/docker-compose.yml exists
-2. Run: docker compose restart [service]
-3. Wait for health checks on restarted service(s)
-   └─ Non-fatal if still starting — warns and continues
+---
+
+### `postkit stack keys [--restart] [--clients <names>]`
+
+Fetch JWKs and client secrets from Keycloak and write them to `postkit.secrets.json`. Optionally restarts PostgREST with the updated JWT configuration.
+
+```bash
+postkit stack keys                        # Fetch and write to secrets
+postkit stack keys --restart              # Fetch + restart PostgREST
+postkit stack keys --clients "app,admin"  # Fetch keys for specific clients only
 ```
 
 ---
 
-## Full Workflow Example
+### `postkit stack realm`
+
+Re-import the Keycloak realm template without restarting the stack.
 
 ```bash
-# 1. Start everything for the first time
+postkit stack realm
+```
+
+Runs `cleanRealmTemplate()` + `importRealmTemplate()` — the same steps as Phase 4 of `stack up`. Use this after editing the realm template or when Keycloak loses its configuration.
+
+---
+
+## 📋 Workflow Guide
+
+### First Run
+
+```bash
+# 1. Initialize the project (creates infra SQL, realm template, providers)
+postkit init
+
+# 2. Start the full stack
+#    Phase 1: postgres + traefik start and become healthy
+#    Phase 2: infra SQL + migrations + seeds applied
+#    Phase 3: keycloak + postgrest start and become healthy
+#    Phase 4: realm imported, JWKs fetched, postgrest restarted
 postkit stack up
-# → Secrets auto-generated and saved to postkit.secrets.json
-# → All three services start, health checks pass
 
-# 2. Check what's running
+# Stack is running:
+#   Keycloak:   http://keycloak.localhost
+#   API:        http://api.localhost
+#   DB:         postgres://postgres:***@localhost:25432/postkit
+#   Dashboard:  http://localhost:8080/dashboard/
+```
+
+### Subsequent Runs
+
+```bash
+# Phase 4 is skipped (is_initial=false in DB)
+postkit stack up
+
+# Check health
 postkit stack status
 
-# 3. Watch Keycloak logs while configuring a realm
-postkit stack logs keycloak
+# Tail logs
+postkit stack logs
 
-# 4. Restart PostgREST after changing db.dbAnonRole in config
-postkit stack restart postgrest
-
-# 5. End of day — stop containers but keep DB data
+# Stop (keep data)
 postkit stack down
+```
 
-# 6. Next day — pick up where you left off
-postkit stack up
+### After Schema Changes
 
-# 7. Full reset — delete all data and start fresh
+Schema changes are applied automatically on the next `stack up` (Phase 2 runs committed migrations every time). If the stack is already running:
+
+```bash
+# Deploy schema changes to the running stack DB
+postkit db deploy
+```
+
+### Full Reset
+
+```bash
+# Wipe all data + volumes, reset is_initial flag
 postkit stack down --volumes
+
+# Next up runs full initialization again
 postkit stack up
+```
+
+### Re-importing the Realm Only
+
+```bash
+# Edit .postkit/auth/realm/postkit.json
+# Then re-import without restarting services
+postkit stack realm
 ```
 
 ---
 
-## Internal File Layout
+## 🔧 PostKit Directory Structure
 
 ```
 .postkit/
+├── auth/
+│   ├── realm/
+│   │   └── postkit.json       # COMMITTED — realm template (scaffolded by init)
+│   └── providers/             # GITIGNORED — Keycloak JARs (vendor + project)
+│       └── *.jar
 └── stack/
-    └── docker-compose.yml    ← generated on every `stack up`, never committed
+    └── docker-compose.yml     # GITIGNORED — generated compose file (regenerated on stack up)
 ```
 
-The compose file is **regenerated every time** `stack up` runs from the current config. You should never edit it manually — changes will be overwritten.
+The compose file is regenerated every time `stack up` runs from the current config. Never edit it manually — changes will be overwritten.
 
 ---
 
-## How Health Checks Work
+## 🐛 Troubleshooting
 
-PostKit waits up to **120 seconds** for each service (60 attempts × 2 second delay):
-
-| Service | Check type | What it probes |
-|---------|-----------|---------------|
-| postgres | TCP | Port reachable (`net.connect`) |
-| keycloak | HTTP GET | `http://localhost:<port>/` — any response |
-| postgrest | HTTP GET | `http://localhost:<port>/` — any response |
-| traefik | HTTP GET | `http://localhost:<dashboardPort>/dashboard/` — any response |
-
-All checks run in parallel. If any service does not become healthy in time, a warning is shown but the command does not fail — the stack may still be starting.
-
----
-
-## Defaults Reference
-
-| Setting | Default |
-|---------|---------|
-| Postgres image | `postgres:16-alpine` |
-| Postgres port | `25432` |
-| Postgres database | `postkit` |
-| Postgres user | `postgres` |
-| Postgres volume | `postkit-pgdata` |
-| Keycloak image | `quay.io/keycloak/keycloak:26.6` |
-| Keycloak port | `28080` |
-| Keycloak realm | `postkit` |
-| Keycloak volume | `postkit-keycloak-data` |
-| PostgREST image | `postgrest/postgrest:latest` |
-| PostgREST port | `3000` |
-| PostgREST db schema | `public` |
-| PostgREST anon role | `anon` |
-| Traefik image | `traefik:v3.3` |
-| Traefik HTTP port | `80` |
-| Traefik dashboard port | `8080` |
-| Docker network | `postkit-net` |
+| Issue | Solution |
+|-------|----------|
+| `Docker not found` | Install Docker Desktop; ensure `docker` is on your PATH |
+| `docker compose` not available | Install Docker Compose V2 (bundled with Docker Desktop 4.x+) |
+| `Config file not found` / `not initialized` | Run `postkit init` before any stack command |
+| `Invalid stack configuration` | Check `stack.*` fields in `postkit.config.json` against the Config Properties table |
+| Keycloak `Broken pipe` or connection refused during realm import | Keycloak is still starting. Run `postkit stack logs keycloak` and wait for the startup message, then run `postkit stack realm` |
+| PostgREST returns 401 after `stack keys` | JWT secret mismatch — run `postkit stack keys --restart` to sync JWKs and restart PostgREST |
+| `keycloak-config-cli import failed` | Check `postkit stack logs keycloak` for startup errors. Verify realm template JSON is valid |
+| Stack starts but Keycloak has DB errors | Ensure `db/infra/002_schemas.sql` creates the `auth` schema (`CREATE SCHEMA IF NOT EXISTS auth`) — applied in Phase 2 before Keycloak starts |
+| `Unknown service: "<name>"` | Valid names are: `postgres`, `keycloak`, `postgrest`, `traefik` |
+| Ports already in use (25432, 80, 8080) | Override ports in `postkit.config.json` under `stack.postgres.port`, `stack.traefik.httpPort`, `stack.traefik.dashboardPort` |
+| Provider JARs not loaded by Keycloak | Re-run `postkit init` to copy JARs to `.postkit/auth/providers/`, then `postkit stack down && postkit stack up` |
+| `stack up` hangs at health check | Run `postkit stack logs` — Keycloak takes 30–60s on first boot. Health check timeout is 120s |
+| `postkit stack down --volumes` does not reset realm | The reset is automatic because the `postkit.stack_config` table lives in the Postgres volume. If Keycloak volume was wiped but not Postgres, run `postkit stack realm` manually |

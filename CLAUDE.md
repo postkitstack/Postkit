@@ -40,12 +40,18 @@ cli/
 │       │   ├── services/     # Core business logic (database, pgschema, dbmate)
 │       │   ├── utils/        # DB-specific utilities (session, db-config, remotes)
 │       │   └── types/        # DB module types
-│       └── auth/             # Keycloak auth module
-│           ├── index.ts      # Module registration (registerAuthModule)
-│           ├── commands/     # export, import, sync
-│           ├── services/     # Keycloak API, Docker importer
-│           └── utils/        # Auth-specific config
-├── vendor/                   # Bundled binaries (pgschema for all platforms)
+│       ├── auth/             # Keycloak auth module
+│       │   ├── index.ts      # Module registration (registerAuthModule)
+│       │   ├── commands/     # export, import, sync
+│       │   ├── services/     # Keycloak API, Docker importer
+│       │   └── utils/        # Auth-specific config
+│       └── stack/            # Local backend stack module
+│           ├── index.ts      # Module registration (registerStackModule)
+│           ├── commands/     # up, down, status, logs, restart, keys, realm
+│           ├── services/     # compose, db-init, health, keycloak-keys, realm-init, scaffold, sync-providers
+│           ├── utils/        # stack-config, stack-state
+│           └── types/        # Stack config types
+├── vendor/                   # Bundled binaries (pgschema for all platforms) + providers/ (Keycloak JARs)
 ├── dist/                     # Build output (generated)
 ├── package.json
 └── tsup.config.ts            # Build configuration
@@ -112,9 +118,12 @@ PostKit files are split between committed (shared with team) and gitignored (use
 │   ├── session/             # GITIGNORED — temporary in-progress migrations
 │   ├── committed.json       # COMMITTED — migration tracking index (shared)
 │   └── migrations/          # COMMITTED — committed SQL migrations for deploy (shared)
-└── auth/
-    ├── raw/                 # COMMITTED — auth raw config (shared)
-    └── realm/               # COMMITTED — auth realm config (shared)
+├── auth/
+│   ├── raw/                 # COMMITTED — auth raw config (shared)
+│   ├── realm/               # COMMITTED — auth realm config (shared)
+│   └── providers/           # GITIGNORED — Keycloak JAR providers (copied from vendor + project)
+└── stack/
+    └── docker-compose.yml   # GITIGNORED — generated compose file (ephemeral)
 ```
 
 **Key paths** (from `modules/db/utils/db-config.ts`):
@@ -136,21 +145,86 @@ PostKit files are split between committed (shared with team) and gitignored (use
 - `resolveApplyTarget(target?)` (`utils/apply-target.ts`) - Resolves `"local"` or `"remote"` apply target; used by infra and seed commands
 - `readJsonFile<T>(path)` / `writeJsonFile(path, data)` (`utils/json-file.ts`) - Typed JSON helpers used by remotes and committed migration tracking
 
+### Stack Module Architecture
+
+The `stack` module manages a local backend service stack (Postgres, Keycloak, PostgREST, Traefik) using Docker Compose.
+
+**Services:**
+
+| Service | Image | Port | Purpose |
+|---------|-------|------|---------|
+| `postgres` | `postgres:16-alpine` | 25432 | Database |
+| `keycloak` | `quay.io/keycloak/keycloak:26.6` | via Traefik | Auth server |
+| `postgrest` | `postgrest/postgrest:latest` | via Traefik | REST API |
+| `traefik` | `traefik:v3.3` | 80 / 8080 | Reverse proxy + dashboard |
+
+**`stack up` startup sequence:**
+1. Start `postgres` + `traefik` (Phase 1 infrastructure)
+2. Wait for health checks on infrastructure services
+3. `applyStackDeploy` — creates `postkit` schema, applies `db/infra/`, committed migrations, seeds (hard failure)
+4. Start `keycloak` + `postgrest` (Phase 2 — only after DB is initialized)
+5. Wait for health checks on all services
+6. If `is_initial=true`: import realm template → fetch JWKs → update PostgREST → mark `is_initial=false`
+
+**`is_initial` flag** — stored in `postkit.stack_config` table in `postkit` schema:
+- `true` (default / missing row) → runs realm import + JWKs fetch on next `stack up`
+- `false` → skips realm/JWKs on subsequent starts
+- Automatically resets when DB volumes are wiped (`stack down --volumes`)
+- Manual reset: `postkit stack realm` or `postkit stack keys`
+
+**Keycloak providers** (`services/sync-providers.ts`):
+- Bundled JARs from `vendor/providers/` are copied to `.postkit/auth/providers/` on `postkit init`
+- Project-specific JARs from `auth/providers/<name>/target/*.jar` are also synced
+- The providers directory is mounted into Keycloak at `/opt/keycloak/providers`
+
+**Realm template + JWT Role Mapper** (`services/realm-init.ts`):
+- Default template scaffolded at `.postkit/auth/realm/postkit.json`
+- `cleanRealmTemplate()` strips builtin clients, strips IDs/secrets, injects `JWT_ROLE_MAPPER` (`script-primary-role.js`) into every non-builtin client
+- Import uses `keycloak-config-cli` via `docker run --network postkit-net`
+
+**Key paths** (from `modules/stack/utils/stack-config.ts`):
+- `getStackDir()` — `.postkit/stack/`
+- `getComposeFilePath()` — `.postkit/stack/docker-compose.yml`
+- `getProvidersDir()` — `.postkit/auth/providers/` (from `sync-providers.ts`)
+
+**Key functions:**
+- `getStackConfig()` (`utils/stack-config.ts`) — Loads + validates stack config, resolves defaults, reads JWKs/client secrets from secrets file
+- `ensureStackSecrets(config)` (`utils/stack-config.ts`) — Auto-generates missing passwords/JWKs and writes to `postkit.secrets.json`
+- `writeComposeFile(config, services)` (`services/compose.ts`) — Generates `.postkit/stack/docker-compose.yml` using project `name` as Docker Compose project name
+- `applyStackDeploy(config, spinner)` (`services/db-init.ts`) — Creates `postkit` schema, applies infra/migrations/seeds via connection retry
+- `readStackIsInitial(config)` / `setStackInitialized(config)` (`utils/stack-state.ts`) — Read/write `is_initial` flag in `postkit.stack_config`
+- `syncKeycloakProviders(spinner?)` (`services/sync-providers.ts`) — Copies JARs from vendor + project into `.postkit/auth/providers/`
+- `importRealmTemplate(config, spinner?)` (`services/realm-init.ts`) — Cleans realm JSON and imports via `keycloak-config-cli` container
+- `cleanRealmTemplate(raw, realmName)` (`services/realm-init.ts`) — Strips builtins, injects JWT Role Mapper
+
+**`postkit init` scaffold additions:**
+- Prompts for project name → generates `<name>_<8hexchars>`, stored as `name` in `postkit.config.json`
+- Creates `db/infra/001_roles.sql` (anon, authenticated, service_role, app_user, authenticator roles)
+- Creates `db/infra/002_schemas.sql` (public, auth, storage schemas)
+- Copies vendor provider JARs to `.postkit/auth/providers/`
+- Scaffolds realm template at `.postkit/auth/realm/postkit.json`
+
 ### Configuration System
 
 Config is loaded by `loadPostkitConfig()` from `common/config.ts`, which deep-merges two files:
 
 | File | Committed | Purpose |
 |------|-----------|---------|
-| `postkit.config.json` | Yes | Non-sensitive project settings (schema paths, flags) |
-| `postkit.secrets.json` | No (gitignored) | Credentials + all remote config (URLs, names, defaults) |
+| `postkit.config.json` | Yes | Non-sensitive project settings (schema paths, flags, stack service config) |
+| `postkit.secrets.json` | No (gitignored) | Credentials + all remote config (URLs, names, defaults) + stack secrets |
 
 **`postkit.config.json` (committed):**
 ```json
 {
+  "name": "myapp_a3f2b1c0",
   "db": {
     "schemaPath": "db/schema",
-    "schema": "public"
+    "schemas": ["public"],
+    "infraPath": "db/infra"
+  },
+  "auth": { "configCliImage": "adorsys/keycloak-config-cli:latest-26" },
+  "stack": {
+    "keycloak": { "realmTemplate": ".postkit/auth/realm/postkit.json" }
   }
 }
 ```
@@ -164,6 +238,10 @@ Config is loaded by `loadPostkitConfig()` from `common/config.ts`, which deep-me
       "dev": { "url": "postgres://...", "default": true, "addedAt": "2024-12-31T10:00:00.000Z" },
       "staging": { "url": "postgres://..." }
     }
+  },
+  "stack": {
+    "postgres": { "user": "postgres", "password": "<generated>" },
+    "keycloak": { "adminUser": "admin", "adminPassword": "<generated>" }
   }
 }
 ```
@@ -215,6 +293,25 @@ Remotes are managed via utilities in `modules/db/utils/remotes.ts`:
 | `postkit db infra [--apply]` | Manage infra SQL (roles, schemas, extensions) |
 | `postkit db seed [--apply]` | Apply seed data |
 | `postkit db schema add <name>` | Scaffold schema dirs + update infra + register in config |
+
+## Stack Module Commands Reference
+
+| Command | Purpose |
+|---------|---------|
+| `postkit stack up [services...]` | Start full stack (two-phase: infra first, then keycloak+postgrest) |
+| `postkit stack up --no-wait` | Start without waiting for health checks |
+| `postkit stack up --no-keys` | Start without auto-fetching Keycloak JWKs |
+| `postkit stack down` | Stop all services and remove containers |
+| `postkit stack down --volumes` | Stop all services and remove containers + volumes |
+| `postkit stack status` | Show running service health |
+| `postkit stack logs [service]` | Tail logs for all or a specific service |
+| `postkit stack logs [service] -f` | Follow log output (default behavior) |
+| `postkit stack logs [service] -n <N>` | Show last N lines (default 100) |
+| `postkit stack restart [services...]` | Restart one or more services (validates names) |
+| `postkit stack keys` | Fetch Keycloak JWKs + client secrets, update PostgREST |
+| `postkit stack keys --restart` | Fetch keys then restart PostgREST |
+| `postkit stack keys --clients <names>` | Fetch keys for specific comma-separated client names |
+| `postkit stack realm` | Re-import the Keycloak realm template |
 
 ## Common Patterns
 
@@ -384,6 +481,7 @@ Skills are invoked via `/<skill-name>` in Claude Code. Agents are sub-processes 
 | `cli/docs/architecture.md` | System architecture, module system, dependency direction |
 | `cli/docs/db.md` | Database module workflow and commands |
 | `cli/docs/auth.md` | Auth module workflow and commands |
+| `cli/docs/stack.md` | Stack module — services, startup sequence, config, commands |
 | `cli/docs/e2e-testing.md` | E2E testing guide and infrastructure |
 
 ### Skills Registry

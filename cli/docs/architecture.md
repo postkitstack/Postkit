@@ -9,16 +9,16 @@ System architecture and design decisions for the PostKit modular CLI toolkit.
 PostKit is a modular CLI toolkit built with **TypeScript** and **Node.js** that provides developer tools for database migrations and Keycloak auth management. It uses a **plugin module architecture** where each feature is self-contained.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     postkit (CLI)                        │
-│                     cli/src/index.ts                     │
-├──────────┬──────────────────────────┬───────────────────┤
-│   init   │       db module          │    auth module     │
-│ command  │   (migrations, import)   │  (Keycloak sync)  │
-├──────────┴──────────────────────────┴───────────────────┤
-│                  common layer                            │
-│     config · logger · shell · types · init-check        │
-└─────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│                          postkit (CLI)                                 │
+│                          cli/src/index.ts                              │
+├──────────┬────────────────────┬──────────────────┬────────────────────┤
+│   init   │     db module      │   auth module    │   stack module     │
+│ command  │ (migrations,import)│ (Keycloak sync)  │ (local dev stack)  │
+├──────────┴────────────────────┴──────────────────┴────────────────────┤
+│                         common layer                                   │
+│          config · logger · shell · types · init-check                  │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -93,6 +93,38 @@ Keycloak realm configuration management: `export → clean → import`
 │ (source) │    │(strip)│    │(target)│
 └──────────┘    └───────┘    └────────┘
 ```
+
+### Stack Module (`postkit stack`)
+
+**Registration**: `registerStackModule()` in `cli/src/modules/stack/index.ts`
+**Docs**: `cli/docs/stack.md`
+
+Local backend stack management via Docker Compose: `up → (init) → keys → down`
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                       stack up (two-phase)                          │
+├────────────────────────────────────────────────────────────────────┤
+│  Phase 1: postgres + traefik                                        │
+│           └─▶ waitForAllServices (health checks)                    │
+│  Phase 2: applyStackDeploy (infra SQL + migrations + seeds)         │
+│  Phase 3: keycloak + postgrest                                      │
+│           └─▶ waitForAllServices                                    │
+│  Phase 4: if is_initial=true:                                       │
+│           └─▶ importRealmTemplate → fetchAndMergeKeys               │
+│               └─▶ writeComposeFile → composeUp (postgrest)          │
+│               └─▶ setStackInitialized (is_initial=false)            │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Architectural decisions:**
+
+- **DB-backed initialization state**: `is_initial` is stored in `postkit.stack_config` table (not a file) so it resets automatically when volumes are wiped with `stack down --volumes`. No manual cleanup needed.
+- **Two-phase boot**: `keycloak` and `postgrest` depend on schema/migrations being applied first. Starting them before `applyStackDeploy` completes causes startup failures. The stack module enforces this ordering explicitly rather than relying on Docker Compose `depends_on` health checks alone.
+- **Provider sync at init time**: Keycloak provider JARs are copied to `.postkit/auth/providers/` during `postkit init` (not at startup) so the mount path exists before the container starts. Two sources: `vendor/providers/` (bundled) and `auth/providers/<name>/target/` (project-specific).
+- **Realm import via keycloak-config-cli**: Import runs `docker run --network postkit-net adorsys/keycloak-config-cli` against the internal container name (`keycloak:8080`), not the Traefik hostname. This allows realm import to complete without Traefik being the entry point.
+- **JWT Role Mapper injection**: `cleanRealmTemplate()` injects the `script-primary-role.js` protocol mapper into every non-builtin client automatically, so every client in the realm gets consistent role claim behavior without manual configuration.
+- **Project name scoping**: `postkit.config.json` `name` field is used as the Docker Compose project name, ensuring container names and network names are isolated per project on the same machine.
 
 ---
 
@@ -203,14 +235,19 @@ Loaded via `loadPostkitConfig()`, which deep-merges two files:
 ```json
 // postkit.config.json (committed — no remotes)
 {
+  "name": "myapp_a3f2b1c0",
   "db": {
     "infraPath": "db/infra",
     "schemaPath": "db/schema",
     "schemas": ["public", "app"]
+  },
+  "auth": { "configCliImage": "adorsys/keycloak-config-cli:latest-26" },
+  "stack": {
+    "keycloak": { "realmTemplate": ".postkit/auth/realm/postkit.json" }
   }
 }
 
-// postkit.secrets.json (gitignored — all remote data lives here)
+// postkit.secrets.json (gitignored — all credentials live here)
 {
   "db": {
     "localDbUrl": "postgres://user:pass@localhost:5432/myapp_local",
@@ -218,13 +255,21 @@ Loaded via `loadPostkitConfig()`, which deep-merges two files:
       "dev": { "url": "postgres://user:pass@dev-host:5432/myapp", "default": true, "addedAt": "2024-12-31T10:00:00.000Z" },
       "staging": { "url": "postgres://user:pass@staging-host:5432/myapp" }
     }
+  },
+  "stack": {
+    "postgres": { "user": "postgres", "password": "<generated>" },
+    "keycloak": { "adminUser": "admin", "adminPassword": "<generated>" }
   }
 }
 ```
 
+**`name`** — Project identifier used as the Docker Compose project name. Generated as `<slug>_<8hexchars>` by `postkit init`. Ensures container and network names are scoped per project.
+
 **`schemas`** — Ordered array of schema names (`["public"]` by default). Array position determines execution order; schemas that other schemas depend on must appear first. Backward compat: `"schemas": ["public"]` with a flat `db/schema/` layout (no `db/schema/public/` subdirectory) continues to work unchanged.
 
 **`infraPath`** — Path to the DB-level infra directory (roles, extensions, `CREATE SCHEMA`). Defaults to `"db/infra"`.
+
+**`stack.*`** — Stack service configuration. All service images, ports, volumes, and realm template path. Service credentials (passwords, admin user) live in `postkit.secrets.json` under `stack.*`.
 
 `localDbUrl` can be empty — PostKit will automatically start a Docker container (`postgres:{version}-alpine`) for the session. The container image version is detected from the remote database at runtime via `SHOW server_version_num`.
 
@@ -267,11 +312,12 @@ cli/test/
 ├── common/           # Unit tests for common utilities
 ├── modules/          # Unit tests for module services/utils
 │   ├── db/
-│   └── auth/
+│   ├── auth/
+│   └── stack/        # Stack module unit tests (compose, realm-init, scaffold, sync-providers, db-init, stack-config, stack-state, restart)
 ├── e2e/              # End-to-end tests
-│   ├── smoke/        # Quick tests (no Docker)
-│   ├── workflows/    # Full workflow tests
-│   └── error-handling/  # Error scenario tests
+│   ├── smoke/        # Quick tests (no Docker) — includes stack-commands.test.ts
+│   ├── workflows/    # Full workflow tests — includes stack-init-workflow.test.ts
+│   └── error-handling/  # Error scenario tests — includes stack-config-errors.test.ts
 └── helpers/          # Shared test utilities (mock-config, mock-shell, etc.)
 ```
 
@@ -292,9 +338,12 @@ PostKit files in `.postkit/` are split between gitignored (ephemeral/user-specif
 │   ├── session/             # GITIGNORED — temporary in-progress migrations
 │   ├── committed.json       # COMMITTED — migration tracking index (shared)
 │   └── migrations/          # COMMITTED — committed SQL migrations for deploy (shared)
-└── auth/
-    ├── raw/                 # COMMITTED — auth raw config (shared)
-    └── realm/               # COMMITTED — auth realm config (shared)
+├── auth/
+│   ├── raw/                 # COMMITTED — auth raw config (shared)
+│   ├── realm/               # COMMITTED — auth realm config (shared)
+│   └── providers/           # GITIGNORED — Keycloak JARs (vendor + project), mounted into container
+└── stack/
+    └── docker-compose.yml   # GITIGNORED — generated compose file (ephemeral, regenerated on stack up)
 ```
 
 `.gitignore` (written by `postkit init`) covers only the ephemeral paths:
@@ -302,4 +351,6 @@ PostKit files in `.postkit/` are split between gitignored (ephemeral/user-specif
 - `.postkit/db/plan_*.sql`
 - `.postkit/db/schema_*.sql`
 - `.postkit/db/session/`
+- `.postkit/auth/providers/`
+- `.postkit/stack/`
 - `postkit.secrets.json`

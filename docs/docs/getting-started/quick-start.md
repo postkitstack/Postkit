@@ -105,9 +105,13 @@ PostKit performs a dry-run first to verify the migration works, then deploys to 
 | `postkit db deploy` | Deploy to remote database |
 | `postkit db status` | Show session state |
 | `postkit db abort` | Cancel session and clean up |
+| `postkit stack up` | Start local backend stack (Postgres, Keycloak, PostgREST, Traefik) |
+| `postkit stack down` | Stop all stack services |
+| `postkit stack status` | Show stack service health |
 
 ## Next Steps
 
 - [DB Module Overview](/docs/modules/db/overview) - Learn about the full migration workflow
 - [Auth Module Overview](/docs/modules/auth/overview) - Manage Keycloak configurations
+- [Stack Module Overview](/docs/modules/stack/overview) - Manage local backend services
 - [Global Options](/docs/reference/global-options) - See all available CLI options
