@@ -66,8 +66,7 @@ export async function remoteListCommand(options: CommandOptions = {}): Promise<v
       logger.blank();
     }
   } catch (error) {
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -88,8 +87,7 @@ export async function remoteAddCommand(
       logger.info(`Set as default with: postkit db remote use ${name}`);
     }
   } catch (error) {
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -114,8 +112,7 @@ export async function remoteRemoveCommand(
 
     await removeRemote(name, options.force);
   } catch (error) {
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -130,7 +127,6 @@ export async function remoteUseCommand(
     await setDefaultRemote(name);
     logger.debug(`Default remote set to "${name}"`, options.verbose);
   } catch (error) {
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }

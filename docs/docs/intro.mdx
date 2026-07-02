@@ -1,0 +1,91 @@
+---
+sidebar_position: 1
+---
+
+import ThemedImage from '@theme/ThemedImage';
+
+# PostKit
+
+<ThemedImage
+  alt="PostKit — Migrations. Realms. In sync."
+  sources={{
+    light: '/img/postkit-cover-light.webp',
+    dark: '/img/postkit-cover-dark.webp',
+  }}
+  className="postkit-cover"
+/>
+
+**PostKit** is a framework designed to streamline development workflows for backend applications using the Appri open-source stack.
+
+## Tools
+
+PostKit includes a modular CLI toolkit with the following tools:
+
+- **CLI** - Command-line interface for database migrations, auth management, and more
+- More tools coming soon...
+
+## Features
+
+- **Session-based database migrations** - Clone remote databases locally, develop and test changes safely, then deploy with confidence
+- **Modular architecture** - Each feature is a pluggable module (database, auth, and more coming soon)
+- **Safe deployments** - Dry-run verification ensures your migrations work before touching production
+
+## The Stack
+
+PostKit is built for the Appri stack:
+
+- **PostgreSQL** - Core database
+- **PostgREST** - Auto-generated REST API
+- **Keycloak** - Authentication and authorization
+- **Graphile Worker** - Background job processing
+- **Appri Function Runtime** - Serverless-style JS/TS function handler
+- **PG-Storage** - Supabase Storage fork
+- **Traefik** - API Gateway and reverse proxy
+
+## Quick Start
+
+```bash
+# Install CLI
+npm install -g @appritech/postkit
+
+# Initialize a new project
+postkit init
+
+# Start a database migration session
+postkit db start
+```
+
+## What PostKit Does
+
+<div className="postkit-card-grid">
+  <a href="/docs/modules/db/overview" className="postkit-card-link">
+    <div className="postkit-card">
+      <img src="/img/cards/card-safe-db-migrations.webp" alt="Safe DB Migrations" />
+      <h3>Safe DB Migrations</h3>
+      <p>Clone → Plan → Apply → Deploy. Session-based workflow with dry-run safety before every production deploy.</p>
+    </div>
+  </a>
+  <a href="/docs/modules/auth/overview" className="postkit-card-link">
+    <div className="postkit-card">
+      <img src="/img/cards/card-realms-in-sync.webp" alt="Realms in Sync" />
+      <h3>Realms in Sync</h3>
+      <p>Export, clean, and sync Keycloak realm configs between environments. Auth configuration as code.</p>
+    </div>
+  </a>
+  <a href="/docs/agent-skills/overview" className="postkit-card-link">
+    <div className="postkit-card">
+      <img src="/img/cards/card-ai-ready-workflows.webp" alt="AI-Ready Workflows" />
+      <h3>AI-Ready Workflows</h3>
+      <p>Agent skills for Claude Code, Cursor, and more. Your AI assistant knows exactly how to run PostKit.</p>
+    </div>
+  </a>
+</div>
+
+## CLI Modules
+
+| Module | Description |
+|--------|-------------|
+| [`db`](/docs/modules/db/overview) | Session-based database migration workflow |
+| [`auth`](/docs/modules/auth/overview) | Keycloak realm configuration management |
+
+**Full Documentation:** [https://docs.postkitstack.com/](https://docs.postkitstack.com/)

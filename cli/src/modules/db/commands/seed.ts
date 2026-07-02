@@ -5,17 +5,19 @@ import {
   getSeedsSQL,
   applySeeds,
 } from "../services/seed-generator";
-import {getSession} from "../utils/session";
 import {testConnection} from "../services/database";
+import {resolveApplyTarget} from "../utils/apply-target";
 import type {CommandOptions} from "../../../common/types";
 
 interface SeedOptions extends CommandOptions {
   apply?: boolean;
-  target?: "local" | "remote";
+  target?: string;
+  schema?: string;
 }
 
 export async function seedCommand(options: SeedOptions): Promise<void> {
   const spinner = ora();
+  const schemaFilter = options.schema;
 
   try {
     logger.heading("Seed Data");
@@ -24,14 +26,14 @@ export async function seedCommand(options: SeedOptions): Promise<void> {
     logger.step(1, 2, "Loading seed files...");
     spinner.start("Scanning for seed files...");
 
-    const seeds = await loadSeeds();
+    const seeds = await loadSeeds(schemaFilter);
 
     if (seeds.length === 0) {
       spinner.warn("No seed files found");
       logger.blank();
       logger.info("Seed files should be placed in:");
-      logger.info("  - db/schema/seeds/");
-      logger.info("  - db/schema/seed/");
+      logger.info("  - db/schema/<name>/seeds/   (per-schema layout)");
+      logger.info("  - db/schema/seeds/           (flat layout)");
       return;
     }
 
@@ -40,7 +42,7 @@ export async function seedCommand(options: SeedOptions): Promise<void> {
     // Step 2: Display seeds
     logger.step(2, 2, "Generating seed statements...");
 
-    const seedsSQL = await getSeedsSQL();
+    const seedsSQL = await getSeedsSQL(schemaFilter);
 
     logger.blank();
     logger.info("Seed Data Statements:");
@@ -52,48 +54,25 @@ export async function seedCommand(options: SeedOptions): Promise<void> {
 
     // Apply if requested
     if (options.apply) {
-      const session = await getSession();
-      let targetUrl: string | null = null;
-      let targetName: string;
+      const target = await resolveApplyTarget(options.target);
 
-      if (options.target === "remote") {
-        if (session) {
-          targetUrl = session.remoteDbUrl;
-        } else {
-          const {resolveRemote} = await import("../utils/remotes");
-          const {url} = resolveRemote();
-          targetUrl = url;
-        }
-        targetName = "remote";
-      } else {
-        if (!session || !session.active) {
-          logger.error(
-            "No active session. Cannot apply seeds to local database.",
-          );
-          logger.info('Run "postkit db start" first or use --target=remote.');
-          process.exit(1);
-        }
-        targetUrl = session.localDbUrl;
-        targetName = "local";
-      }
-
-      logger.info(`Applying seeds to ${targetName} database...`);
+      logger.info(`Applying seeds to ${target.label} database...`);
       spinner.start("Testing connection...");
 
-      const connected = await testConnection(targetUrl);
+      const connected = await testConnection(target.url);
 
       if (!connected) {
-        spinner.fail(`Failed to connect to ${targetName} database`);
-        process.exit(1);
+        spinner.fail(`Failed to connect to ${target.label} database`);
+        throw new Error(`Could not connect to ${target.label} database`);
       }
 
-      spinner.succeed(`Connected to ${targetName} database`);
+      spinner.succeed(`Connected to ${target.label} database`);
 
       if (options.dryRun) {
         spinner.info("Dry run - skipping seed application");
       } else {
         spinner.start("Applying seeds...");
-        await applySeeds(targetUrl);
+        await applySeeds(target.url, schemaFilter);
         spinner.succeed("Seeds applied successfully");
       }
     }
@@ -106,7 +85,6 @@ export async function seedCommand(options: SeedOptions): Promise<void> {
     );
   } catch (error) {
     spinner.fail("Failed to generate seeds");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }

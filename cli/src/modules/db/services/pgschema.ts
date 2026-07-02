@@ -1,7 +1,7 @@
 import path from "path";
 import type {PlanResult} from "../types/index";
 import {runCommand, commandExists} from "../../../common/shell";
-import {getDbConfig, getPlanFilePath} from "../utils/db-config";
+import {getDbConfig, getPostkitDbDir} from "../utils/db-config";
 import {parseConnectionUrl} from "./database";
 import fs from "fs/promises";
 import {existsSync} from "fs";
@@ -21,15 +21,14 @@ export async function checkPgschemaInstalled(): Promise<boolean> {
 export async function runPgschemaplan(
   schemaFile: string,
   databaseUrl: string,
-  schemaOverride?: string,
+  schemaName: string,
+  planFilePath: string,
 ): Promise<PlanResult> {
   const config = getDbConfig();
-  const planFile = getPlanFilePath();
   const dbInfo = parseConnectionUrl(databaseUrl);
-  const schema = schemaOverride || config.schema;
 
   // Run pgschema plan command (cwd set to schemaPath so .pgschemaignore is picked up)
-  const command = `${config.pgSchemaBin} plan --schema "${schema}" --file "${schemaFile}" --output-sql "${planFile}"`;
+  const command = `${config.pgSchemaBin} plan --schema "${schemaName}" --file "${schemaFile}" --output-sql "${planFilePath}"`;
   const result = await runCommand(command, {
     cwd: config.schemaPath,
     env: {
@@ -49,15 +48,15 @@ export async function runPgschemaplan(
   let hasChanges = false;
   let planOutput = "";
 
-  if (existsSync(planFile)) {
-    const rawPlan = await fs.readFile(planFile, "utf-8");
+  if (existsSync(planFilePath)) {
+    const rawPlan = await fs.readFile(planFilePath, "utf-8");
     hasChanges =
       rawPlan.trim().length > 0 && !rawPlan.includes("-- No changes");
 
     if (hasChanges) {
       // Sanitize plan SQL to remove transaction-incompatible constructs
       const sanitized = sanitizePlanSQL(rawPlan);
-      await fs.writeFile(planFile, sanitized, "utf-8");
+      await fs.writeFile(planFilePath, sanitized, "utf-8");
       planOutput = sanitized.trim();
     } else {
       planOutput = rawPlan;
@@ -76,13 +75,11 @@ export async function runPgschemaplan(
   return {
     hasChanges,
     planOutput: planOutput || result.stdout,
-    planFile: hasChanges ? planFile : null,
+    planFile: hasChanges ? planFilePath : null,
   };
 }
 
-export async function wrapPlanSQL(planFile: string): Promise<string> {
-  const config = getDbConfig();
-
+export async function wrapPlanSQL(planFile: string, schemaName: string): Promise<string> {
   if (!existsSync(planFile)) {
     throw new Error(`Plan file not found: ${planFile}`);
   }
@@ -93,18 +90,19 @@ export async function wrapPlanSQL(planFile: string): Promise<string> {
     return "";
   }
 
-  return `SET search_path TO "${config.schema}";\n\n${planSQL.trim()}\n`;
+  return `SET search_path TO "${schemaName}";\n\n${planSQL.trim()}\n`;
 }
 
 export async function runPgschemaDiff(
   schemaFile: string,
   databaseUrl: string,
+  schemaName: string,
 ): Promise<string> {
   const config = getDbConfig();
   const dbInfo = parseConnectionUrl(databaseUrl);
 
   // Run pgschema diff command to show differences (cwd set to schemaPath so .pgschemaignore is picked up)
-  const command = `${config.pgSchemaBin} diff --schema "${config.schema}" --file "${schemaFile}"`;
+  const command = `${config.pgSchemaBin} diff --schema "${schemaName}" --file "${schemaFile}"`;
   const result = await runCommand(command, {
     cwd: config.schemaPath,
     env: {
@@ -184,20 +182,43 @@ function sanitizePlanSQL(sql: string): string {
   return cleaned;
 }
 
-export async function getPlanFileContent(): Promise<string | null> {
-  const planFile = getPlanFilePath();
+export async function getPlanFileContent(schemaName?: string): Promise<string | null> {
+  const dbDir = getPostkitDbDir();
 
-  if (!existsSync(planFile)) {
-    return null;
+  if (schemaName) {
+    const planFile = path.join(dbDir, `plan_${schemaName}.sql`);
+    if (!existsSync(planFile)) return null;
+    return fs.readFile(planFile, "utf-8");
   }
 
-  return fs.readFile(planFile, "utf-8");
+  // Return content of the first non-empty plan file found
+  if (!existsSync(dbDir)) return null;
+  const entries = await fs.readdir(dbDir);
+  for (const entry of entries.sort()) {
+    if (entry.startsWith("plan_") && entry.endsWith(".sql")) {
+      const content = await fs.readFile(path.join(dbDir, entry), "utf-8");
+      if (content.trim()) return content;
+    }
+  }
+  return null;
 }
 
-export async function deletePlanFile(): Promise<void> {
-  const planFile = getPlanFilePath();
+export async function deletePlanFile(schemaName?: string): Promise<void> {
+  const dbDir = getPostkitDbDir();
 
-  if (existsSync(planFile)) {
-    await fs.unlink(planFile);
+  if (!existsSync(dbDir)) return;
+
+  if (schemaName) {
+    const planFile = path.join(dbDir, `plan_${schemaName}.sql`);
+    if (existsSync(planFile)) await fs.unlink(planFile);
+    return;
+  }
+
+  // Delete all plan_*.sql files
+  const entries = await fs.readdir(dbDir);
+  for (const entry of entries) {
+    if (entry.startsWith("plan_") && entry.endsWith(".sql")) {
+      await fs.unlink(path.join(dbDir, entry));
+    }
   }
 }

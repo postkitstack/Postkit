@@ -128,7 +128,7 @@ describe("db import — custom schema (non-public)", () => {
   // ── Step 2: Verify schema files ─────────────────────────────────────
 
   it("creates tables/ directory with SQL files", () => {
-    const dir = path.join(project.schemaPath, "tables");
+    const dir = path.join(project.schemaPath, CUSTOM_SCHEMA, "tables");
     expect(fs.existsSync(dir)).toBe(true);
     const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql"));
     expect(files.length).toBeGreaterThan(0);
@@ -151,7 +151,7 @@ describe("db import — custom schema (non-public)", () => {
   });
 
   it("table files contain category and product DDL", () => {
-    const dir = path.join(project.schemaPath, "tables");
+    const dir = path.join(project.schemaPath, CUSTOM_SCHEMA, "tables");
     const allSql = fs
       .readdirSync(dir)
       .filter((f) => f.endsWith(".sql"))
@@ -162,7 +162,7 @@ describe("db import — custom schema (non-public)", () => {
   });
 
   it("creates infra directory with ordered SQL files", () => {
-    const infraDir = path.join(project.schemaPath, "infra");
+    const infraDir = project.infraPath;
     expect(fs.existsSync(infraDir)).toBe(true);
     const files = fs.readdirSync(infraDir).filter((f) => f.endsWith(".sql"));
     expect(files.length).toBeGreaterThan(0);

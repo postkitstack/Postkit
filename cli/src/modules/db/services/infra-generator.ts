@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
+import type {Ora} from "ora";
 import {getDbConfig} from "../utils/db-config";
 import {parseConnectionUrl} from "./database";
 import {runSpawnCommand} from "../../../common/shell";
@@ -8,13 +9,8 @@ import type {InfraStatement} from "../types/index";
 
 export async function loadInfra(): Promise<InfraStatement[]> {
   const config = getDbConfig();
-  const infraPath = path.join(config.schemaPath, "infra");
-
-  if (!existsSync(infraPath)) {
-    return [];
-  }
-
-  return loadInfraFromDirectory(infraPath);
+  if (!existsSync(config.infraPath)) return [];
+  return loadInfraFromDirectory(config.infraPath);
 }
 
 async function loadInfraFromDirectory(
@@ -90,4 +86,15 @@ export async function applyInfra(databaseUrl: string): Promise<void> {
   if (result.exitCode !== 0) {
     throw new Error(`Failed to apply infra: ${result.stderr || result.stdout}`);
   }
+}
+
+export async function applyInfraStep(spinner: Ora, dbUrl: string, label = "local"): Promise<void> {
+  const infra = await loadInfra();
+  if (infra.length === 0) {
+    spinner.info("No infra files found - skipping");
+    return;
+  }
+  spinner.start(`Applying infra to ${label}...`);
+  await applyInfra(dbUrl);
+  spinner.succeed(`Infra applied to ${label} (${infra.length} file(s))`);
 }

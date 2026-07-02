@@ -33,7 +33,7 @@ describe("Abort workflow — start → abort → verify cleanup", () => {
     });
 
     // Install fixture schema sections for plan testing
-    await installFixtureSections(project, ["core", "tables", "rls", "trigger", "function", "view"]);
+    await installFixtureSections(project, "public", ["core", "tables", "rls", "trigger", "function", "view"]);
   });
 
   afterAll(async () => {

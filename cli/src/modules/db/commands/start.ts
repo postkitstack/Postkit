@@ -11,9 +11,11 @@ import {
   testConnection,
   cloneDatabase,
   getTableCount,
+  getRemotePgMajorVersion,
 } from "../services/database";
-import {checkPgschemaInstalled} from "../services/pgschema";
-import {checkDbmateInstalled, runDbmateStatus} from "../services/dbmate";
+import {runDbmateStatus} from "../services/dbmate";
+import {checkDbPrerequisites} from "../services/prerequisites";
+import {resolveLocalDb, cloneDatabaseViaContainer, stopSessionContainer, onContainerInterrupt} from "../services/container";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
 import {PostkitError} from "../../../common/errors";
@@ -24,6 +26,8 @@ interface StartOptions extends CommandOptions {
 
 export async function startCommand(options: StartOptions): Promise<void> {
   const spinner = ora();
+  let containerID: string | undefined;
+  let deregisterSignal: (() => void) | undefined;
 
   try {
     if (await hasActiveSession()) {
@@ -39,29 +43,19 @@ export async function startCommand(options: StartOptions): Promise<void> {
     // Step 1: Check prerequisites
     logger.step(1, 5, "Checking prerequisites...");
 
-    const pgschemaInstalled = await checkPgschemaInstalled();
-    const dbmateInstalled = await checkDbmateInstalled();
-
-    if (!pgschemaInstalled) {
-      throw new PostkitError(
-        "pgschema binary not found.",
-        "Visit: https://github.com/pgschema/pgschema",
-      );
-    }
-
-    if (!dbmateInstalled) {
-      throw new PostkitError(
-        "dbmate binary not found.",
-        "Install with: brew install dbmate  or  go install github.com/amacneil/dbmate@latest",
-      );
-    }
-
-    logger.debug("Prerequisites check passed", options.verbose);
+    await checkDbPrerequisites(options.verbose ?? false);
 
     // Step 2: Load configuration
     logger.step(2, 5, "Loading configuration...");
 
     const config = getDbConfig();
+
+    // Determine whether we need an auto-container (localDbUrl is empty)
+    let localDbUrl = config.localDbUrl;
+    const needsContainer = !localDbUrl;
+
+    // Total steps: 5 normally, 6 when auto-container is needed
+    const totalSteps = needsContainer ? 6 : 5;
 
     // Resolve remote
     let targetRemoteName: string;
@@ -91,16 +85,18 @@ export async function startCommand(options: StartOptions): Promise<void> {
       `Remote DB (${targetRemoteName}): ${maskRemoteUrl(targetRemoteUrl)}`,
       options.verbose,
     );
-    logger.debug(
-      `Local DB: ${maskConnectionUrl(config.localDbUrl)}`,
-      options.verbose,
-    );
+    if (localDbUrl) {
+      logger.debug(
+        `Local DB: ${maskRemoteUrl(localDbUrl)}`,
+        options.verbose,
+      );
+    }
 
     // Ensure .pgschemaignore exists in schema directory
     await ensurePgschemaIgnore(config.schemaPath);
 
     // Step 3: Test remote connection
-    logger.step(3, 5, "Testing remote database connection...");
+    logger.step(3, totalSteps, "Testing remote database connection...");
     spinner.start("Connecting to remote database...");
 
     const remoteConnected = await testConnection(targetRemoteUrl);
@@ -118,8 +114,11 @@ export async function startCommand(options: StartOptions): Promise<void> {
     const remoteTableCount = await getTableCount(targetRemoteUrl);
     logger.info(`Remote database has ${remoteTableCount} tables`);
 
+    const remotePgVersion = await getRemotePgMajorVersion(targetRemoteUrl);
+    logger.debug(`Remote PostgreSQL version: ${remotePgVersion}`, options.verbose);
+
     // Step 4: Verify database state
-    logger.step(4, 6, "Verifying database state...");
+    logger.step(4, totalSteps, "Verifying database state...");
 
     // Check 1: Pending committed migrations (check remote's schema_migrations table)
     const pendingCommitted = await getPendingCommittedMigrations(targetRemoteUrl);
@@ -186,29 +185,50 @@ export async function startCommand(options: StartOptions): Promise<void> {
       spinner.succeed("All migrations applied - database is in sync");
     }
 
-    // Step 5: Clone database
-    logger.step(4, 5, "Cloning remote database to local...");
+    // Step 5 (only when no localDbUrl): Start local Postgres container
+    if (needsContainer) {
+      logger.step(5, totalSteps, "Starting local Postgres container...");
+      const resolved = await resolveLocalDb(localDbUrl, targetRemoteUrl, spinner);
+      containerID = resolved.containerID;
+      localDbUrl = resolved.url;
+      logger.debug(`Local DB (container): ${maskRemoteUrl(localDbUrl)}`, options.verbose);
+      if (containerID) {
+        deregisterSignal = onContainerInterrupt(containerID);
+      }
+    }
+
+    // Step 5/6: Clone database
+    const cloneStep = needsContainer ? 6 : 5;
+    logger.step(cloneStep, totalSteps, "Cloning remote database to local...");
     spinner.start("Cloning database (this may take a moment)...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping database clone");
     } else {
-      await cloneDatabase(targetRemoteUrl, config.localDbUrl);
+      if (containerID) {
+        // Run pg_dump/psql inside the container — version-matched with remote
+        await cloneDatabaseViaContainer(containerID, targetRemoteUrl, localDbUrl);
+      } else {
+        await cloneDatabase(targetRemoteUrl, localDbUrl);
+      }
       spinner.succeed("Database cloned successfully");
 
-      const localTableCount = await getTableCount(config.localDbUrl);
+      const localTableCount = await getTableCount(localDbUrl);
       logger.info(`Local clone has ${localTableCount} tables`);
     }
 
-    // Step 6: Create session
-    logger.step(6, 6, "Creating session...");
+    // Final step: Create session
+    logger.step(totalSteps, totalSteps, "Creating session...");
 
     if (!options.dryRun) {
       const session = await createSession(
         targetRemoteUrl,
-        config.localDbUrl,
+        localDbUrl,
         targetRemoteName,
+        containerID,
       );
+      deregisterSignal?.();
+      deregisterSignal = undefined;
       logger.success(`Session created (cloned at: ${session.clonedAt})`);
     } else {
       logger.info("Dry run - session not created");
@@ -224,6 +244,10 @@ export async function startCommand(options: StartOptions): Promise<void> {
     logger.info('  4. Run "postkit db commit <description>" when ready');
   } catch (error) {
     spinner.fail("Failed to start migration session");
+    deregisterSignal?.();
+    if (containerID) {
+      try { await stopSessionContainer(containerID); } catch { /* best effort */ }
+    }
     throw error;
   }
 }
@@ -242,14 +266,4 @@ async function ensurePgschemaIgnore(schemaPath: string): Promise<void> {
   ].join("\n");
 
   await fs.writeFile(ignorePath, content, "utf-8");
-}
-
-function maskConnectionUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.password = "****";
-    return parsed.toString();
-  } catch {
-    return url.replace(/:([^@]+)@/, ":****@");
-  }
 }

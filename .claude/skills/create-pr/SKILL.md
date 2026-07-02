@@ -1,48 +1,76 @@
 ---
 name: create-pr
-description: Generate a PR description and save to temp/pr-description.md.
+description: Generate a PR description for the current branch and save it to temp/pr-description.md. Analyzes commits against the base branch and fills in the project PR template exactly.
+argument-hint: "[base-branch]"
+allowed-tools: Bash, Read, Write
 ---
 
 # Create PR Skill
 
-Generate a standardized PR description for the PostKit project and save it to `temp/pr-description.md`.
+Generate a standardized PR description following the project template and save it to `temp/pr-description.md`. Does NOT push or create the PR on GitHub — description only.
 
-## Project Context
+## Arguments
 
-Read `CLAUDE.md` at the project root for project conventions.
-Use the PR template at `.github/pull_request_template.md`.
+Optional: base branch to compare against (e.g. `/create-pr development` or `/create-pr main`).
+Default to `main` if no argument is provided.
 
 ## Workflow
 
-### Step 1: Analyze Changes
-Gather branch information:
+### Step 1: Read the PR Template
+
+**Always read the template file first** before writing anything:
+
 ```bash
-git log origin/main...HEAD --oneline
-git diff origin/main...HEAD --stat
-git diff origin/main...HEAD
+cat .github/pull_request_template.md
 ```
-Categorize changes into: features, fixes, refactors, tests, docs, chore.
 
-### Step 2: Generate PR Description
-Using the PR template structure, generate:
+The output must use the **exact section headings and checkbox format** from that file. Do not add, remove, or reorder sections.
 
-**Title** — under 70 characters with conventional commit prefix:
-- `feat: <description>` for new features
-- `fix: <description>` for bug fixes
-- `refactor: <description>` for code refactoring
-- `test: <description>` for test changes
-- `docs: <description>` for documentation changes
-- `chore: <description>` for build/tooling changes
+### Step 2: Analyze Changes
 
-**Body** — using the template sections:
-- Summary (1-3 bullet points)
-- Changes (specific list)
-- Type of Change (check one)
-- Test Plan (checklist)
+Get the current branch and compare against the remote base:
 
-### Step 3: Save to File
-Create `temp/` directory if needed and save to `temp/pr-description.md`.
-Use the exact format from `.github/pull_request_template.md` — read that file and follow its structure.
+```bash
+git rev-parse --abbrev-ref HEAD
+git fetch origin <base>
+git log origin/<base>...HEAD --oneline
+git diff origin/<base>...HEAD --stat
+```
 
-### Step 4: Show to User
-Display the generated PR description and ask for confirmation or edits before saving.
+Always use `origin/<base>` so the comparison is against the remote state.
+
+### Step 3: Generate PR Title and Body
+
+**Title** — under 70 characters, conventional commit prefix:
+- `feat:` new feature
+- `fix:` bug fix
+- `refactor:` no functional change
+- `test:` test changes
+- `docs:` documentation only
+- `chore:` build/tooling/CI
+
+**Body** — fill in each template section in exact order:
+- `## Summary` — 1–3 bullet points of what the PR does
+- `## Changes` — bullet list of specific files/components changed
+- `## Type of Change` — mark exactly one checkbox `[x]`
+- `## Test Plan` — check completed items; fill in the "Manually tested:" line
+- `## Breaking Changes` — `[x] No breaking changes` if none; otherwise list them
+
+### Step 4: Save to `temp/pr-description.md`
+
+```bash
+mkdir -p temp
+```
+
+Write the file with this exact structure:
+```
+# <title>
+
+**Branch:** `<current-branch>` → `<base-branch>`
+
+<body following template sections exactly>
+```
+
+### Step 5: Show the Result
+
+Display the full content of `temp/pr-description.md` to the user and confirm it is saved.

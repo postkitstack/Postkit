@@ -1,9 +1,8 @@
-import pg from "pg";
 import fs from "fs/promises";
 import path from "path";
 import {existsSync} from "fs";
 import {runCommand} from "../../../common/shell";
-import {getDbConfig, getTmpImportDir, MIGRATIONS_TABLE} from "../utils/db-config";
+import {getDbConfig, getPlanFilePath} from "../utils/db-config";
 import {
   CREATE_POSTKIT_SCHEMA,
   CREATE_MIGRATIONS_TABLE,
@@ -11,11 +10,9 @@ import {
   FETCH_SCHEMAS,
   FETCH_ROLES,
 } from "../config/queries";
-import {parseConnectionUrl, createDatabase, dropDatabase} from "./database";
+import {parseConnectionUrl, createDatabase, dropDatabase, withPgClient} from "./database";
 import {runPgschemaplan} from "./pgschema";
 import {generateSchemaSQLAndFingerprint} from "./schema-generator";
-
-const {Client} = pg;
 
 /**
  * Parse schema.sql \i include directives to determine file ordering per directory.
@@ -231,17 +228,12 @@ export async function fetchInfraFromDatabase(
   databaseUrl: string,
   schemaName: string,
 ): Promise<{roles: string[]; schemas: string[]}> {
-  const client = new Client({connectionString: databaseUrl});
-  const roles: string[] = [];
-  const schemas: string[] = [];
-
-  try {
-    await client.connect();
+  return withPgClient(databaseUrl, async (client) => {
+    const roles: string[] = [];
+    const schemas: string[] = [];
 
     // Fetch non-system schemas
-    const schemaRows = await client.query<{nspname: string; owner: string}>(
-      FETCH_SCHEMAS,
-    );
+    const schemaRows = await client.query<{nspname: string; owner: string}>(FETCH_SCHEMAS);
 
     for (const row of schemaRows.rows) {
       schemas.push(`CREATE SCHEMA IF NOT EXISTS ${row.nspname} AUTHORIZATION ${row.owner};`);
@@ -274,11 +266,9 @@ export async function fetchInfraFromDatabase(
         `DO $$\nBEGIN\n    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${row.rolname}') THEN\n        CREATE ROLE ${row.rolname} ${attrs};\n    END IF;\nEND\n$$;`,
       );
     }
-  } finally {
-    await client.end();
-  }
 
-  return {roles, schemas};
+    return {roles, schemas};
+  });
 }
 
 /**
@@ -290,6 +280,7 @@ export async function normalizeDumpForPostkit(
   schemaName: string,
   databaseUrl: string,
 ): Promise<{filesCreated: string[]}> {
+  const config = getDbConfig();
   const filesCreated: string[] = [];
 
   // Map of pgschema dump directories to PostKit schema subdirectories
@@ -333,19 +324,20 @@ export async function normalizeDumpForPostkit(
   // pgschema dump does not reliably emit CREATE SCHEMA / CREATE ROLE statements.
   const {roles, schemas} = await fetchInfraFromDatabase(databaseUrl, schemaName);
 
-  const infraDir = path.join(schemaPath, "infra");
+  // Write infra to db/infra/ (database-level, not schema-level)
+  const infraDir = config.infraPath;
   await fs.mkdir(infraDir, {recursive: true});
 
   if (roles.length > 0) {
     const rolesPath = path.join(infraDir, "001_roles.sql");
     await fs.writeFile(rolesPath, roles.join("\n\n") + "\n", "utf-8");
-    filesCreated.push("infra/001_roles.sql");
+    filesCreated.push("db/infra/001_roles.sql");
   }
 
   if (schemas.length > 0) {
     const schemasPath = path.join(infraDir, "002_schemas.sql");
     await fs.writeFile(schemasPath, schemas.join("\n\n") + "\n", "utf-8");
-    filesCreated.push("infra/002_schemas.sql");
+    filesCreated.push("db/infra/002_schemas.sql");
   }
 
   // Parse schema.sql for extensions only (no change to this behaviour)
@@ -399,27 +391,31 @@ export async function normalizeDumpForPostkit(
     await fs.writeFile(ignorePath, content, "utf-8");
   }
 
-  // Clean up schema.sql artifact that pgschema creates in parent of schemaPath
-  const artifact = path.join(path.dirname(schemaPath), "schema.sql");
-  if (existsSync(artifact)) {
-    await fs.unlink(artifact);
-  }
+  // No schema.sql artifact to clean up — generated files are now schema_<name>.sql in .postkit/db/
 
   return {filesCreated};
 }
 
 /**
- * Apply all SQL files from infra/ to a database.
- * This ensures roles and schemas exist before pgschema validates the schema SQL.
+ * Apply all SQL files from the infra directory to a database.
+ * infraDir defaults to config.infraPath (db/infra/).
+ * Backward compat: falls back to schemaPath/infra if db/infra/ doesn't exist.
  */
-export async function applyInfraToDatabase(databaseUrl: string, schemaPath: string): Promise<void> {
-  const infraDir = path.join(schemaPath, "infra");
-  if (!existsSync(infraDir)) return;
+export async function applyInfraToDatabase(databaseUrl: string, infraDirOverride?: string): Promise<void> {
+  const config = getDbConfig();
+  let infraDir = infraDirOverride ?? config.infraPath;
 
-  const client = new Client({connectionString: databaseUrl});
-  try {
-    await client.connect();
+  if (!existsSync(infraDir)) {
+    // Backward compat: try legacy location
+    const legacyDir = path.join(config.schemaPath, "infra");
+    if (existsSync(legacyDir)) {
+      infraDir = legacyDir;
+    } else {
+      return;
+    }
+  }
 
+  await withPgClient(databaseUrl, async (client) => {
     const entries = (await fs.readdir(infraDir)).sort();
     for (const entry of entries) {
       if (!entry.endsWith(".sql")) continue;
@@ -428,29 +424,29 @@ export async function applyInfraToDatabase(databaseUrl: string, schemaPath: stri
         await client.query(sql);
       }
     }
-  } finally {
-    await client.end();
-  }
+  });
 }
 
 /**
  * Generate baseline DDL by running pgschema plan against an empty temporary database.
+ * Loops over each schema in order with intermediate apply so cross-schema refs resolve.
  *
  * 1. Creates an empty temp database
- * 2. Applies infra SQL (roles, schemas) so role references resolve during pgschema validation
- * 3. Generates schema.sql from the normalized files
- * 4. Runs pgschema plan (schema files vs empty DB = full CREATE DDL)
- * 5. Drops the temp database
- * 6. Returns the DDL string
+ * 2. Applies infra SQL (roles, schemas) so role references resolve
+ * 3. For each schema (in order):
+ *    a. Generates schema_<name>.sql from the normalized files
+ *    b. Runs pgschema plan (schema files vs current temp DB = CREATE DDL)
+ *    c. Applies plan to temp DB (so next schema can reference this one's objects)
+ * 4. Drops the temp database
+ * 5. Returns the combined DDL string
  */
 export async function generateBaselineDDL(
   schemaPath: string,
-  schemaName: string,
+  schemas: string[],
+  localDbUrl: string,
 ): Promise<string> {
-  const config = getDbConfig();
-
-  // Construct a temp database URL based on localDbUrl
-  const localInfo = parseConnectionUrl(config.localDbUrl);
+  // Construct a temp database URL based on the resolved localDbUrl
+  const localInfo = parseConnectionUrl(localDbUrl);
   const tmpDbName = `postkit_import_${Date.now()}`;
   const tmpDbUrl = `postgres://${localInfo.user}:${encodeURIComponent(localInfo.password)}@${localInfo.host}:${localInfo.port}/${tmpDbName}`;
 
@@ -459,28 +455,43 @@ export async function generateBaselineDDL(
     await createDatabase(tmpDbUrl);
 
     // Apply infra SQL (roles, schemas) so pgschema can resolve role references
-    // in the schema SQL it validates internally (e.g. AUTHORIZATION, OWNER TO)
-    await applyInfraToDatabase(tmpDbUrl, schemaPath);
+    await applyInfraToDatabase(tmpDbUrl);
 
-    // Generate schema.sql from the normalized schema files
-    const {schemaFile} = await generateSchemaSQLAndFingerprint();
+    const combinedDDL: string[] = [];
 
-    // Run pgschema plan against empty database — produces full CREATE DDL
-    const planResult = await runPgschemaplan(schemaFile, tmpDbUrl, schemaName);
+    for (const schemaName of schemas) {
+      // Generate schema SQL for this schema
+      const {schemaFile} = await generateSchemaSQLAndFingerprint(schemaName);
 
-    if (!planResult.hasChanges || !planResult.planOutput) {
+      // Plan file path for this schema
+      const planFilePath = getPlanFilePath(schemaName);
+
+      // Run pgschema plan against temp database — produces full CREATE DDL
+      const planResult = await runPgschemaplan(schemaFile, tmpDbUrl, schemaName, planFilePath);
+
+      if (planResult.hasChanges && planResult.planOutput) {
+        // Wrap with search_path
+        let ddl = planResult.planOutput;
+        ddl = `SET search_path TO "${schemaName}";\n\n${ddl}`;
+        combinedDDL.push(ddl);
+
+        // Intermediate apply: apply this schema to temp DB so next schema can reference it
+        const {runSpawnCommand} = await import("../../../common/shell");
+        const dbInfo = parseConnectionUrl(tmpDbUrl);
+        await runSpawnCommand(
+          ["psql", "-h", dbInfo.host, "-p", String(dbInfo.port), "-U", dbInfo.user, "-d", dbInfo.database, "-v", "ON_ERROR_STOP=1"],
+          {input: ddl, env: {PGPASSWORD: dbInfo.password}},
+        );
+      }
+    }
+
+    if (combinedDDL.length === 0) {
       throw new Error(
         "pgschema plan produced no output. The schema directory may be empty or the dump normalization may have failed.",
       );
     }
 
-    // Prepend SET search_path for non-public schemas
-    let ddl = planResult.planOutput;
-    if (schemaName !== "public") {
-      ddl = `SET search_path TO "${schemaName}";\n\n${ddl}`;
-    }
-
-    return ddl;
+    return combinedDDL.join("\n\n");
   } finally {
     // Always clean up the temp database
     try {
@@ -499,22 +510,14 @@ export async function syncMigrationState(
   databaseUrl: string,
   version: string,
 ): Promise<void> {
-  const client = new Client({connectionString: databaseUrl});
-
-  try {
-    await client.connect();
-
+  await withPgClient(databaseUrl, async (client) => {
     // Ensure postkit schema exists
     await client.query(CREATE_POSTKIT_SCHEMA);
-
     // Create schema_migrations table in postkit schema
     await client.query(CREATE_MIGRATIONS_TABLE);
-
     // Insert the baseline version
     await client.query(INSERT_MIGRATION_VERSION, [version]);
-  } finally {
-    await client.end();
-  }
+  });
 }
 
 /**

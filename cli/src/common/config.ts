@@ -17,10 +17,15 @@ export const projectRoot = process.cwd();
 
 // Postkit project paths
 export const POSTKIT_CONFIG_FILE = "postkit.config.json";
+export const POSTKIT_SECRETS_FILE = "postkit.secrets.json";
 export const POSTKIT_DIR = ".postkit";
 
 export function getConfigFilePath(): string {
   return path.join(projectRoot, POSTKIT_CONFIG_FILE);
+}
+
+export function getSecretsFilePath(): string {
+  return path.join(projectRoot, POSTKIT_SECRETS_FILE);
 }
 
 export function getPostkitDir(): string {
@@ -29,6 +34,10 @@ export function getPostkitDir(): string {
 
 export function getPostkitAuthDir(): string {
   return path.join(projectRoot, POSTKIT_DIR, "auth");
+}
+
+export function getStackDir(): string {
+  return path.join(projectRoot, POSTKIT_DIR, "stack");
 }
 
 export function getVendorDir(): string {
@@ -58,10 +67,116 @@ export interface AuthInputConfig {
   configCliImage?: string;
 }
 
+// ─── Public config (committed to git) ───────────────────────────────────────
+// Non-sensitive project settings: schema paths, docker images, etc.
+// Remotes are user/environment-specific and live entirely in secrets.
+
+export interface DbPublicConfig {
+  schemaPath?: string;
+  schemas?: string[];
+  infraPath?: string;
+}
+
+export interface AuthPublicConfig {
+  configCliImage?: string;
+}
+
+export interface StackPostgresPublicConfig {
+  enabled?: boolean;
+  port?: number;
+  pgVersion?: number;
+  image?: string;
+  database?: string;
+  volume?: string;
+}
+
+export interface StackKeycloakPublicConfig {
+  enabled?: boolean;
+  port?: number;
+  image?: string;
+  realm?: string;
+  volume?: string;
+  clientRealm?: string;
+  clients?: string[];
+  realmTemplate?: string;
+}
+
+export interface StackPostgrestPublicConfig {
+  enabled?: boolean;
+  port?: number;
+  image?: string;
+  dbSchema?: string;
+  dbAnonRole?: string;
+}
+
+export interface StackPublicConfig {
+  postgres?: StackPostgresPublicConfig;
+  keycloak?: StackKeycloakPublicConfig;
+  postgrest?: StackPostgrestPublicConfig;
+  network?: string;
+}
+
+export interface PostkitPublicConfig {
+  name?: string;
+  db?: DbPublicConfig;
+  auth?: AuthPublicConfig;
+  stack?: StackPublicConfig;
+}
+
+// ─── Secrets (gitignored) ─────────────────────────────────────────────────────
+// Sensitive credentials: DB URLs, passwords, auth tokens.
+// Remotes are fully stored here (url + metadata).
+
+export interface RemoteSecretConfig {
+  url: string;
+  default?: boolean;
+  addedAt?: string;
+}
+
+export interface DbSecretsConfig {
+  localDbUrl?: string;
+  remotes?: Record<string, RemoteSecretConfig>;
+}
+
+export interface AuthSecretsConfig {
+  source?: Partial<AuthSourceConfig>;
+  target?: Partial<AuthTargetConfig>;
+}
+
+export interface StackPostgresSecrets {
+  user?: string;
+  password?: string;
+}
+
+export interface StackKeycloakSecrets {
+  adminUser?: string;
+  adminPassword?: string;
+}
+
+export interface StackPostgrestSecrets {
+  jwtSecret?: string;
+}
+
+export interface StackSecretsConfig {
+  postgres?: StackPostgresSecrets;
+  keycloak?: StackKeycloakSecrets;
+  postgrest?: StackPostgrestSecrets;
+}
+
+export interface PostkitSecrets {
+  db?: DbSecretsConfig;
+  auth?: AuthSecretsConfig;
+  stack?: StackSecretsConfig;
+}
+
+// ─── Merged runtime config ────────────────────────────────────────────────────
+
 // PostkitConfig interface matching the JSON structure
 export interface PostkitConfig {
+  name?: string;
   db: DbInputConfig;
   auth: AuthInputConfig;
+  stack?: Record<string, unknown>;
 }
 
 let cachedConfig: PostkitConfig | null = null;
@@ -80,9 +195,36 @@ export function checkInitialized(): void {
   if (!fs.existsSync(configPath)) {
     throw new Error(
       "Postkit project is not initialized.\n" +
-        `Run \"postkit init\" to initialize your project first.`,
+        `Run "postkit init" to initialize your project first.`,
     );
   }
+}
+
+/**
+ * Deep-merge two plain objects. Values in `override` win over `base`.
+ * Only plain objects are recursed into; primitives and arrays are replaced wholesale.
+ */
+function deepMerge<T extends object>(base: T, override: Partial<T>): T {
+  const result: T = {...base};
+  for (const key of Object.keys(override) as (keyof T)[]) {
+    const overrideVal = override[key];
+    const baseVal = base[key];
+    if (
+      overrideVal !== null &&
+      overrideVal !== undefined &&
+      typeof overrideVal === "object" &&
+      !Array.isArray(overrideVal) &&
+      baseVal !== null &&
+      baseVal !== undefined &&
+      typeof baseVal === "object" &&
+      !Array.isArray(baseVal)
+    ) {
+      result[key] = deepMerge(baseVal as object, overrideVal as object) as T[keyof T];
+    } else if (overrideVal !== undefined) {
+      result[key] = overrideVal as T[keyof T];
+    }
+  }
+  return result;
 }
 
 export function loadPostkitConfig(): PostkitConfig {
@@ -99,41 +241,47 @@ export function loadPostkitConfig(): PostkitConfig {
   }
 
   const raw = fs.readFileSync(configPath, "utf-8");
-  const parsed = JSON.parse(raw);
+  let parsed: Record<string, unknown> = JSON.parse(raw);
 
   // Auto-migrate from old config format (remoteDbUrl/environments to remotes)
-  if (parsed.db && (parsed.db.remoteDbUrl || parsed.db.environments)) {
-    if (!parsed.db.remotes || Object.keys(parsed.db.remotes).length === 0) {
-      // Migrate remoteDbUrl to default remote
-      if (parsed.db.remoteDbUrl) {
-        parsed.db.remotes = parsed.db.remotes || {};
-        parsed.db.remotes.default = {
-          url: parsed.db.remoteDbUrl,
+  if (parsed.db && (parsed.db as Record<string, unknown>).remoteDbUrl || parsed.db && (parsed.db as Record<string, unknown>).environments) {
+    const db = parsed.db as Record<string, unknown>;
+    if (!db.remotes || Object.keys(db.remotes as object).length === 0) {
+      if (db.remoteDbUrl) {
+        db.remotes = db.remotes || {};
+        (db.remotes as Record<string, unknown>).default = {
+          url: db.remoteDbUrl,
           default: true,
           addedAt: new Date().toISOString(),
         };
-        delete parsed.db.remoteDbUrl;
+        delete db.remoteDbUrl;
       }
 
-      // Migrate environments to named remotes
-      if (parsed.db.environments) {
-        parsed.db.remotes = parsed.db.remotes || {};
-        for (const [name, url] of Object.entries(parsed.db.environments)) {
+      if (db.environments) {
+        db.remotes = db.remotes || {};
+        for (const [name, url] of Object.entries(db.environments as Record<string, unknown>)) {
           if (name !== "default" && typeof url === "string") {
-            parsed.db.remotes[name] = {
+            (db.remotes as Record<string, unknown>)[name] = {
               url,
               addedAt: new Date().toISOString(),
             };
           }
         }
-        delete parsed.db.environments;
+        delete db.environments;
       }
 
-      // Save migrated config
       fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), "utf-8");
     }
   }
 
-  cachedConfig = parsed as PostkitConfig;
+  // Load and merge secrets file if it exists
+  const secretsPath = getSecretsFilePath();
+  if (fs.existsSync(secretsPath)) {
+    const secretsRaw = fs.readFileSync(secretsPath, "utf-8");
+    const secrets: PostkitSecrets = JSON.parse(secretsRaw);
+    parsed = deepMerge(parsed as object, secrets as object) as Record<string, unknown>;
+  }
+
+  cachedConfig = parsed as unknown as PostkitConfig;
   return cachedConfig;
 }

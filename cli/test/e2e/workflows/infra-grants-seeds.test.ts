@@ -25,7 +25,7 @@ describe("Infra and seeds workflow", () => {
     expect(startResult.exitCode).toBe(0);
 
     // Install infra section (roles) after session start (the clone overwrites local DB)
-    await installFixtureSections(project, [
+    await installFixtureSections(project, "public", [
       "infra",
       "core",
       "tables",
@@ -38,14 +38,14 @@ describe("Infra and seeds workflow", () => {
     ]);
 
     // Apply the core function and tables directly so infra/grants/seeds have something to work with
-    await executeSql(db.url, fs.readFileSync(path.join(project.schemaPath, "core", "01_update_updated_at.sql"), "utf-8"));
-    await executeSql(db.url, fs.readFileSync(path.join(project.schemaPath, "tables", "01_category.table.sql"), "utf-8"));
-    await executeSql(db.url, fs.readFileSync(path.join(project.schemaPath, "tables", "02_product.table.sql"), "utf-8"));
+    await executeSql(db.url, fs.readFileSync(path.join(project.schemaPath, "public", "core", "01_update_updated_at.sql"), "utf-8"));
+    await executeSql(db.url, fs.readFileSync(path.join(project.schemaPath, "public", "tables", "01_category.table.sql"), "utf-8"));
+    await executeSql(db.url, fs.readFileSync(path.join(project.schemaPath, "public", "tables", "02_product.table.sql"), "utf-8"));
   });
 
   afterAll(async () => {
     // Clean up session
-    await runCli(["db", "abort", "--force"], {cwd: project.rootDir}).catch(() => {});
+    if (project) await runCli(["db", "abort", "--force"], {cwd: project.rootDir}).catch(() => {});
     if (project) await cleanupTestProject(project);
     if (db) await stopPostgres(db);
   });

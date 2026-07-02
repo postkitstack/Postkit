@@ -10,9 +10,14 @@ permissions:
   id-token: write
 
 jobs:
-  test:
-    name: Test
+  # ── Unit tests ──────────────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,19 +27,62 @@ jobs:
           cache: npm
           cache-dependency-path: cli/package-lock.json
 
-      - run: npm ci
-        working-directory: cli
+      - name: Install dependencies
+        run: npm ci
 
-      - run: npm run test:all
-        working-directory: cli
+      - name: Run unit tests
+        run: npm run test
 
+  # ── E2E tests (requires Docker) ─────────────────────────────────────────────
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Start Docker daemon and verify
+        run: |
+          sudo systemctl start docker || true
+          docker version
+          docker info
+
+      - name: Pull PostgreSQL image (cache warm-up)
+        run: docker pull postgres:16-alpine
+
+      - name: Install dependencies
+        working-directory: cli
+        run: npm ci
+
+      - name: Build
+        working-directory: cli
+        run: npm run build
+
+      - name: Run E2E tests
+        working-directory: cli
+        run: npm run test:e2e
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: true
+          DOCKER_HOST: unix:///var/run/docker.sock
+
+  # ── Release & Publish (only after all tests pass) ───────────────────────────
   release:
     name: Release & Publish
-    needs: test
+    needs: [unit-tests, e2e-tests]
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: cli
+
     steps:
       - uses: actions/checkout@v4
 
@@ -45,9 +93,11 @@ jobs:
           cache-dependency-path: cli/package-lock.json
           registry-url: https://registry.npmjs.org
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-      - run: npm run build
+      - name: Build
+        run: npm run build
 
       - name: Extract version from tag
         id: version
@@ -94,6 +144,7 @@ jobs:
               prerelease: false
             });
 
-      - run: npm publish --provenance --access public
+      - name: Publish to npm
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -7,10 +7,13 @@ import {promptConfirm} from "../../../common/prompt";
 import {PostkitError} from "../../../common/errors";
 import {getDbConfig, getTmpImportDir, getCommittedMigrationsPath, toRelativePath} from "../utils/db-config";
 import {hasActiveSession} from "../utils/session";
+import {maskRemoteUrl} from "../utils/remotes";
 import {addCommittedMigration, saveCommittedState} from "../utils/committed";
 import {testConnection, getTableCount, createDatabase} from "../services/database";
-import {checkPgschemaInstalled, deletePlanFile} from "../services/pgschema";
-import {checkDbmateInstalled, createMigrationFile, runCommittedMigrate} from "../services/dbmate";
+import {resolveLocalDb, stopSessionContainer, onContainerInterrupt} from "../services/container";
+import {deletePlanFile} from "../services/pgschema";
+import {createMigrationFile, runCommittedMigrate} from "../services/dbmate";
+import {checkDbPrerequisites} from "../services/prerequisites";
 import {deleteGeneratedSchema} from "../services/schema-generator";
 import {
   runPgschemaDump,
@@ -19,31 +22,40 @@ import {
   syncMigrationState,
   applyInfraToDatabase,
 } from "../services/schema-importer";
+import {addSchemaToConfig} from "../services/schema-scaffold";
 import type {CommandOptions} from "../../../common/types";
 
 interface ImportOptions extends CommandOptions {
   url?: string;
   schema?: string;
+  schemas?: string;
   name?: string;
-}
-
-function maskConnectionUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.password = "****";
-    return parsed.toString();
-  } catch {
-    return url.replace(/:([^@]+)@/, ":****@");
-  }
 }
 
 export async function importCommand(options: ImportOptions): Promise<void> {
   const spinner = ora();
+  const config = getDbConfig();
   const migrationName = options.name || "imported_baseline";
-  const schemaName = options.schema || "public";
+
+  // Resolve schemas list: --schemas "public,app" > --schema "public" > config.schemas
+  const schemasToImport: string[] = options.schemas
+    ? options.schemas.split(",").map((s) => s.trim()).filter(Boolean)
+    : options.schema
+      ? [options.schema]
+      : config.schemas;
+
+  let tempContainerID: string | undefined;
+  let deregisterSignal: (() => void) | undefined;
+
+  async function cleanupContainer(): Promise<void> {
+    deregisterSignal?.();
+    deregisterSignal = undefined;
+    if (tempContainerID) {
+      try { await stopSessionContainer(tempContainerID); } catch { /* best effort */ }
+    }
+  }
 
   try {
-    // Step 0: Check prerequisites
     if (await hasActiveSession()) {
       throw new PostkitError(
         "An active migration session exists.",
@@ -54,40 +66,21 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     logger.heading("Import Database into PostKit");
 
     logger.step(1, 8, "Checking prerequisites...");
+    await checkDbPrerequisites(options.verbose ?? false);
 
-    const pgschemaInstalled = await checkPgschemaInstalled();
-    const dbmateInstalled = await checkDbmateInstalled();
-
-    if (!pgschemaInstalled) {
-      throw new PostkitError(
-        "pgschema binary not found.",
-        "Visit: https://github.com/pgschema/pgschema",
-      );
-    }
-
-    if (!dbmateInstalled) {
-      throw new PostkitError(
-        "dbmate binary not found.",
-        "Install with: brew install dbmate  or  go install github.com/amacneil/dbmate@latest",
-      );
-    }
-
-    logger.debug("Prerequisites check passed", options.verbose);
-
-    // Step 1: Resolve target database and test connection
+    // Step 2: Resolve target database and test connection
     logger.step(2, 8, "Validating database connection...");
 
-    const config = getDbConfig();
     const targetUrl = options.url || config.localDbUrl;
 
     if (!targetUrl) {
       throw new PostkitError(
         "No database URL provided.",
-        "Use --url flag or set localDbUrl in postkit.config.json.",
+        "Use --url flag or set localDbUrl in postkit.secrets.json.",
       );
     }
 
-    logger.debug(`Target database: ${maskConnectionUrl(targetUrl)}`, options.verbose);
+    logger.debug(`Target database: ${maskRemoteUrl(targetUrl)}`, options.verbose);
 
     spinner.start("Connecting to database...");
     const connected = await testConnection(targetUrl);
@@ -95,7 +88,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     if (!connected) {
       spinner.fail("Failed to connect to database");
       throw new PostkitError(
-        `Could not connect to database: ${maskConnectionUrl(targetUrl)}`,
+        `Could not connect to database: ${maskRemoteUrl(targetUrl)}`,
         "Check the database URL and ensure the database is running.",
       );
     }
@@ -109,12 +102,11 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       logger.warn("Database appears to be empty — importing anyway.");
     }
 
-    // Step 2: Warn about existing files and confirm
+    // Step 3: Warn about existing files and confirm
     logger.step(3, 8, "Checking existing state...");
 
     const warnings: string[] = [];
 
-    // Check if schema directory has files
     if (existsSync(config.schemaPath)) {
       const schemaFiles = await countSqlFiles(config.schemaPath);
       if (schemaFiles > 0) {
@@ -122,7 +114,6 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       }
     }
 
-    // Check if migrations directory has files
     const migrationsDir = getCommittedMigrationsPath();
     if (existsSync(migrationsDir)) {
       const migrationFiles = await countSqlFiles(migrationsDir);
@@ -131,7 +122,6 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       }
     }
 
-    // Check for stale temp directory
     const tmpDir = getTmpImportDir();
     if (existsSync(tmpDir)) {
       warnings.push("A temporary import directory already exists (likely from a failed previous run) — it will be cleaned up.");
@@ -147,7 +137,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     }
 
     logger.info("This command will:");
-    logger.info(`  1. Dump schema from ${maskConnectionUrl(targetUrl)} (schema: ${schemaName})`);
+    logger.info(`  1. Dump schemas from ${maskRemoteUrl(targetUrl)} (schemas: ${schemasToImport.join(", ")})`);
     logger.info("  2. Normalize the dump into PostKit schema directory structure");
     logger.info(`  3. Generate baseline migration: "${migrationName}"`);
     logger.info("  4. Insert migration tracking record in the source database");
@@ -163,35 +153,37 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       throw new PostkitError("Import cancelled.", undefined, 0);
     }
 
-    // Step 3: Schema dump
+    // Step 4: Schema dump — one per schema
     logger.step(4, 8, "Dumping database schema...");
 
     if (options.dryRun) {
       spinner.info("Dry run — skipping schema dump");
     } else {
-      // Clean up any existing temp directory
       if (existsSync(tmpDir)) {
         await fs.rm(tmpDir, {recursive: true, force: true});
       }
 
-      spinner.start("Running pgschema dump...");
-      const dumpResult = await runPgschemaDump(targetUrl, schemaName, tmpDir);
-      spinner.succeed(`Schema dump complete — ${dumpResult.files.length} file(s) produced`);
+      for (const schemaName of schemasToImport) {
+        const schemaTmpDir = path.join(tmpDir, schemaName);
+        spinner.start(`Running pgschema dump for "${schemaName}"...`);
+        const dumpResult = await runPgschemaDump(targetUrl, schemaName, schemaTmpDir);
+        spinner.succeed(`Schema dump complete for "${schemaName}" — ${dumpResult.files.length} file(s)`);
 
-      if (options.verbose) {
-        for (const f of dumpResult.files) {
-          logger.debug(`  ${path.relative(tmpDir, f)}`, true);
+        if (options.verbose) {
+          for (const f of dumpResult.files) {
+            logger.debug(`  ${path.relative(schemaTmpDir, f)}`, true);
+          }
         }
       }
     }
 
-    // Step 4: Normalize dump into PostKit structure
+    // Step 5: Normalize dump into PostKit structure — one per schema
     logger.step(5, 8, "Normalizing schema for PostKit...");
 
     if (options.dryRun) {
       spinner.info("Dry run — skipping normalization");
     } else {
-      // Clear schema directory before normalizing (keep .pgschemaignore)
+      // Clear schema directory before normalizing
       if (existsSync(config.schemaPath)) {
         const entries = await fs.readdir(config.schemaPath, {withFileTypes: true});
         for (const entry of entries) {
@@ -200,27 +192,51 @@ export async function importCommand(options: ImportOptions): Promise<void> {
         }
       }
 
-      spinner.start("Normalizing schema files...");
-      const normalizeResult = await normalizeDumpForPostkit(tmpDir, config.schemaPath, schemaName, targetUrl);
-      spinner.succeed(`Normalized into ${normalizeResult.filesCreated.length} file(s)`);
+      for (const schemaName of schemasToImport) {
+        const schemaTmpDir = path.join(tmpDir, schemaName);
+        const schemaDestDir = path.join(config.schemaPath, schemaName);
+        spinner.start(`Normalizing "${schemaName}"...`);
+        const normalizeResult = await normalizeDumpForPostkit(schemaTmpDir, schemaDestDir, schemaName, targetUrl);
+        spinner.succeed(`Normalized "${schemaName}" — ${normalizeResult.filesCreated.length} file(s)`);
 
-      for (const f of normalizeResult.filesCreated) {
-        logger.info(`  Created: ${f}`);
+        for (const f of normalizeResult.filesCreated) {
+          logger.info(`  Created: ${f}`);
+        }
       }
     }
 
-    // Step 5: Generate baseline migration using pgschema plan
-    logger.step(6, 8, "Generating baseline migration...");
+    // Update postkit.config.json schemas array with every imported schema
+    for (const schemaName of schemasToImport) {
+      await addSchemaToConfig(schemaName, options.dryRun ?? false);
+    }
+    if (!options.dryRun) {
+      logger.info(`  Updated postkit.config.json schemas: [${schemasToImport.join(", ")}]`);
+    }
+
+    // Step 6: Resolve local DB URL
+    logger.step(6, 8, "Setting up local database...");
+
+    let localDbUrl = config.localDbUrl;
+    if (!options.dryRun) {
+      const resolved = await resolveLocalDb(config.localDbUrl, targetUrl, spinner);
+      localDbUrl = resolved.url;
+      tempContainerID = resolved.containerID;
+      if (tempContainerID) {
+        deregisterSignal = onContainerInterrupt(tempContainerID);
+      }
+    }
+
+    // Step 7: Generate baseline migration using pgschema plan (all schemas, ordered)
+    logger.step(7, 8, "Generating baseline migration...");
 
     if (options.dryRun) {
       spinner.info("Dry run — skipping baseline generation");
     } else {
       spinner.start("Generating baseline DDL via pgschema plan...");
-      const baselineDDL = await generateBaselineDDL(config.schemaPath, schemaName);
+      const baselineDDL = await generateBaselineDDL(config.schemaPath, schemasToImport, localDbUrl);
       spinner.succeed("Baseline DDL generated");
 
-      // Clear migrations directory and reset committed state before creating baseline migration
-      const migrationsDir = getCommittedMigrationsPath();
+      // Clear migrations directory and reset committed state
       if (existsSync(migrationsDir)) {
         const entries = await fs.readdir(migrationsDir);
         for (const entry of entries) {
@@ -231,10 +247,10 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       }
       await saveCommittedState({migrations: []});
 
-      // Create migration file
+      const schemaLabel = schemasToImport.join(", ");
       const migrationFile = await createMigrationFile(
         migrationName,
-        `-- Baseline import\n-- Schema: ${schemaName}\n-- Imported at: ${new Date().toISOString()}\n\n${baselineDDL}`,
+        `-- Baseline import\n-- Schemas: ${schemaLabel}\n-- Imported at: ${new Date().toISOString()}\n\n${baselineDDL}`,
         "-- WARNING: Automatic rollback of a full baseline import is not supported.\n-- Manual intervention required to undo all imported objects.",
         getCommittedMigrationsPath(),
       );
@@ -242,40 +258,38 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       logger.success(`Baseline migration created: ${migrationFile.name}`);
       logger.debug(`  Path: ${migrationFile.path}`, options.verbose);
 
-      // Track in committed state
       await addCommittedMigration({
         migrationFile: {
           name: migrationFile.name,
           path: toRelativePath(migrationFile.path),
           timestamp: migrationFile.timestamp,
         },
-        description: `Baseline import (${schemaName})`,
+        description: `Baseline import (${schemaLabel})`,
         sessionMigrations: [],
         committedAt: new Date().toISOString(),
       });
 
-      // Step 7: Set up local database
-      logger.step(7, 8, "Setting up local database...");
+      // Step 8: Apply to local database
+      logger.step(8, 8, "Applying to local database...");
 
       spinner.start("Creating local database...");
       try {
-        await createDatabase(config.localDbUrl);
+        await createDatabase(localDbUrl);
         spinner.succeed("Local database created");
       } catch {
         spinner.warn("Local database may already exist — continuing");
       }
 
-      // Apply infra SQL (roles, schemas) before running migration
       spinner.start("Applying infrastructure SQL to local database...");
       try {
-        await applyInfraToDatabase(config.localDbUrl, config.schemaPath);
+        await applyInfraToDatabase(localDbUrl);
         spinner.succeed("Infrastructure SQL applied");
       } catch {
         spinner.warn("Could not apply infrastructure SQL — continuing");
       }
 
       spinner.start("Applying baseline migration to local database...");
-      const migrateResult = await runCommittedMigrate(config.localDbUrl);
+      const migrateResult = await runCommittedMigrate(localDbUrl);
       if (migrateResult.success) {
         spinner.succeed("Baseline migration applied to local database");
       } else {
@@ -283,44 +297,35 @@ export async function importCommand(options: ImportOptions): Promise<void> {
         logger.warn(`  ${migrateResult.output}`);
       }
 
-      // Step 8: Sync migration state with source database (only after successful local apply)
       logger.step(8, 8, "Syncing migration state...");
-
       spinner.start("Inserting migration tracking record...");
       try {
         await syncMigrationState(targetUrl, migrationFile.timestamp);
         spinner.succeed("Migration tracking record inserted");
       } catch (error) {
         spinner.warn("Could not insert migration tracking record");
-        logger.warn(
-          `  ${error instanceof Error ? error.message : String(error)}`,
-        );
+        logger.warn(`  ${error instanceof Error ? error.message : String(error)}`);
         logger.warn("  The baseline migration file was created but the source database may not recognize it.");
         logger.warn("  You may need to manually insert the record into schema_migrations.");
       }
     }
 
-    // Step 8: Cleanup
+    // Cleanup
     if (!options.dryRun) {
-      const tmpImportDir = getTmpImportDir();
-      if (existsSync(tmpImportDir)) {
-        await fs.rm(tmpImportDir, {recursive: true, force: true});
-      }
-      // Clean up schema.sql artifact from baseline generation step
-      const artifact = path.join(path.dirname(config.schemaPath), "schema.sql");
-      if (existsSync(artifact)) {
-        await fs.unlink(artifact);
+      if (existsSync(tmpDir)) {
+        await fs.rm(tmpDir, {recursive: true, force: true});
       }
       await deletePlanFile();
       await deleteGeneratedSchema();
+      await cleanupContainer();
     }
 
-    // Summary
     logger.blank();
     logger.success("Database import complete!");
     logger.blank();
     logger.info("What was created:");
     logger.info(`  - Schema files in ${config.schemaPath} (normalized from database dump)`);
+    logger.info(`  - Infra files in ${config.infraPath} (roles, extensions, schemas)`);
     logger.info(`  - Baseline migration in ${getCommittedMigrationsPath()}`);
     logger.info("  - Local database set up with imported schema");
     logger.blank();
@@ -330,6 +335,7 @@ export async function importCommand(options: ImportOptions): Promise<void> {
     logger.info('  3. Start working: modify schema files, then "postkit db plan" to see changes');
   } catch (error) {
     spinner.fail("Import failed");
+    await cleanupContainer();
     throw error;
   }
 }

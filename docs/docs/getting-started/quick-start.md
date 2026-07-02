@@ -17,13 +17,15 @@ postkit init
 ```
 
 This creates:
-- `postkit.config.json` - Your configuration file
+- `postkit.config.json` - Non-sensitive configuration (committed to git)
+- `postkit.secrets.json` - Your credentials (gitignored)
+- `postkit.secrets.example.json` - Credentials template for teammates (committed)
 - `db/schema/` - Your schema files directory
-- `.postkit/` - Runtime files (gitignored)
+- `.postkit/` - Runtime state (ephemeral files gitignored; committed migrations and auth config are tracked by git)
 
 ## 2. Configure Remotes
 
-Add your remote databases:
+Add your remote databases (all remote data is stored in `postkit.secrets.json` — remotes are user-specific and never committed):
 
 ```bash
 # Add development remote (set as default)
@@ -42,17 +44,18 @@ postkit db start
 ```
 
 This:
-1. Clones the remote database to local
-2. Creates a session to track your changes
-3. Prepares for schema modifications
+1. Detects the remote PostgreSQL version
+2. Clones the remote database to local (auto-starts a Docker container if `localDbUrl` is empty)
+3. Creates a session to track your changes
+4. Prepares for schema modifications
 
 ## 4. Make Schema Changes
 
-Edit files in `db/schema/`:
+Edit files in `db/schema/<name>/`:
 
 ```sql
--- db/schema/tables/users.sql
-CREATE TABLE users (
+-- db/schema/public/tables/users.sql
+CREATE TABLE public.users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -102,9 +105,13 @@ PostKit performs a dry-run first to verify the migration works, then deploys to 
 | `postkit db deploy` | Deploy to remote database |
 | `postkit db status` | Show session state |
 | `postkit db abort` | Cancel session and clean up |
+| `postkit stack up` | Start local backend stack (Postgres, Keycloak, PostgREST, Traefik) |
+| `postkit stack down` | Stop all stack services |
+| `postkit stack status` | Show stack service health |
 
 ## Next Steps
 
 - [DB Module Overview](/docs/modules/db/overview) - Learn about the full migration workflow
 - [Auth Module Overview](/docs/modules/auth/overview) - Manage Keycloak configurations
+- [Stack Module Overview](/docs/modules/stack/overview) - Manage local backend services
 - [Global Options](/docs/reference/global-options) - See all available CLI options

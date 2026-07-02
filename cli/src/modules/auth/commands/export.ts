@@ -1,7 +1,7 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
 import {promptConfirm} from "../../../common/prompt";
-import {getAuthConfig} from "../utils/auth-config";
+import {getExportConfig} from "../utils/auth-config";
 import {
   getAdminToken,
   exportRealm,
@@ -18,7 +18,7 @@ export async function exportCommand(options: CommandOptions): Promise<void> {
 
     // Step 1: Load config
     logger.step(1, 4, "Loading configuration...");
-    const config = getAuthConfig();
+    const config = getExportConfig();
 
     logger.info(`Source : ${config.sourceUrl}`);
     logger.info(`Realm  : ${config.sourceRealm}`);
@@ -79,7 +79,6 @@ export async function exportCommand(options: CommandOptions): Promise<void> {
     logger.info(`Clean  → ${config.cleanFilePath}`);
   } catch (error) {
     spinner.fail("Export failed");
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }

@@ -1,7 +1,7 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
 import {promptInput} from "../../../common/prompt";
-import {getSession, deleteSession} from "../utils/session";
+import {requireActiveSession, deleteSession} from "../utils/session";
 import {getSessionMigrationsPath, toRelativePath} from "../utils/db-config";
 import {mergeSessionMigrations, deleteSessionMigrations} from "../services/dbmate";
 import {deletePlanFile} from "../services/pgschema";
@@ -19,15 +19,7 @@ export async function commitCommand(options: CommitOptions): Promise<void> {
   const spinner = ora();
 
   try {
-    // Check for active session
-    const session = await getSession();
-
-    if (!session || !session.active) {
-      throw new PostkitError(
-        "No active migration session.",
-        'Run "postkit db start" to begin a new session.',
-      );
-    }
+    const session = await requireActiveSession();
 
     if (!session.pendingChanges.applied) {
       throw new PostkitError(

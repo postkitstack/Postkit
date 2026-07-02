@@ -13,9 +13,10 @@ export interface RemoteInputConfig {
 }
 
 export interface DbInputConfig {
-  localDbUrl: string;
+  localDbUrl?: string;
   schemaPath?: string;
-  schema?: string;
+  schemas?: string[];
+  infraPath?: string;
   remotes?: Record<string, RemoteInputConfig>;
 }
 
@@ -32,7 +33,8 @@ export interface RemoteConfig {
 export interface DbConfig {
   localDbUrl: string;
   schemaPath: string;
-  schema: string;
+  schemas: string[];
+  infraPath: string;
   remotes: Record<string, RemoteConfig>;
   pgSchemaBin: string;
   dbmateBin: string;

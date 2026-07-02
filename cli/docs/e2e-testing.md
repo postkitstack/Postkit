@@ -254,10 +254,10 @@ Tests infrastructure SQL (roles) and seed data management. Grant permissions are
 | Test | What It Tests |
 |------|---------------|
 | `db remote list` | Shows configured remote name |
-| `db remote add` | Persists to `postkit.config.json` |
-| `db remote add --default` | Sets `default: true` flag |
-| `db remote use` | Switches default remote |
-| `db remote remove --force` | Deletes from config |
+| `db remote add` | Persists to `postkit.secrets.json` |
+| `db remote add --default` | Sets `default: true` flag in `postkit.secrets.json` |
+| `db remote use` | Switches default remote in `postkit.secrets.json` |
+| `db remote remove --force` | Deletes from `postkit.secrets.json` |
 
 ### Error Handling (4 files)
 
@@ -419,6 +419,89 @@ test/e2e/
     ├── no-session.test.ts                      # Commands without session
     ├── connection-failure.test.ts              # Unreachable database
     └── conflict-detection.test.ts              # Duplicate session, unapplied
+```
+
+---
+
+## Stack Module Tests
+
+The stack module has its own E2E test files. None of these tests require Docker to be running — they test CLI behavior and filesystem scaffolding only.
+
+### Test Files
+
+| File | Category | Docker | Description |
+|------|----------|--------|-------------|
+| `smoke/stack-commands.test.ts` | Smoke | No | `stack --help`, `stack up --help`, `stack restart --help`, init-check enforcement |
+| `error-handling/stack-config-errors.test.ts` | Error handling | No | Invalid stack config, missing secrets validation |
+| `workflows/stack-init-workflow.test.ts` | Workflow | No | `postkit init` scaffold verification |
+
+### `stack-commands.test.ts` — Smoke Tests
+
+Verifies subcommand registration and init-check without starting Docker:
+
+- `stack --help` lists all subcommands (`up`, `down`, `restart`, `status`, `logs`)
+- `stack up --help` shows `--no-wait` and `--no-keys` flags
+- `stack restart --help` shows `[services...]` variadic argument
+- `stack up` / `stack status` / `stack restart` / `stack down` all fail with `not initialized` or `Config file not found` in an empty (uninitialized) directory
+
+### `stack-init-workflow.test.ts` — Init Workflow (No Docker)
+
+Tests that `postkit init --force` produces the correct scaffold for the stack module. All assertions are filesystem-based — no containers are started.
+
+Pattern:
+```typescript
+beforeAll(async () => {
+  rootDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "postkit-e2e-init-"));
+  await runCli(["init", "--force"], {cwd: rootDir});
+});
+```
+
+Assertions verified:
+- `.postkit/auth/providers/` directory exists
+- `.postkit/stack/` directory exists
+- `db/infra/001_roles.sql` exists and contains `IF NOT EXISTS` pattern
+- `db/infra/002_schemas.sql` exists and contains `CREATE SCHEMA IF NOT EXISTS auth/public/storage`
+- `postkit.config.json` has `stack.keycloak.realmTemplate` pointing to an existing file
+- `postkit.config.json` has `name` field matching `[a-z0-9-]*_[0-9a-f]{8}` pattern
+- `postkit.secrets.example.json` exists and has `db` + `auth` top-level keys
+- `.gitignore` contains `postkit.secrets.json`
+- Second `postkit init --force` succeeds (idempotency)
+
+### Running Stack Tests
+
+```bash
+# Run all stack smoke tests (no Docker)
+npm run test:e2e:file -- test/e2e/smoke/stack-commands.test.ts
+
+# Run stack init workflow test (no Docker)
+npm run test:e2e:file -- test/e2e/workflows/stack-init-workflow.test.ts
+
+# Run stack config error tests (no Docker)
+npm run test:e2e:file -- test/e2e/error-handling/stack-config-errors.test.ts
+
+# Run all stack E2E tests together
+npx vitest run --config vitest.e2e.config.ts test/e2e/smoke/stack-commands.test.ts test/e2e/workflows/stack-init-workflow.test.ts test/e2e/error-handling/stack-config-errors.test.ts
+```
+
+### Stack Unit Tests
+
+Stack module unit tests live under `test/modules/stack/` and use Vitest with `vi.mock()`:
+
+| File | What It Tests |
+|------|--------------|
+| `services/compose.test.ts` | `generateComposeFile()` output, `getSelectedServices()` dependency resolution |
+| `services/realm-init.test.ts` | `cleanRealmTemplate()` — strips builtins, injects JWT Role Mapper |
+| `services/scaffold.test.ts` | `scaffoldRealmTemplate()` — creates file, skips if exists |
+| `services/sync-providers.test.ts` | `syncKeycloakProviders()` — copies JARs from vendor + project dirs |
+| `services/db-init.test.ts` | `applyStackDeploy()` — connection retry, schema init, infra/migrations/seeds |
+| `utils/stack-config.test.ts` | `getStackConfig()` — defaults, Zod validation, secrets merging |
+| `utils/stack-state.test.ts` | `readStackIsInitial()` / `setStackInitialized()` — DB flag read/write |
+| `commands/restart.test.ts` | `restartCommand()` — service name validation, multiple targets |
+
+Run unit tests:
+```bash
+npm run test:unit                                    # All unit tests
+npx vitest run test/modules/stack/                  # Stack unit tests only
 ```
 
 ---

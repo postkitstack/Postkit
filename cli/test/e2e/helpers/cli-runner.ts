@@ -48,16 +48,16 @@ export async function runCli(
     });
 
     return {
-      stdout: result.stdout.trim(),
-      stderr: result.stderr.trim(),
+      stdout: String(result.stdout ?? "").trim(),
+      stderr: String(result.stderr ?? "").trim(),
       exitCode: result.exitCode ?? 0,
       failed: result.failed,
     };
   } catch (error: unknown) {
     const err = error as Result;
     return {
-      stdout: err.stdout?.trim() ?? "",
-      stderr: err.stderr?.trim() ?? String(error),
+      stdout: String(err.stdout ?? "").trim(),
+      stderr: String(err.stderr ?? "").trim() || String(error),
       exitCode: err.exitCode ?? 1,
       failed: true,
     };

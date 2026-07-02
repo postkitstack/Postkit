@@ -23,13 +23,13 @@ postkit db apply [-f]
 
 ## What It Does
 
-1. Validates schema fingerprint (ensures schema files haven't changed since plan)
+1. Validates per-schema fingerprints (ensures schema files haven't changed since plan)
 2. Displays the planned changes
 3. Tests local database connection
-4. Applies infrastructure SQL from `db/schema/infra/`
-5. Wraps the plan SQL and creates a dbmate migration file (staged in `.postkit/db/session/`)
+4. Applies infrastructure SQL from `db/infra/`
+5. For each schema with changes: wraps plan SQL with `SET search_path TO "<name>"` and combines into one migration file (staged in `.postkit/db/session/`)
 6. Runs `dbmate migrate` on the local database
-7. Applies seed data from `db/schema/seeds/`
+7. Applies seed data from `db/schema/<name>/seeds/` for each schema in config order
 
 **Resume support:** If seeds fail, re-running `postkit db apply` resumes from where it left off.
 

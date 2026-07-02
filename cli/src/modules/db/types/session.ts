@@ -9,13 +9,14 @@ export interface SessionState {
   remoteName?: string;
   localDbUrl: string;
   remoteDbUrl: string;
+  containerID?: string;
   pendingChanges: {
     planned: boolean;
     applied: boolean;
-    planFile: string | null;
+    planFiles: Record<string, string | null>;
     migrationFiles: {name: string; path: string}[];
     description: string | null;
-    schemaFingerprint: string | null;
+    schemaFingerprints: Record<string, string | null>;
     migrationApplied: boolean;
     seedsApplied: boolean;
   };

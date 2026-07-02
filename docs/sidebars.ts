@@ -13,6 +13,7 @@ const sidebars: SidebarsConfig = {
         'getting-started/installation',
         'getting-started/configuration',
         'getting-started/quick-start',
+        'getting-started/migrating-existing-database',
       ],
     },
 
@@ -23,29 +24,70 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'modules/db/overview',
-        'modules/db/migrating-existing-database',
         {
           type: 'category',
           label: 'Commands',
           collapsible: true,
           collapsed: false,
           items: [
-            'modules/db/commands/start',
-            'modules/db/commands/plan',
-            'modules/db/commands/apply',
-            'modules/db/commands/commit',
-            'modules/db/commands/deploy',
-            'modules/db/commands/status',
-            'modules/db/commands/abort',
-            'modules/db/commands/migration',
-            'modules/db/commands/remote',
-            'modules/db/commands/infra',
-            'modules/db/commands/seed',
-            'modules/db/commands/import',
+            {
+              type: 'category',
+              label: 'Session',
+              collapsible: true,
+              collapsed: false,
+              items: [
+                'modules/db/commands/start',
+                'modules/db/commands/status',
+                'modules/db/commands/abort',
+              ],
+            },
+            {
+              type: 'category',
+              label: 'Schema Workflow',
+              collapsible: true,
+              collapsed: false,
+              items: [
+                'modules/db/commands/plan',
+                'modules/db/commands/apply',
+                'modules/db/commands/commit',
+                'modules/db/commands/deploy',
+              ],
+            },
+            {
+              type: 'category',
+              label: 'Infrastructure & Data',
+              collapsible: true,
+              collapsed: false,
+              items: [
+                'modules/db/commands/infra',
+                'modules/db/commands/seed',
+                'modules/db/commands/migration',
+                'modules/db/commands/schema',
+                'modules/db/commands/import',
+              ],
+            },
+            {
+              type: 'category',
+              label: 'Remotes',
+              collapsible: true,
+              collapsed: false,
+              items: [
+                'modules/db/commands/remote',
+              ],
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Advanced',
+          collapsible: true,
+          collapsed: false,
+          items: [
+            'modules/db/cross-schema-migrations',
+            'modules/db/plan-limitations',
           ],
         },
         'modules/db/troubleshooting',
-        'modules/db/plan-limitations',
       ],
     },
 
@@ -73,6 +115,31 @@ const sidebars: SidebarsConfig = {
 
     {
       type: 'category',
+      label: 'Stack Module',
+      collapsible: true,
+      collapsed: false,
+      items: [
+        'modules/stack/overview',
+        {
+          type: 'category',
+          label: 'Commands',
+          collapsible: true,
+          collapsed: false,
+          items: [
+            'modules/stack/commands/up',
+            'modules/stack/commands/down',
+            'modules/stack/commands/status',
+            'modules/stack/commands/logs',
+            'modules/stack/commands/restart',
+            'modules/stack/commands/keys',
+            'modules/stack/commands/realm',
+          ],
+        },
+      ],
+    },
+
+    {
+      type: 'category',
       label: 'Reference',
       collapsible: true,
       collapsed: true,
@@ -80,6 +147,7 @@ const sidebars: SidebarsConfig = {
         'reference/global-options',
         'reference/project-structure',
         'reference/session-state',
+        'agent-skills/overview',
       ],
     },
   ],

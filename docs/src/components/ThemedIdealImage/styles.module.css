@@ -1,0 +1,7 @@
+/* light mode: show light, hide dark */
+.lightImg { display: block !important; }
+.darkImg  { display: none  !important; }
+
+/* dark mode: show dark, hide light */
+:global([data-theme='dark']) .lightImg { display: none  !important; }
+:global([data-theme='dark']) .darkImg  { display: block !important; }

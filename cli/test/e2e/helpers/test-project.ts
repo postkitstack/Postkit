@@ -9,14 +9,15 @@ export interface TestProject {
   configPath: string;
   postkitDir: string;
   dbDir: string;
-  schemaPath: string;
+  schemaPath: string;  // absolute path to db/schema
+  infraPath: string;   // absolute path to db/infra
 }
 
 export interface CreateTestProjectOptions {
-  localDbUrl: string;
+  localDbUrl?: string;   // omit or pass "" for auto-Docker mode
   remoteDbUrl?: string;
   remoteName?: string;
-  schemaPath?: string;
+  schemas?: string[];    // defaults to ["public"] — patch postkit.config.json when provided
 }
 
 /**
@@ -40,30 +41,38 @@ export async function createTestProject(
 
   const postkitDir = path.join(rootDir, ".postkit");
   const dbDir = path.join(postkitDir, "db");
-  const schemaPath = path.join(rootDir, config.schemaPath ?? "schema");
+  const schemaPath = path.join(rootDir, "db", "schema");
+  const infraPath = path.join(rootDir, "db", "infra");
   const configPath = path.join(rootDir, "postkit.config.json");
 
-  // Ensure schema directory exists (init doesn't create it)
+  // Ensure schema and infra directories exist (init doesn't create them)
   await fs.mkdir(schemaPath, {recursive: true});
+  await fs.mkdir(infraPath, {recursive: true});
 
-  // Read the generated config and merge in test-specific values
-  const existingConfig = JSON.parse(await fs.readFile(configPath, "utf-8"));
+  // Patch secrets: all credentials and remote data live exclusively in postkit.secrets.json
+  const secretsPath = path.join(rootDir, "postkit.secrets.json");
   const remoteName = config.remoteName ?? "test-remote";
 
-  existingConfig.db.localDbUrl = config.localDbUrl;
+  const existingSecrets = JSON.parse(await fs.readFile(secretsPath, "utf-8"));
+  existingSecrets.db.localDbUrl = config.localDbUrl ?? "";
   if (config.remoteDbUrl) {
-    existingConfig.db.remotes = {
-      [remoteName]: {
-        url: config.remoteDbUrl,
-        default: true,
-        addedAt: new Date().toISOString(),
-      },
+    existingSecrets.db.remotes = {
+      [remoteName]: {url: config.remoteDbUrl, default: true, addedAt: new Date().toISOString()},
     };
   }
+  await fs.writeFile(secretsPath, JSON.stringify(existingSecrets, null, 2));
 
-  await fs.writeFile(configPath, JSON.stringify(existingConfig, null, 2));
+  // Patch public config if schemas override provided
+  if (config.schemas) {
+    const existingConfig = JSON.parse(await fs.readFile(configPath, "utf-8"));
+    existingConfig.db = existingConfig.db ?? {};
+    existingConfig.db.schemas = config.schemas;
+    existingConfig.db.schemaPath = "db/schema";
+    existingConfig.db.infraPath = "db/infra";
+    await fs.writeFile(configPath, JSON.stringify(existingConfig, null, 2));
+  }
 
-  return {rootDir, configPath, postkitDir, dbDir, schemaPath};
+  return {rootDir, configPath, postkitDir, dbDir, schemaPath, infraPath};
 }
 
 /**

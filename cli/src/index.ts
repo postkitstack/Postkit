@@ -3,6 +3,7 @@ import {createRequire} from "module";
 import {initCommand} from "./commands/init";
 import {registerDbModule} from "./modules/db/index";
 import {registerAuthModule} from "./modules/auth/index";
+import {registerStackModule} from "./modules/stack/index";
 import {logger} from "./common/logger";
 
 const require = createRequire(import.meta.url);
@@ -41,6 +42,7 @@ program
 // Register modules
 registerDbModule(program);
 registerAuthModule(program);
+registerStackModule(program);
 
 // Parse and run
 program.parse();

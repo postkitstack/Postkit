@@ -19,7 +19,6 @@ export async function syncCommand(options: CommandOptions): Promise<void> {
     logger.blank();
     logger.success("Sync complete! Realm exported and imported successfully.");
   } catch (error) {
-    logger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 }

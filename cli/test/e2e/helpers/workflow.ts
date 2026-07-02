@@ -5,7 +5,7 @@ import {runCli} from "./cli-runner";
 import type {TestProject} from "./test-project";
 import type {TestDatabase} from "./test-database";
 import {queryDatabase} from "./db-query";
-import {FIXTURE_TABLES} from "./schema-builder";
+import {FIXTURE_TABLES, FIXTURE_APP_TABLES} from "./schema-builder";
 
 // ---------------------------------------------------------------------------
 // CLI workflow actions
@@ -261,4 +261,36 @@ export async function verifyFixtureSchema(
     label,
   );
   await verifyViewsExist(dbUrl, ["products_with_category"], label);
+}
+
+/** Verify that all specified tables exist in a specific schema */
+export async function verifyTablesInSchema(
+  dbUrl: string,
+  schemaName: string,
+  tables: readonly string[],
+  label = "DB",
+): Promise<void> {
+  for (const table of tables) {
+    const rows = await queryDatabase(
+      dbUrl,
+      `SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = $1 AND table_name = $2
+      ) AS exists`,
+      [schemaName, table],
+    );
+    expect(
+      rows[0]?.exists,
+      `Table '${schemaName}.${table}' should exist in ${label}`,
+    ).toBe(true);
+  }
+}
+
+/** Verify both public (category, product) and app (order, order_item) fixture tables exist */
+export async function verifyMultiSchemaFixture(
+  dbUrl: string,
+  label = "DB",
+): Promise<void> {
+  await verifyTablesInSchema(dbUrl, "public", FIXTURE_TABLES, label);
+  await verifyTablesInSchema(dbUrl, "app", FIXTURE_APP_TABLES, label);
 }

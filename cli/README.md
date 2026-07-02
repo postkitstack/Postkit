@@ -21,11 +21,10 @@ npm install -g @appritech/postkit
 
 ### Requirements
 
-| Requirement | Version | Download |
-|-------------|---------|----------|
-| **Node.js** | >= 18.0.0 | [nodejs.org](https://nodejs.org/) |
-| **Docker** | Latest | [docker.com](https://www.docker.com/products/docker-desktop/) |
-| **PostgreSQL CLI** | `psql`, `pg_dump` | [postgresql.org/download](https://www.postgresql.org/download/) |
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| **Node.js** | >= 18.0.0 | Required |
+| **Docker** | Latest | Required only when `localDbUrl` is empty (auto-container mode) |
 
 ### Basic Usage
 
@@ -110,39 +109,31 @@ Full documentation available at: **[https://docs.postkitstack.com/](https://docs
 
 ## 🔧 Configuration
 
-Create a `postkit.config.json` in your project root:
+PostKit uses two config files — run `postkit init` to generate both.
 
+**`postkit.config.json`** (commit this):
+```json
+{
+  "db": {
+    "schemaPath": "db/schema",
+    "schema": "public"
+  }
+}
+```
+
+**`postkit.secrets.json`** (gitignored — contains credentials and all remote config):
 ```json
 {
   "db": {
     "localDbUrl": "postgres://user:pass@localhost:5432/myapp_local",
-    "schemaPath": "db/schema",
-    "schema": "public",
     "remotes": {
-      "dev": {
-        "url": "postgres://user:pass@dev-host:5432/myapp",
-        "default": true
-      },
-      "staging": {
-        "url": "postgres://user:pass@staging-host:5432/myapp"
-      }
+      "dev": { "url": "postgres://user:pass@dev-host:5432/myapp", "default": true }
     }
-  },
-  "auth": {
-    "source": {
-      "url": "https://keycloak-dev.example.com",
-      "adminUser": "admin",
-      "adminPass": "dev-password",
-      "realm": "myapp-realm"
-    },
-    "target": {
-      "url": "https://keycloak-staging.example.com",
-      "adminUser": "admin",
-      "adminPass": "staging-password"
-    },
-    "configCliImage": "adorsys/keycloak-config-cli:6.4.0-24"
   }
 }
+```
+
+> Leave `localDbUrl` empty to have PostKit automatically spin up a version-matched Docker container for your local database. No PostgreSQL client tools required on your host.
 ```
 
 Run `postkit init` to create the `.postkit/` directory structure:

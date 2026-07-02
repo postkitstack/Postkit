@@ -10,6 +10,19 @@ import {
 
 const {Client} = pg;
 
+export async function withPgClient<T>(
+  url: string,
+  fn: (client: InstanceType<typeof Client>) => Promise<T>,
+): Promise<T> {
+  const client = new Client({connectionString: url});
+  try {
+    await client.connect();
+    return await fn(client);
+  } finally {
+    await client.end();
+  }
+}
+
 export function parseConnectionUrl(url: string): DatabaseConnectionInfo {
   const parsed = new URL(url);
 
@@ -28,16 +41,13 @@ function buildConnectionUrl(info: DatabaseConnectionInfo): string {
 }
 
 export async function testConnection(url: string): Promise<boolean> {
-  const client = new Client({connectionString: url});
-
   try {
-    await client.connect();
-    await client.query(TEST_CONNECTION);
-    return true;
+    return await withPgClient(url, async (client) => {
+      await client.query(TEST_CONNECTION);
+      return true;
+    });
   } catch {
     return false;
-  } finally {
-    await client.end();
   }
 }
 
@@ -47,23 +57,13 @@ export async function createDatabase(url: string): Promise<void> {
 
   // Connect to postgres database to create the new one
   const adminUrl = buildConnectionUrl({...info, database: "postgres"});
-  const client = new Client({connectionString: adminUrl});
-
-  try {
-    await client.connect();
-
+  await withPgClient(adminUrl, async (client) => {
     // Check if database exists
-    const result = await client.query(
-      CHECK_DB_EXISTS,
-      [targetDb],
-    );
-
+    const result = await client.query(CHECK_DB_EXISTS, [targetDb]);
     if (result.rows.length === 0) {
       await client.query(`CREATE DATABASE "${targetDb}"`);
     }
-  } finally {
-    await client.end();
-  }
+  });
 }
 
 export async function dropDatabase(url: string): Promise<void> {
@@ -72,22 +72,12 @@ export async function dropDatabase(url: string): Promise<void> {
 
   // Connect to postgres database to drop the target
   const adminUrl = buildConnectionUrl({...info, database: "postgres"});
-  const client = new Client({connectionString: adminUrl});
-
-  try {
-    await client.connect();
-
+  await withPgClient(adminUrl, async (client) => {
     // Terminate existing connections
-    await client.query(
-      TERMINATE_CONNECTIONS,
-      [targetDb],
-    );
-
+    await client.query(TERMINATE_CONNECTIONS, [targetDb]);
     // Drop database if exists
     await client.query(`DROP DATABASE IF EXISTS "${targetDb}"`);
-  } finally {
-    await client.end();
-  }
+  });
 }
 
 export async function cloneDatabase(
@@ -134,25 +124,27 @@ export async function cloneDatabase(
 }
 
 export async function executeSQL(url: string, sql: string): Promise<string> {
-  const client = new Client({connectionString: url});
-
-  try {
-    await client.connect();
+  return withPgClient(url, async (client) => {
     const result = await client.query(sql);
     return JSON.stringify(result.rows, null, 2);
-  } finally {
-    await client.end();
-  }
+  });
 }
 
 export async function getTableCount(url: string): Promise<number> {
-  const client = new Client({connectionString: url});
-
-  try {
-    await client.connect();
+  return withPgClient(url, async (client) => {
     const result = await client.query(COUNT_TABLES);
     return parseInt(result.rows[0].count, 10);
-  } finally {
-    await client.end();
-  }
+  });
+}
+
+/**
+ * Returns the major PostgreSQL version of a server (e.g. 14, 15, 16).
+ * Uses SHOW server_version_num which returns a zero-padded integer like "160003".
+ */
+export async function getRemotePgMajorVersion(url: string): Promise<number> {
+  return withPgClient(url, async (client) => {
+    const result = await client.query("SHOW server_version_num");
+    const num = parseInt(result.rows[0].server_version_num as string, 10);
+    return Math.floor(num / 10000);
+  });
 }

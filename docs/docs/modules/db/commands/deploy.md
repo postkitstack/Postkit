@@ -43,22 +43,22 @@ postkit db deploy --remote staging -f
 
 1. Resolves the target database URL (from remote config or `--url` flag)
 2. If an active session exists, removes it (with confirmation unless `-f`)
-3. Tests the target database connection
-4. Clones the target database to local (using `LOCAL_DATABASE_URL`)
-5. Runs a full dry-run on the local clone: infra, dbmate migrate, seeds
-6. If `--dry-run` is set, stops here and reports results
-7. Reports dry-run results and confirms deployment (unless `-f`)
-8. Applies to target: infra, dbmate migrate, seeds
-9. Drops the local clone database
-10. Marks migrations as deployed in `.postkit/db/committed.json`
+3. Tests the target database connection and detects its PostgreSQL major version
+4. **If `localDbUrl` is empty**: Starts a temporary `postgres:{version}-alpine` container for the dry-run, version-matched to the target
+5. Clones the target database to local for dry-run verification. When using a temp container, cloning runs via `docker exec` inside the container
+6. Runs a full dry-run on the local clone: infra, dbmate migrate, seeds
+7. If `--dry-run` is set, stops here and reports results without touching the target
+8. Reports dry-run results and confirms deployment (unless `-f`)
+9. Applies to target: infra, dbmate migrate, seeds
+10. Drops the local clone database; stops and removes the temp container if one was used
 
 If the dry run fails, deployment is aborted and no changes are made to the target database.
 
 ## Requirements
 
 - Committed migrations must exist (run `db commit` first)
-- PostgreSQL client tools must be installed
-- `localDbUrl` must be different from the target remote URL
+- `localDbUrl` must be different from the target remote URL (or leave it empty to use an auto-container)
+- Docker must be running if `localDbUrl` is empty
 
 ## Related
 

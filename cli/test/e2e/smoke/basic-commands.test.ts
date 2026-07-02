@@ -104,8 +104,8 @@ describe("init command — detailed tests (no Docker)", () => {
 
       // Runtime files
       expect(fs.existsSync(path.join(tmpDir, ".postkit", "db", "committed.json"))).toBe(true);
-      expect(fs.existsSync(path.join(tmpDir, ".postkit", "db", "plan.sql"))).toBe(true);
-      expect(fs.existsSync(path.join(tmpDir, ".postkit", "db", "schema.sql"))).toBe(true);
+      // plan_*.sql and schema_*.sql are ephemeral — created on demand, not by init
+
     } finally {
       await cleanupDir(tmpDir);
     }
@@ -119,17 +119,24 @@ describe("init command — detailed tests (no Docker)", () => {
       const config = JSON.parse(
         fs.readFileSync(path.join(tmpDir, "postkit.config.json"), "utf-8"),
       );
+      const secrets = JSON.parse(
+        fs.readFileSync(path.join(tmpDir, "postkit.secrets.json"), "utf-8"),
+      );
 
-      // DB section
-      expect(config.db.localDbUrl).toBe("");
-      expect(config.db.schemaPath).toBe("schema");
-      expect(config.db.schema).toBe("public");
-      expect(config.db.remotes).toEqual({});
+      // postkit.config.json — non-sensitive project settings only (no remotes, no localDbUrl)
+      expect(config.db.schemaPath).toBe("db/schema");
+      expect(config.db.schemas).toEqual(["public"]);
+      expect(config.db.localDbUrl).toBeUndefined();
+      expect(config.db.remotes).toBeUndefined();
 
-      // Auth section
-      expect(config.auth).toBeDefined();
-      expect(config.auth.source).toBeDefined();
-      expect(config.auth.target).toBeDefined();
+      // postkit.secrets.json — credentials and remotes
+      expect(secrets.db.localDbUrl).toBe("");
+      expect(secrets.db.remotes).toEqual({});
+
+      // Auth section in secrets
+      expect(secrets.auth).toBeDefined();
+      expect(secrets.auth.source).toBeDefined();
+      expect(secrets.auth.target).toBeDefined();
     } finally {
       await cleanupDir(tmpDir);
     }
@@ -155,8 +162,17 @@ describe("init command — detailed tests (no Docker)", () => {
       await runCli(["init", "--force"], {cwd: tmpDir});
 
       const gitignore = fs.readFileSync(path.join(tmpDir, ".gitignore"), "utf-8");
-      expect(gitignore).toContain(".postkit/");
-      expect(gitignore).toContain("postkit.config.json");
+      // Ephemeral/session-specific paths are gitignored
+      expect(gitignore).toContain(".postkit/db/session.json");
+      expect(gitignore).toContain(".postkit/db/plan_*.sql");
+      expect(gitignore).toContain(".postkit/db/schema_*.sql");
+      expect(gitignore).toContain(".postkit/db/session/");
+      expect(gitignore).toContain("postkit.secrets.json");
+      // Committed files must NOT be gitignored
+      expect(gitignore).not.toContain("postkit.config.json");
+      expect(gitignore).not.toContain(".postkit/db/migrations");
+      expect(gitignore).not.toContain(".postkit/db/committed.json");
+      expect(gitignore).not.toContain(".postkit/auth");
     } finally {
       await cleanupDir(tmpDir);
     }
@@ -179,8 +195,13 @@ describe("init command — detailed tests (no Docker)", () => {
         path.join(tmpDir, "postkit.config.json"), "utf-8",
       );
 
-      // Config should be identical after second init
-      expect(firstConfig).toBe(secondConfig);
+      // Non-name fields should be identical after second init
+      // (name includes a random suffix so it changes each run)
+      const cfg1 = JSON.parse(firstConfig) as Record<string, unknown>;
+      const cfg2 = JSON.parse(secondConfig) as Record<string, unknown>;
+      delete cfg1.name;
+      delete cfg2.name;
+      expect(cfg1).toEqual(cfg2);
     } finally {
       await cleanupDir(tmpDir);
     }

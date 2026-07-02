@@ -44,7 +44,6 @@ const validSession = {
     description: null,
     schemaFingerprint: null,
     migrationApplied: false,
-    grantsApplied: false,
     seedsApplied: false,
   },
 };
@@ -101,6 +100,25 @@ describe("session", () => {
       vi.mocked(fs.writeFile).mockResolvedValue();
       const session = await createSession("postgres://remote/db", "postgres://local/db");
       expect(session.clonedAt).toMatch(/^\d{14}$/);
+    });
+
+    it("stores containerID when provided", async () => {
+      vi.mocked(fs.writeFile).mockResolvedValue();
+      const session = await createSession(
+        "postgres://remote:5432/db",
+        "postgres://localhost:5432/local",
+        "dev",
+        "abc123containerID",
+      );
+      expect(session.containerID).toBe("abc123containerID");
+      const written = JSON.parse(vi.mocked(fs.writeFile).mock.calls[0]![1] as string);
+      expect(written.containerID).toBe("abc123containerID");
+    });
+
+    it("containerID is undefined when not provided", async () => {
+      vi.mocked(fs.writeFile).mockResolvedValue();
+      const session = await createSession("postgres://remote/db", "postgres://local/db", "dev");
+      expect(session.containerID).toBeUndefined();
     });
   });
 
