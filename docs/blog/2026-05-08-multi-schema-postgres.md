@@ -59,14 +59,9 @@ This creates `db/schema/app/` with subdirectories for tables, views, functions, 
 
 Array order matters — `public` runs before `app`.
 
-### 2. Add the schema creation to infra
+### 2. Schema creation is handled automatically
 
-PostKit's infra step handles DB-level objects that pgschema doesn't manage:
-
-```sql
--- db/infra/002_schemas.sql
-CREATE SCHEMA IF NOT EXISTS app;
-```
+`postkit db schema add app` automatically appends `CREATE SCHEMA IF NOT EXISTS "app";` to your infra file — no manual edit required. The infra step runs this before pgschema plans the schema, so the namespace exists when planning begins.
 
 ### 3. Write schema files for the new schema
 
@@ -106,17 +101,19 @@ The intermediate apply in step 2 is what makes cross-schema resolution possible 
 
 ## Cross-Schema Foreign Keys
 
-Here's where developers get confused. pgschema plans each schema in an isolated environment. If you write this in `db/schema/app/tables/orders.sql`:
+Here's where developers get confused. PostgreSQL itself handles cross-schema foreign keys perfectly fine — but **pgschema's diff engine plans each schema in isolation at diff time**, so it cannot resolve references to objects in sibling schemas. If you write this in `db/schema/app/tables/orders.sql`:
 
 ```sql
--- This will fail during plan:
-REFERENCES public.users(id)  -- ❌ public.users doesn't exist in pgschema's isolated env
+-- This will fail during postkit db plan (pgschema limitation, not a PostgreSQL restriction):
+REFERENCES public.users(id)  -- ❌ pgschema can't resolve public.users at diff time
 ```
 
 You'll get:
 ```
 ERROR: relation "public.users" does not exist
 ```
+
+This error comes from pgschema's planning environment, not from PostgreSQL itself. The same FK works fine in a committed migration (where PostgreSQL sees the full database).
 
 **The correct approach**: keep the column as a plain UUID in the schema file, then add the constraint as a manual migration.
 

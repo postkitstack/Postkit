@@ -20,7 +20,7 @@ Prisma Migrate works by translating your `schema.prisma` model into SQL migratio
 - **RLS policies** — not expressible in Prisma schema
 - **Custom functions and triggers** — require raw SQL blocks in Prisma with `db.execute`
 - **Multi-schema projects** — Prisma has limited multi-schema support and it varies by database connector
-- **Complex index types** — GIN, BRIN, partial indexes require `@@index` raw map or custom SQL
+- **Complex index types** — BRIN and partial indexes require raw SQL; GIN indexes are partially supported via `@@index` with `type: Gin` (e.g. full-text search), but operator classes like `gin_trgm_ops` still need raw SQL
 
 Teams usually end up with a hybrid: Prisma Migrate for tables, a separate folder of raw SQL files for everything else. PostKit unifies these under one workflow.
 
