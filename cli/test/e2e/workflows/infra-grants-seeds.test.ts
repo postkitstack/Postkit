@@ -45,7 +45,7 @@ describe("Infra and seeds workflow", () => {
 
   afterAll(async () => {
     // Clean up session
-    await runCli(["db", "abort", "--force"], {cwd: project.rootDir}).catch(() => {});
+    if (project) await runCli(["db", "abort", "--force"], {cwd: project.rootDir}).catch(() => {});
     if (project) await cleanupTestProject(project);
     if (db) await stopPostgres(db);
   });

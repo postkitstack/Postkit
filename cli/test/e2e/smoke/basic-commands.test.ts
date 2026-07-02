@@ -195,8 +195,13 @@ describe("init command — detailed tests (no Docker)", () => {
         path.join(tmpDir, "postkit.config.json"), "utf-8",
       );
 
-      // Config should be identical after second init
-      expect(firstConfig).toBe(secondConfig);
+      // Non-name fields should be identical after second init
+      // (name includes a random suffix so it changes each run)
+      const cfg1 = JSON.parse(firstConfig) as Record<string, unknown>;
+      const cfg2 = JSON.parse(secondConfig) as Record<string, unknown>;
+      delete cfg1.name;
+      delete cfg2.name;
+      expect(cfg1).toEqual(cfg2);
     } finally {
       await cleanupDir(tmpDir);
     }

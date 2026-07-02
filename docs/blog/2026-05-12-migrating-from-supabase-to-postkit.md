@@ -54,7 +54,8 @@ This creates:
 - `postkit.config.json` — committed, non-sensitive settings
 - `postkit.secrets.json` — gitignored, your credentials
 - `postkit.secrets.example.json` — template for teammates
-- `db/schema/` — where your schema files will live
+
+`db/schema/` is created in Step 4 by `postkit db import`, not here.
 
 ---
 
@@ -117,7 +118,7 @@ Take a few minutes to review. Supabase often creates helper functions and polici
 
 - `auth.*` schema — Supabase's internal auth tables. **Do not touch these** — they're managed by Supabase, not your migrations.
 - `storage.*` schema — same, managed by Supabase.
-- Row-level security (RLS) policies — pgschema captures these in `grants/` files.
+- Row-level security (RLS) policies — pgschema captures these in `policies/` files.
 - `supabase_admin` role — Supabase-internal role. Ignore or exclude.
 
 If you only want to manage your own schemas (e.g. `public` and `app`) and leave `auth` and `storage` alone:
@@ -190,7 +191,7 @@ Supabase pre-installs extensions like `uuid-ossp`, `pgcrypto`, and `pg_stat_stat
 
 ### The `public` schema default
 
-Supabase's `public` schema has a broad default grant (`GRANT ALL ON SCHEMA public TO public`). After import, this appears in your `grants/` file. You can tighten or customize it.
+Supabase explicitly restores the broad default grant (`GRANT ALL ON SCHEMA public TO public`) that PostgreSQL 15+ removed from standard installations. After import, this appears in your `grants/` file — you can tighten or customize it, but be aware this is Supabase-specific behaviour, not a standard PostgreSQL default.
 
 ---
 

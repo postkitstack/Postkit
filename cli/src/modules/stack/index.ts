@@ -1,0 +1,103 @@
+import {Command} from "commander";
+import {withInitCheck} from "../../common/init-check";
+import {upCommand} from "./commands/up";
+import {downCommand} from "./commands/down";
+import {statusCommand} from "./commands/status";
+import {logsCommand} from "./commands/logs";
+import {restartCommand} from "./commands/restart";
+import {keysCommand} from "./commands/keys";
+import {realmCommand} from "./commands/realm";
+
+export function registerStackModule(program: Command): void {
+  const stack = program
+    .command("stack")
+    .description("Manage local backend service stack");
+
+  // Up command
+  stack
+    .command("up")
+    .description("Start all or selected backend services")
+    .argument("[services...]", "Services to start (postgres, keycloak, postgrest)")
+    .option("--no-wait", "Skip health check waiting")
+    .option("--no-keys", "Skip auto-fetching Keycloak JWKs after startup")
+    .action(async (services: string[], cmdOptions: Record<string, unknown>) => {
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await upCommand(options as never, services);
+      });
+    });
+
+  // Down command
+  stack
+    .command("down")
+    .description("Stop and remove all stack containers")
+    .option("--volumes", "Remove persistent volumes too")
+    .action(async (cmdOptions: Record<string, unknown>) => {
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await downCommand(options as never);
+      });
+    });
+
+  // Status command
+  stack
+    .command("status")
+    .description("Show running services, ports, and health")
+    .action(async (cmdOptions: Record<string, unknown>) => {
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await statusCommand(options as never);
+      });
+    });
+
+  // Logs command
+  stack
+    .command("logs")
+    .description("Tail logs for stack services")
+    .argument("[service]", "Service name to tail (omit for all)")
+    .option("-f, --follow", "Follow log output (default: true)")
+    .option("--no-follow", "Don't follow log output")
+    .option("-n, --tail <number>", "Number of lines to show", "100")
+    .action(async (service: string | undefined, cmdOptions: Record<string, unknown>) => {
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await logsCommand(options as never, service);
+      });
+    });
+
+  // Restart command
+  stack
+    .command("restart")
+    .description("Restart all or selected stack services")
+    .argument("[services...]", "Services to restart (omit for all): postgres, keycloak, postgrest, traefik")
+    .action(async (services: string[], cmdOptions: Record<string, unknown>) => {
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await restartCommand(options as never, services);
+      });
+    });
+
+  // Keys command
+  stack
+    .command("keys")
+    .description("Fetch JWKs and client credentials from Keycloak into secrets")
+    .option("--restart", "Restart PostgREST after updating secrets")
+    .option("--clients <names>", "Comma-separated client names to fetch (overrides config)")
+    .action(async (cmdOptions: Record<string, unknown>) => {
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await keysCommand(options as never);
+      });
+    });
+
+  // Realm command
+  stack
+    .command("realm")
+    .description("Import base realm template into local Keycloak")
+    .action(async (cmdOptions: Record<string, unknown>) => {
+      await withInitCheck(async () => {
+        const options = {...program.opts(), ...cmdOptions};
+        await realmCommand(options as never);
+      });
+    });
+}

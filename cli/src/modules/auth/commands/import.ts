@@ -1,7 +1,7 @@
 import ora from "ora";
 import {logger} from "../../../common/logger";
 import {promptConfirm} from "../../../common/prompt";
-import {getAuthConfig} from "../utils/auth-config";
+import {getImportConfig} from "../utils/auth-config";
 import {importRealm} from "../services/importer";
 import type {CommandOptions} from "../../../common/types";
 
@@ -13,7 +13,7 @@ export async function importCommand(options: CommandOptions): Promise<void> {
 
     // Step 1: Load config
     logger.step(1, 3, "Loading configuration...");
-    const config = getAuthConfig();
+    const config = getImportConfig();
 
     logger.info(`Target : ${config.targetUrl}`);
     logger.info(`Config : ${config.cleanFilePath}`);

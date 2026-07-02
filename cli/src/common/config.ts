@@ -36,6 +36,10 @@ export function getPostkitAuthDir(): string {
   return path.join(projectRoot, POSTKIT_DIR, "auth");
 }
 
+export function getStackDir(): string {
+  return path.join(projectRoot, POSTKIT_DIR, "stack");
+}
+
 export function getVendorDir(): string {
   return path.join(cliRoot, "vendor");
 }
@@ -77,9 +81,46 @@ export interface AuthPublicConfig {
   configCliImage?: string;
 }
 
+export interface StackPostgresPublicConfig {
+  enabled?: boolean;
+  port?: number;
+  pgVersion?: number;
+  image?: string;
+  database?: string;
+  volume?: string;
+}
+
+export interface StackKeycloakPublicConfig {
+  enabled?: boolean;
+  port?: number;
+  image?: string;
+  realm?: string;
+  volume?: string;
+  clientRealm?: string;
+  clients?: string[];
+  realmTemplate?: string;
+}
+
+export interface StackPostgrestPublicConfig {
+  enabled?: boolean;
+  port?: number;
+  image?: string;
+  dbSchema?: string;
+  dbAnonRole?: string;
+}
+
+export interface StackPublicConfig {
+  postgres?: StackPostgresPublicConfig;
+  keycloak?: StackKeycloakPublicConfig;
+  postgrest?: StackPostgrestPublicConfig;
+  network?: string;
+}
+
 export interface PostkitPublicConfig {
+  name?: string;
   db?: DbPublicConfig;
   auth?: AuthPublicConfig;
+  stack?: StackPublicConfig;
 }
 
 // ─── Secrets (gitignored) ─────────────────────────────────────────────────────
@@ -102,17 +143,40 @@ export interface AuthSecretsConfig {
   target?: Partial<AuthTargetConfig>;
 }
 
+export interface StackPostgresSecrets {
+  user?: string;
+  password?: string;
+}
+
+export interface StackKeycloakSecrets {
+  adminUser?: string;
+  adminPassword?: string;
+}
+
+export interface StackPostgrestSecrets {
+  jwtSecret?: string;
+}
+
+export interface StackSecretsConfig {
+  postgres?: StackPostgresSecrets;
+  keycloak?: StackKeycloakSecrets;
+  postgrest?: StackPostgrestSecrets;
+}
+
 export interface PostkitSecrets {
   db?: DbSecretsConfig;
   auth?: AuthSecretsConfig;
+  stack?: StackSecretsConfig;
 }
 
 // ─── Merged runtime config ────────────────────────────────────────────────────
 
 // PostkitConfig interface matching the JSON structure
 export interface PostkitConfig {
+  name?: string;
   db: DbInputConfig;
   auth: AuthInputConfig;
+  stack?: Record<string, unknown>;
 }
 
 let cachedConfig: PostkitConfig | null = null;

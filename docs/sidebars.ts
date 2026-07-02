@@ -115,6 +115,31 @@ const sidebars: SidebarsConfig = {
 
     {
       type: 'category',
+      label: 'Stack Module',
+      collapsible: true,
+      collapsed: false,
+      items: [
+        'modules/stack/overview',
+        {
+          type: 'category',
+          label: 'Commands',
+          collapsible: true,
+          collapsed: false,
+          items: [
+            'modules/stack/commands/up',
+            'modules/stack/commands/down',
+            'modules/stack/commands/status',
+            'modules/stack/commands/logs',
+            'modules/stack/commands/restart',
+            'modules/stack/commands/keys',
+            'modules/stack/commands/realm',
+          ],
+        },
+      ],
+    },
+
+    {
+      type: 'category',
       label: 'Reference',
       collapsible: true,
       collapsed: true,
