@@ -1,7 +1,7 @@
 import net from "net";
 import type {Ora} from "ora";
 import {runCommand, runSpawnCommand, commandExists} from "../../../common/shell";
-import {testConnection, parseConnectionUrl, getRemotePgMajorVersion} from "./database";
+import {testConnection, parseConnectionUrl, getRemotePgMajorVersion, makeSchemaCreationIdempotent} from "./database";
 import {runPipedCommands} from "../../../common/shell";
 import {PostkitError} from "../../../common/errors";
 
@@ -123,6 +123,7 @@ export async function cloneDatabaseViaContainer(
   containerID: string,
   sourceUrl: string,
   targetUrl: string,
+  schemaOnly = false,
 ): Promise<void> {
   const src = parseConnectionUrl(sourceUrl);
   const dst = parseConnectionUrl(targetUrl);
@@ -140,7 +141,7 @@ export async function cloneDatabaseViaContainer(
         "-U", src.user,
         "-d", src.database,
         "--no-owner",
-        "--no-acl",
+        ...(schemaOnly ? ["--schema-only"] : []),
       ],
     },
     {
@@ -153,8 +154,10 @@ export async function cloneDatabaseViaContainer(
         "-p", "5432",        // internal port — always 5432 inside the container
         "-U", dst.user,
         "-d", dst.database,
+        "-v", "ON_ERROR_STOP=1",
       ],
     },
+    makeSchemaCreationIdempotent,
   );
 
   if (result.exitCode !== 0) {

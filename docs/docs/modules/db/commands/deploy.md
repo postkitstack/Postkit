@@ -45,12 +45,13 @@ postkit db deploy --remote staging -f
 2. If an active session exists, removes it (with confirmation unless `-f`)
 3. Tests the target database connection and detects its PostgreSQL major version
 4. **If `localDbUrl` is empty**: Starts a temporary `postgres:{version}-alpine` container for the dry-run, version-matched to the target
-5. Clones the target database to local for dry-run verification. When using a temp container, cloning runs via `docker exec` inside the container
-6. Runs a full dry-run on the local clone: infra, dbmate migrate, seeds
-7. If `--dry-run` is set, stops here and reports results without touching the target
-8. Reports dry-run results and confirms deployment (unless `-f`)
-9. Applies to target: infra, dbmate migrate, seeds
-10. Drops the local clone database; stops and removes the temp container if one was used
+5. **Applies `db/infra/` (roles, schemas, extensions) to the local/temp database** — before cloning, so RLS policies and grants in the target's dump (which reference custom roles) restore correctly instead of failing with `role does not exist`
+6. Clones the target database (full data — intentional, so the dry run tests against realistic data) to local for dry-run verification. When using a temp container, cloning runs via `docker exec` inside the container
+7. Runs a full dry-run on the local clone: infra (reapplied, idempotently), dbmate migrate, seeds
+8. If `--dry-run` is set, stops here and reports results without touching the target
+9. Reports dry-run results and confirms deployment (unless `-f`)
+10. Applies to target: infra, dbmate migrate, seeds
+11. Drops the local clone database; stops and removes the temp container if one was used
 
 If the dry run fails, deployment is aborted and no changes are made to the target database.
 

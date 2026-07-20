@@ -1,4 +1,5 @@
 import {exec, spawn} from "child_process";
+import {Transform} from "stream";
 import {promisify} from "util";
 import type {ShellResult} from "./types";
 
@@ -107,13 +108,41 @@ export interface SpawnConfig {
 }
 
 /**
+ * Buffers chunks and rewrites complete lines via `transformLine`, so a regex
+ * match never straddles a chunk boundary. Partial trailing data is held until
+ * the next chunk (or flushed as-is at stream end).
+ */
+function createLineTransform(transformLine: (line: string) => string): Transform {
+  let buffer = "";
+  return new Transform({
+    transform(chunk, _encoding, callback) {
+      buffer += chunk.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        this.push(transformLine(line) + "\n");
+      }
+      callback();
+    },
+    flush(callback) {
+      if (buffer) this.push(transformLine(buffer));
+      callback();
+    },
+  });
+}
+
+/**
  * Spawns two processes and pipes stdout of the producer into stdin of the consumer.
  * Neither command is interpreted by a shell — args are passed directly to the OS.
  * Credentials should be supplied via the env field, never inline in args.
+ *
+ * `transformLine`, if given, rewrites each line of the producer's output before
+ * it reaches the consumer's stdin (e.g. to patch pg_dump output before psql).
  */
 export async function runPipedCommands(
   producer: SpawnConfig,
   consumer: SpawnConfig,
+  transformLine?: (line: string) => string,
 ): Promise<ShellResult> {
   const producerCmd = producer.args[0];
   const producerArgs = producer.args.slice(1);
@@ -137,7 +166,11 @@ export async function runPipedCommands(
       stdio: ["pipe", "pipe", "pipe"],
     });
 
-    src.stdout.pipe(dst.stdin);
+    if (transformLine) {
+      src.stdout.pipe(createLineTransform(transformLine)).pipe(dst.stdin);
+    } else {
+      src.stdout.pipe(dst.stdin);
+    }
 
     let stdout = "";
     let stderr = "";

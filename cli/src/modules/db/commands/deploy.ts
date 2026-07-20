@@ -151,8 +151,8 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       logger.blank();
     }
 
-    // 3 fixed steps (test, status, clone) + 3 runSteps × 2 passes (dry-run + target) + 1 fixed step (cleanup)
-    const totalSteps = 3 + 3 * 2 + 1; // = 10
+    // 4 fixed steps (test, status, infra-apply, clone) + 3 runSteps × 2 passes (dry-run + target) + 1 fixed step (cleanup)
+    const totalSteps = 4 + 3 * 2 + 1; // = 11
     const migrationNames = pendingMigrations.map(m => m.migrationFile.name);
 
     // Step 1: Test target DB connection
@@ -209,7 +209,15 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       }
     };
 
-    logger.step(3, totalSteps, "Cloning target database to local...");
+    // Step 3: Apply infra (roles, schemas, extensions) to the local/temp DB BEFORE
+    // cloning. target's dump includes CREATE POLICY / GRANT / ALTER DEFAULT
+    // PRIVILEGES statements naming custom roles (e.g. app_admin, employee) — those
+    // fail with "role does not exist" if replayed before the roles exist, and since
+    // the clone's psql now runs with ON_ERROR_STOP, that failure is no longer silent.
+    logger.step(3, totalSteps, "Applying infrastructure to local database...");
+    await applyInfraStep(spinner, localDbUrl, "local clone");
+
+    logger.step(4, totalSteps, "Cloning target database to local...");
     spinner.start("Cloning target database to local for dry-run verification...");
     if (tempContainerID) {
       await cloneDatabaseViaContainer(tempContainerID, targetUrl, localDbUrl);
@@ -219,12 +227,12 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     const localTableCount = await getTableCount(localDbUrl);
     spinner.succeed(`Target cloned to local (${localTableCount} tables)`);
 
-    // Steps 4-6: Dry run on local clone
+    // Steps 5-7: Dry run on local clone
     logger.blank();
     logger.heading("Dry Run (local verification)");
 
     try {
-      await runSteps(localDbUrl, "local clone", spinner, 4, totalSteps, migrationNames);
+      await runSteps(localDbUrl, "local clone", spinner, 5, totalSteps, migrationNames);
     } catch (error) {
       spinner.fail("Dry run failed on local clone");
       logger.error(error instanceof Error ? error.message : String(error));
@@ -262,12 +270,12 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       return;
     }
 
-    // Steps 7-9: Apply to target
+    // Steps 8-10: Apply to target
     logger.blank();
     logger.heading("Deploying to Target");
 
     try {
-      await runSteps(targetUrl, targetLabel, spinner, 7, totalSteps, migrationNames);
+      await runSteps(targetUrl, targetLabel, spinner, 8, totalSteps, migrationNames);
     } catch (error) {
       logger.error(error instanceof Error ? error.message : String(error));
       logger.blank();
@@ -281,7 +289,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
 
     // Step 10: Drop local clone and stop temp container
     logger.blank();
-    logger.step(10, totalSteps, "Cleaning up local clone...");
+    logger.step(11, totalSteps, "Cleaning up local clone...");
     spinner.start("Dropping local clone database...");
 
     try {

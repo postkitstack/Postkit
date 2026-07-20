@@ -20,6 +20,7 @@ vi.mock("../../../../src/modules/db/services/database", () => ({
       password: decodeURIComponent(parsed.password),
     };
   }),
+  makeSchemaCreationIdempotent: vi.fn((line: string) => line),
 }));
 
 vi.mock("../../../../src/common/errors", () => ({
@@ -216,6 +217,20 @@ describe("container", () => {
       expect(consumer.args).toContain("5432");
       // Must NOT use the external mapped port (15432)
       expect(consumer.args).not.toContain("15432");
+    });
+
+    it("does not pass --schema-only by default", async () => {
+      vi.mocked(runPipedCommands).mockResolvedValue({stdout: "", stderr: "", exitCode: 0});
+      await cloneDatabaseViaContainer(containerID, sourceUrl, targetUrl);
+      const [producer] = vi.mocked(runPipedCommands).mock.calls[0]!;
+      expect(producer.args).not.toContain("--schema-only");
+    });
+
+    it("passes --schema-only to pg_dump when schemaOnly is true", async () => {
+      vi.mocked(runPipedCommands).mockResolvedValue({stdout: "", stderr: "", exitCode: 0});
+      await cloneDatabaseViaContainer(containerID, sourceUrl, targetUrl, true);
+      const [producer] = vi.mocked(runPipedCommands).mock.calls[0]!;
+      expect(producer.args).toContain("--schema-only");
     });
 
     it("passes PGPASSWORD for source via -e flag in docker exec args", async () => {

@@ -80,9 +80,21 @@ export async function dropDatabase(url: string): Promise<void> {
   });
 }
 
+/**
+ * pg_dump always emits a bare `CREATE SCHEMA name;` (no IF NOT EXISTS), assuming
+ * it's restoring into an empty database. Since infra now pre-creates schemas
+ * (public/auth/storage/etc.) before the clone runs so roles exist for RLS
+ * policies and grants, that line would collide with what infra already made.
+ * Rewriting it to CREATE SCHEMA IF NOT EXISTS keeps it a no-op in that case.
+ */
+export function makeSchemaCreationIdempotent(line: string): string {
+  return line.replace(/^CREATE SCHEMA (?!IF NOT EXISTS)(.+);$/, "CREATE SCHEMA IF NOT EXISTS $1;");
+}
+
 export async function cloneDatabase(
   sourceUrl: string,
   targetUrl: string,
+  schemaOnly = false,
 ): Promise<void> {
   const src = parseConnectionUrl(sourceUrl);
   const dst = parseConnectionUrl(targetUrl);
@@ -101,7 +113,7 @@ export async function cloneDatabase(
         "-U", src.user,
         "-d", src.database,
         "--no-owner",
-        "--no-acl",
+        ...(schemaOnly ? ["--schema-only"] : []),
       ],
       env: {PGPASSWORD: src.password},
     },
@@ -112,9 +124,11 @@ export async function cloneDatabase(
         "-p", String(dst.port),
         "-U", dst.user,
         "-d", dst.database,
+        "-v", "ON_ERROR_STOP=1",
       ],
       env: {PGPASSWORD: dst.password},
     },
+    makeSchemaCreationIdempotent,
   );
 
   if (result.exitCode !== 0) {
