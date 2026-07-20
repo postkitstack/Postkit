@@ -91,6 +91,28 @@ export function makeSchemaCreationIdempotent(line: string): string {
   return line.replace(/^CREATE SCHEMA (?!IF NOT EXISTS)(.+);$/, "CREATE SCHEMA IF NOT EXISTS $1;");
 }
 
+/**
+ * pg_dump's preamble includes `SET <session-guc> = ...;` lines to configure the
+ * restore session (disable timeouts, etc). Most of these GUCs are ancient and
+ * universally supported, but newer pg_dump versions add newer ones (e.g.
+ * `transaction_timeout`, added in PostgreSQL 17) unconditionally, regardless of
+ * the actual restore target's version. If the host's pg_dump/psql are newer
+ * than the target server, the target rejects the unrecognized GUC with
+ * "unrecognized configuration parameter" — fatal now that ON_ERROR_STOP is on.
+ * These are session-tuning conveniences, not structural/data statements, so
+ * it's always safe to comment one out if the target doesn't support it.
+ */
+const PREAMBLE_ONLY_SETTINGS = ["transaction_timeout"];
+
+export function neutralizeUnsupportedPreambleSettings(line: string): string {
+  const pattern = new RegExp(`^SET (${PREAMBLE_ONLY_SETTINGS.join("|")})\\s*=.*;$`);
+  return pattern.test(line) ? `-- ${line}` : line;
+}
+
+export function sanitizeCloneLine(line: string): string {
+  return makeSchemaCreationIdempotent(neutralizeUnsupportedPreambleSettings(line));
+}
+
 export async function cloneDatabase(
   sourceUrl: string,
   targetUrl: string,
@@ -128,7 +150,7 @@ export async function cloneDatabase(
       ],
       env: {PGPASSWORD: dst.password},
     },
-    makeSchemaCreationIdempotent,
+    sanitizeCloneLine,
   );
 
   if (result.exitCode !== 0) {

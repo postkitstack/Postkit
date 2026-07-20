@@ -1,7 +1,7 @@
 import net from "net";
 import type {Ora} from "ora";
 import {runCommand, runSpawnCommand, commandExists} from "../../../common/shell";
-import {testConnection, parseConnectionUrl, getRemotePgMajorVersion, makeSchemaCreationIdempotent} from "./database";
+import {testConnection, parseConnectionUrl, getRemotePgMajorVersion, sanitizeCloneLine} from "./database";
 import {runPipedCommands} from "../../../common/shell";
 import {PostkitError} from "../../../common/errors";
 
@@ -157,7 +157,7 @@ export async function cloneDatabaseViaContainer(
         "-v", "ON_ERROR_STOP=1",
       ],
     },
-    makeSchemaCreationIdempotent,
+    sanitizeCloneLine,
   );
 
   if (result.exitCode !== 0) {

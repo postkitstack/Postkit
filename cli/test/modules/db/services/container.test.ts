@@ -20,7 +20,7 @@ vi.mock("../../../../src/modules/db/services/database", () => ({
       password: decodeURIComponent(parsed.password),
     };
   }),
-  makeSchemaCreationIdempotent: vi.fn((line: string) => line),
+  sanitizeCloneLine: vi.fn((line: string) => line),
 }));
 
 vi.mock("../../../../src/common/errors", () => ({

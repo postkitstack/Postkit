@@ -338,8 +338,22 @@ CREATE TABLE tag (
     );
   });
 
-  it("verifies seed data is intact in local DB", async () => {
-    await verifySeedsInSchema(localDb.url, CUSTOM_SCHEMA);
+  it("clones structure only — local DB has zero rows, not remote's row data", async () => {
+    // `db start` clones schema-only (no row data) by design, so ad-hoc rows
+    // inserted directly into remote (not via db/schema/<name>/seeds/) never
+    // reach local. Remote itself is untouched and still has this data —
+    // see "verifies seed data is intact in remote DB" below.
+    const categories = await queryDatabase(
+      localDb.url,
+      `SELECT name FROM ${CUSTOM_SCHEMA}.category`,
+    );
+    expect(categories).toHaveLength(0);
+
+    const products = await queryDatabase(
+      localDb.url,
+      `SELECT name FROM ${CUSTOM_SCHEMA}.product`,
+    );
+    expect(products).toHaveLength(0);
   });
 
   // ── Phase 5: Commit ───────────────────────────────────────────────────
