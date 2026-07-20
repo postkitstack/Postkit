@@ -15,7 +15,7 @@ import {
 import {runCommittedMigrate, runDbmateStatus} from "../services/dbmate";
 import {applyInfraStep} from "../services/infra-generator";
 import {applySeedsStep} from "../services/seed-generator";
-import {resolveLocalDb, stopSessionContainer, cloneDatabaseViaContainer} from "../services/container";
+import {resolveLocalDb, stopSessionContainer, cloneDatabaseViaContainer, onContainerInterrupt} from "../services/container";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import {resolveRemote, maskRemoteUrl, normalizeUrl} from "../utils/remotes";
 import type {CommandOptions} from "../../../common/types";
@@ -97,6 +97,7 @@ async function runSteps(
 
 export async function deployCommand(options: DeployOptions): Promise<void> {
   const spinner = ora();
+  let deregisterSignal: (() => void) | undefined;
 
   try {
     const config = getDbConfig();
@@ -203,11 +204,17 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     );
 
     const cleanupLocal = async () => {
+      deregisterSignal?.();
+      deregisterSignal = undefined;
       try { await dropDatabase(localDbUrl); } catch { /* best effort */ }
       if (tempContainerID) {
         try { await stopSessionContainer(tempContainerID); } catch { /* best effort */ }
       }
     };
+
+    if (tempContainerID) {
+      deregisterSignal = onContainerInterrupt(tempContainerID);
+    }
 
     // Step 3: Apply infra (roles, schemas, extensions) to the local/temp DB BEFORE
     // cloning. target's dump includes CREATE POLICY / GRANT / ALTER DEFAULT
@@ -320,6 +327,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
     logger.blank();
   } catch (error) {
     spinner.fail("Deployment failed");
+    deregisterSignal?.();
     throw error;
   }
 }

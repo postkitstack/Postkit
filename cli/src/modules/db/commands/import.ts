@@ -10,7 +10,7 @@ import {hasActiveSession} from "../utils/session";
 import {maskRemoteUrl} from "../utils/remotes";
 import {addCommittedMigration, saveCommittedState} from "../utils/committed";
 import {testConnection, getTableCount, createDatabase} from "../services/database";
-import {resolveLocalDb, stopSessionContainer} from "../services/container";
+import {resolveLocalDb, stopSessionContainer, onContainerInterrupt} from "../services/container";
 import {deletePlanFile} from "../services/pgschema";
 import {createMigrationFile, runCommittedMigrate} from "../services/dbmate";
 import {checkDbPrerequisites} from "../services/prerequisites";
@@ -45,8 +45,11 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       : config.schemas;
 
   let tempContainerID: string | undefined;
+  let deregisterSignal: (() => void) | undefined;
 
   async function cleanupContainer(): Promise<void> {
+    deregisterSignal?.();
+    deregisterSignal = undefined;
     if (tempContainerID) {
       try { await stopSessionContainer(tempContainerID); } catch { /* best effort */ }
     }
@@ -218,6 +221,9 @@ export async function importCommand(options: ImportOptions): Promise<void> {
       const resolved = await resolveLocalDb(config.localDbUrl, targetUrl, spinner);
       localDbUrl = resolved.url;
       tempContainerID = resolved.containerID;
+      if (tempContainerID) {
+        deregisterSignal = onContainerInterrupt(tempContainerID);
+      }
     }
 
     // Step 7: Generate baseline migration using pgschema plan (all schemas, ordered)
