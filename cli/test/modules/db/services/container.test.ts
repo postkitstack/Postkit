@@ -101,7 +101,7 @@ describe("container", () => {
       });
       vi.mocked(testConnection).mockResolvedValue(true);
 
-      const info = await startSessionContainer(16);
+      await startSessionContainer(16);
 
       const spawnArgs = vi.mocked(runSpawnCommand).mock.calls[0]![0];
       expect(spawnArgs).toContain("postgres:16-alpine");
