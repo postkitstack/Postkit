@@ -14,6 +14,19 @@ sidebar_position: 100
 
 **Solution:** dbmate should be installed via npm. Run `npm install` in the CLI directory, or install manually (`brew install dbmate`) and set `db.dbmateBin` in config.
 
+### `psql binary not found`
+
+**Solution:** Required by `postkit db start`. Install PostgreSQL client tools:
+- macOS: `brew install libpq && brew link --force libpq`
+- Linux: `apt install postgresql-client` (or your distro's equivalent)
+- Windows: `winget install PostgreSQL.PostgreSQL`, then add its `bin/` folder to `PATH`
+
+Open a new terminal afterward and verify with `psql --version`.
+
+### `role "<name>" does not exist` during clone
+
+**Solution:** A custom role referenced by an RLS policy or grant isn't defined in `db/infra/`. Add it there — `db start` and `db deploy` apply `db/infra/` to the local database before cloning specifically so these roles exist in time. Make sure `db/infra/` only contains roles/schemas/extensions, not tables (see [Database Module overview](/docs/modules/db/overview)).
+
 ### `Failed to connect to remote database`
 
 **Solution:** Check the remote URL in `postkit db remote list`

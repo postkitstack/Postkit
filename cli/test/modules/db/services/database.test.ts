@@ -22,7 +22,7 @@ vi.mock("../../../../src/common/shell", () => ({
 // Get references to the mocked functions via pg import
 import pg from "pg";
 import {runPipedCommands} from "../../../../src/common/shell";
-import {parseConnectionUrl, testConnection, createDatabase, dropDatabase, cloneDatabase, getRemotePgMajorVersion} from "../../../../src/modules/db/services/database";
+import {parseConnectionUrl, testConnection, createDatabase, dropDatabase, cloneDatabase, getRemotePgMajorVersion, makeSchemaCreationIdempotent, neutralizeUnsupportedPreambleSettings, sanitizeCloneLine} from "../../../../src/modules/db/services/database";
 
 // Access mock methods from the Client prototype
 const getMockClient = () => {
@@ -146,6 +146,73 @@ describe("database", () => {
       await expect(
         cloneDatabase("postgres://src:pass@host:5432/src", "postgres://dst:pass@host:5432/dst"),
       ).rejects.toThrow("Failed to clone");
+    });
+
+    it("runs psql with -v ON_ERROR_STOP=1 so restore failures surface instead of being silently swallowed", async () => {
+      vi.mocked(runPipedCommands).mockResolvedValue({stdout: "", stderr: "", exitCode: 0});
+      await cloneDatabase("postgres://src:pass@src-host:5432/srcdb", "postgres://dst:pass@dst-host:5432/dstdb");
+      const [, consumer] = vi.mocked(runPipedCommands).mock.calls[0]!;
+      expect(consumer.args).toContain("-v");
+      expect(consumer.args).toContain("ON_ERROR_STOP=1");
+    });
+
+    it("passes sanitizeCloneLine as the transformLine argument", async () => {
+      vi.mocked(runPipedCommands).mockResolvedValue({stdout: "", stderr: "", exitCode: 0});
+      await cloneDatabase("postgres://src:pass@src-host:5432/srcdb", "postgres://dst:pass@dst-host:5432/dstdb");
+      const call = vi.mocked(runPipedCommands).mock.calls[0]!;
+      expect(call[2]).toBe(sanitizeCloneLine);
+    });
+
+    it("does not pass --schema-only by default", async () => {
+      vi.mocked(runPipedCommands).mockResolvedValue({stdout: "", stderr: "", exitCode: 0});
+      await cloneDatabase("postgres://src:pass@src-host:5432/srcdb", "postgres://dst:pass@dst-host:5432/dstdb");
+      const [producer] = vi.mocked(runPipedCommands).mock.calls[0]!;
+      expect(producer.args).not.toContain("--schema-only");
+    });
+
+    it("passes --schema-only to pg_dump when schemaOnly is true", async () => {
+      vi.mocked(runPipedCommands).mockResolvedValue({stdout: "", stderr: "", exitCode: 0});
+      await cloneDatabase("postgres://src:pass@src-host:5432/srcdb", "postgres://dst:pass@dst-host:5432/dstdb", true);
+      const [producer] = vi.mocked(runPipedCommands).mock.calls[0]!;
+      expect(producer.args).toContain("--schema-only");
+    });
+  });
+
+  describe("makeSchemaCreationIdempotent()", () => {
+    it("rewrites a bare CREATE SCHEMA statement to include IF NOT EXISTS", () => {
+      expect(makeSchemaCreationIdempotent("CREATE SCHEMA auth;")).toBe("CREATE SCHEMA IF NOT EXISTS auth;");
+    });
+
+    it("does not double-guard a line that already has IF NOT EXISTS", () => {
+      expect(makeSchemaCreationIdempotent("CREATE SCHEMA IF NOT EXISTS auth;")).toBe("CREATE SCHEMA IF NOT EXISTS auth;");
+    });
+
+    it("leaves unrelated lines untouched", () => {
+      expect(makeSchemaCreationIdempotent("CREATE TABLE auth.users (id serial);")).toBe("CREATE TABLE auth.users (id serial);");
+      expect(makeSchemaCreationIdempotent("")).toBe("");
+    });
+  });
+
+  describe("neutralizeUnsupportedPreambleSettings()", () => {
+    it("comments out SET transaction_timeout (PG17-only GUC, unsupported by older targets)", () => {
+      expect(neutralizeUnsupportedPreambleSettings("SET transaction_timeout = 0;")).toBe("-- SET transaction_timeout = 0;");
+    });
+
+    it("leaves universally-supported preamble SET statements untouched", () => {
+      expect(neutralizeUnsupportedPreambleSettings("SET statement_timeout = 0;")).toBe("SET statement_timeout = 0;");
+      expect(neutralizeUnsupportedPreambleSettings("SET client_encoding = 'UTF8';")).toBe("SET client_encoding = 'UTF8';");
+    });
+
+    it("leaves unrelated lines untouched", () => {
+      expect(neutralizeUnsupportedPreambleSettings("CREATE TABLE t (id serial);")).toBe("CREATE TABLE t (id serial);");
+    });
+  });
+
+  describe("sanitizeCloneLine()", () => {
+    it("applies both schema-idempotency and preamble-neutralization rewrites", () => {
+      expect(sanitizeCloneLine("CREATE SCHEMA auth;")).toBe("CREATE SCHEMA IF NOT EXISTS auth;");
+      expect(sanitizeCloneLine("SET transaction_timeout = 0;")).toBe("-- SET transaction_timeout = 0;");
+      expect(sanitizeCloneLine("CREATE TABLE t (id serial);")).toBe("CREATE TABLE t (id serial);");
     });
   });
 });

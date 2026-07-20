@@ -80,9 +80,43 @@ export async function dropDatabase(url: string): Promise<void> {
   });
 }
 
+/**
+ * pg_dump always emits a bare `CREATE SCHEMA name;` (no IF NOT EXISTS), assuming
+ * it's restoring into an empty database. Since infra now pre-creates schemas
+ * (public/auth/storage/etc.) before the clone runs so roles exist for RLS
+ * policies and grants, that line would collide with what infra already made.
+ * Rewriting it to CREATE SCHEMA IF NOT EXISTS keeps it a no-op in that case.
+ */
+export function makeSchemaCreationIdempotent(line: string): string {
+  return line.replace(/^CREATE SCHEMA (?!IF NOT EXISTS)(.+);$/, "CREATE SCHEMA IF NOT EXISTS $1;");
+}
+
+/**
+ * pg_dump's preamble includes `SET <session-guc> = ...;` lines to configure the
+ * restore session (disable timeouts, etc). Most of these GUCs are ancient and
+ * universally supported, but newer pg_dump versions add newer ones (e.g.
+ * `transaction_timeout`, added in PostgreSQL 17) unconditionally, regardless of
+ * the actual restore target's version. If the host's pg_dump/psql are newer
+ * than the target server, the target rejects the unrecognized GUC with
+ * "unrecognized configuration parameter" — fatal now that ON_ERROR_STOP is on.
+ * These are session-tuning conveniences, not structural/data statements, so
+ * it's always safe to comment one out if the target doesn't support it.
+ */
+const PREAMBLE_ONLY_SETTINGS = ["transaction_timeout"];
+
+export function neutralizeUnsupportedPreambleSettings(line: string): string {
+  const pattern = new RegExp(`^SET (${PREAMBLE_ONLY_SETTINGS.join("|")})\\s*=.*;$`);
+  return pattern.test(line) ? `-- ${line}` : line;
+}
+
+export function sanitizeCloneLine(line: string): string {
+  return makeSchemaCreationIdempotent(neutralizeUnsupportedPreambleSettings(line));
+}
+
 export async function cloneDatabase(
   sourceUrl: string,
   targetUrl: string,
+  schemaOnly = false,
 ): Promise<void> {
   const src = parseConnectionUrl(sourceUrl);
   const dst = parseConnectionUrl(targetUrl);
@@ -101,7 +135,7 @@ export async function cloneDatabase(
         "-U", src.user,
         "-d", src.database,
         "--no-owner",
-        "--no-acl",
+        ...(schemaOnly ? ["--schema-only"] : []),
       ],
       env: {PGPASSWORD: src.password},
     },
@@ -112,9 +146,11 @@ export async function cloneDatabase(
         "-p", String(dst.port),
         "-U", dst.user,
         "-d", dst.database,
+        "-v", "ON_ERROR_STOP=1",
       ],
       env: {PGPASSWORD: dst.password},
     },
+    sanitizeCloneLine,
   );
 
   if (result.exitCode !== 0) {
