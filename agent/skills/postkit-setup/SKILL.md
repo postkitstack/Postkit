@@ -20,7 +20,8 @@ This creates:
 - `postkit.config.json` — Committed project configuration (schema paths, flags)
 - `postkit.secrets.json` — Gitignored secrets (DB URLs, remote credentials)
 - `db/schema/public/` — Default schema directory structure
-- `db/infra/` — Infrastructure SQL directory
+- `db/infra/` — Infrastructure SQL directory (roles, schemas)
+- `.postkit/db/migrations/` — includes a `storage.migrations` bootstrap migration for a self-hosted storage service (e.g. Supabase storage-api) — delete it (and its `committed.json` entry) if you don't run one
 - `.postkit/` — Runtime directory (gitignored)
 - `.gitignore` entries for secrets and ephemeral files
 
@@ -29,6 +30,20 @@ Add `-f` to skip confirmation prompts:
 ```bash
 postkit init -f
 ```
+
+### Scaffold a single module
+
+`postkit init` with no argument scaffolds everything (db + auth + stack). To scaffold only one module — e.g. when adding a module to a project that was only ever partially initialized — pass its name:
+
+```bash
+postkit init db      # .postkit/db/, db/infra/*.sql
+postkit init auth    # .postkit/auth/, Keycloak provider sync, realm template
+postkit init stack   # .postkit/stack/
+```
+
+Scoped runs never re-prompt for or overwrite an existing `postkit.config.json`/`postkit.secrets.json` — they only create those files if missing, and reuse the existing project name otherwise. Each run is idempotent and only updates its own slice of `.gitignore`.
+
+Note: the `storage.migrations` bootstrap migration is only scaffolded by the full `postkit init` — `postkit init db` does not create it.
 
 ## Configuration Files
 

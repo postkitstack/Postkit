@@ -144,6 +144,7 @@ PostKit files are split between committed (shared with team) and gitignored (use
 - `assertLocalConnection(session, spinner)` (`utils/session.ts`) - Tests local DB connection from session; throws if unreachable
 - `resolveApplyTarget(target?)` (`utils/apply-target.ts`) - Resolves `"local"` or `"remote"` apply target; used by infra and seed commands
 - `readJsonFile<T>(path)` / `writeJsonFile(path, data)` (`utils/json-file.ts`) - Typed JSON helpers used by remotes and committed migration tracking
+- `scaffoldDbInfra()` (`services/scaffold.ts`) - Scaffolds `db/infra/001_roles.sql`+`002_schemas.sql`; runs on both full `postkit init` and `init db`. `scaffoldStorageMigration()` scaffolds the `storage.migrations` bootstrap migration; full `postkit init` only. Both are idempotent (safe to call multiple times, never overwrite)
 
 ### Stack Module Architecture
 
@@ -197,10 +198,13 @@ The `stack` module manages a local backend service stack (Postgres, Keycloak, Po
 - `importRealmTemplate(config, spinner?)` (`services/realm-init.ts`) — Cleans realm JSON and imports via `keycloak-config-cli` container
 - `cleanRealmTemplate(raw, realmName)` (`services/realm-init.ts`) — Strips builtins, injects JWT Role Mapper
 
-**`postkit init` scaffold additions:**
+**`postkit init [module]` scaffold additions:**
+- No `module` argument scaffolds everything (db + auth + stack), unchanged from before scoping existed. Passing `db`, `auth`, or `stack` scaffolds only that module — see `initCommand()`/`initModuleCommand()` in `cli/src/commands/init.ts`
+- Scoped runs never re-prompt for or overwrite an existing `postkit.config.json`/`postkit.secrets.json` — they create those files (always with the full db+auth+stack shape, since the db/auth config loaders throw on a missing section) only if missing, and otherwise reuse the existing project name
 - Prompts for project name → generates `<name>_<8hexchars>`, stored as `name` in `postkit.config.json`
 - Creates `db/infra/001_roles.sql` (anon, authenticated, service_role, app_user, authenticator roles)
 - Creates `db/infra/002_schemas.sql` (public, auth, storage schemas)
+- Full init only (not `init db`): scaffolds a `storage.migrations` bootstrap migration (`.postkit/db/migrations/00000000000001_create_storage_migrations_table.sql`, tracked in `committed.json`) — a migration-tracking table expected by a self-hosted storage service (e.g. Supabase storage-api) run against the `storage` schema; delete the file + its `committed.json` entry if you don't run one
 - Copies vendor provider JARs to `.postkit/auth/providers/`
 - Scaffolds realm template at `.postkit/auth/realm/postkit.json`
 
@@ -273,6 +277,15 @@ Remotes are managed via utilities in `modules/db/utils/remotes.ts`:
 - **tsup** is used for bundling (ES modules only, Node 18+ target)
 - **tsx** for development mode (direct TS execution without building)
 - Output goes to `dist/` with a shebang banner for CLI execution
+
+## Project Init Commands Reference
+
+| Command | Purpose |
+|---------|---------|
+| `postkit init` | Scaffold the entire project: db + auth + stack |
+| `postkit init db` | Scaffold only the db module (`.postkit/db/`, `db/infra/*.sql`) — does not scaffold the `storage.migrations` bootstrap migration, which is full-init only |
+| `postkit init auth` | Scaffold only the auth module (`.postkit/auth/`, Keycloak provider sync, realm template) |
+| `postkit init stack` | Scaffold only the stack module (`.postkit/stack/`) |
 
 ## Database Module Commands Reference
 

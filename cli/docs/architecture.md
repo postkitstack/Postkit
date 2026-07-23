@@ -21,6 +21,8 @@ PostKit is a modular CLI toolkit built with **TypeScript** and **Node.js** that 
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
+**`postkit init [module]`** scaffolds the project. With no argument it scaffolds everything (db + auth + stack) in one pass — the original, unchanged behavior. Passing `db`, `auth`, or `stack` scopes the run to just that module (`cli/src/commands/init.ts`): scoped runs never re-prompt for or overwrite an existing `postkit.config.json`, only creating it — with the full db+auth+stack shape, since the db/auth config loaders throw on a missing section — if it doesn't exist yet, and reusing the existing project name otherwise.
+
 ---
 
 ## Module System
@@ -354,3 +356,5 @@ PostKit files in `.postkit/` are split between gitignored (ephemeral/user-specif
 - `.postkit/auth/providers/`
 - `.postkit/stack/`
 - `postkit.secrets.json`
+
+Full `postkit init` (not the scoped `init db`) also scaffolds a committed bootstrap migration at `.postkit/db/migrations/00000000000001_create_storage_migrations_table.sql`, creating a `storage.migrations` tracking table for a self-hosted storage service (e.g. Supabase storage-api) run against the `storage` schema. It's registered in `committed.json` like any other migration — delete both the file and its `committed.json` entry if you don't run one.

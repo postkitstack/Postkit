@@ -13,7 +13,7 @@ PostKit separates non-sensitive settings from credentials using two config files
 | `postkit.config.json` | **Yes** | Schema paths, non-sensitive project settings |
 | `postkit.secrets.json` | **No** (gitignored) | Database URLs, remotes, passwords, credentials |
 
-Both files are deep-merged at load time. `postkit init` creates all three files: the config, the secrets file, and a `postkit.secrets.example.json` template your team can use as a reference.
+Both files are deep-merged at load time. `postkit init` creates all three files: the config, the secrets file, and a `postkit.secrets.example.json` template your team can use as a reference. See the [Init Command reference](/docs/reference/init) for the scoped `init db`/`init auth`/`init stack` variants.
 
 ## `postkit.config.json` (committed)
 

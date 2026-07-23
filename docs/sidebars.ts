@@ -144,6 +144,7 @@ const sidebars: SidebarsConfig = {
       collapsible: true,
       collapsed: true,
       items: [
+        'reference/init',
         'reference/global-options',
         'reference/project-structure',
         'reference/session-state',

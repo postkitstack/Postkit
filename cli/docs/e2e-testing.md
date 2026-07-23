@@ -246,6 +246,11 @@ Tests infrastructure SQL (roles) and seed data management. Grant permissions are
 | `db status` in empty dir | CLI prevents running before init |
 | `init --force` | Creates complete project scaffold |
 | `init --force` re-init | Force flag allows re-initialization |
+| `init bogus --force` | Unknown module name rejected cleanly, no files created |
+| `init db --force` | Scopes scaffold to `.postkit/db/`, `db/infra/*.sql` only (no storage.migrations — full-init only) |
+| `init auth --force` after `init db` | Adds only auth files; reuses the existing project name |
+| `init stack --force` | Scopes scaffold to `.postkit/stack/` only |
+| `init db --force` twice | Idempotent — no duplicate committed migrations or gitignore lines |
 
 ### Remote Management (`remote-management.test.ts`)
 

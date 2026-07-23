@@ -38,11 +38,13 @@ my-project/
 │   │   ├── schema_app.sql
 │   │   ├── session/          # Session migrations (temporary)
 │   │   └── migrations/       # Committed migrations (for deploy)
+│   │       └── 00000000000001_create_storage_migrations_table.sql  # scaffolded by init
 │   └── auth/                 # Auth module runtime files
 │       ├── raw/              # Raw exports from source Keycloak
 │       │   └── {realm}.json
-│       └── realm/            # Cleaned configs for import
-│           └── {realm}.json
+│       ├── realm/            # Cleaned configs for import
+│       │   └── {realm}.json
+│       └── providers/        # Keycloak provider JARs (gitignored, rebuilt by init)
 ├── postkit.config.json       # Project configuration
 ├── .env                      # Environment variables (gitignored)
 └── package.json
@@ -85,25 +87,26 @@ Each schema has its own subdirectory under `db/schema/<name>/`:
 
 ## PostKit Runtime Directory
 
-The `.postkit/` directory contains runtime files that are **not** tracked by git:
+`.postkit/` is split between gitignored (ephemeral) and committed (shared with the team) files:
 
 ### Database Module (`db/`)
 
-| File/Directory | Description |
-|----------------|-------------|
-| `session.json` | Current session state |
-| `committed.json` | Committed migrations tracking |
-| `plan_<name>.sql` | Generated migration plan per schema (e.g. `plan_public.sql`, `plan_app.sql`) |
-| `schema_<name>.sql` | Generated schema artifact per schema (e.g. `schema_public.sql`) |
-| `session/` | Session migrations (temporary, cleared on commit) |
-| `migrations/` | Committed migrations (for deployment) |
+| File/Directory | Tracked? | Description |
+|----------------|----------|-------------|
+| `session.json` | Gitignored | Current session state |
+| `committed.json` | Committed | Committed migrations tracking |
+| `plan_<name>.sql` | Gitignored | Generated migration plan per schema (e.g. `plan_public.sql`, `plan_app.sql`) |
+| `schema_<name>.sql` | Gitignored | Generated schema artifact per schema (e.g. `schema_public.sql`) |
+| `session/` | Gitignored | Session migrations (temporary, cleared on commit) |
+| `migrations/` | Committed | Committed migrations (for deployment), including the `storage.migrations` bootstrap migration scaffolded by `init` |
 
 ### Auth Module (`auth/`)
 
-| File/Directory | Description |
-|----------------|-------------|
-| `raw/{realm}.json` | Raw export from source Keycloak (includes IDs, secrets) |
-| `realm/{realm}.json` | Cleaned config ready for import (IDs, secrets stripped) |
+| File/Directory | Tracked? | Description |
+|----------------|----------|-------------|
+| `raw/{realm}.json` | Committed | Raw export from source Keycloak (includes IDs, secrets) |
+| `realm/{realm}.json` | Committed | Cleaned config ready for import (IDs, secrets stripped) |
+| `providers/` | Gitignored | Keycloak provider JARs (bundled + project), rebuilt by `init` |
 
 ## Config File
 
@@ -121,4 +124,4 @@ The `.postkit/` directory contains runtime files that are **not** tracked by git
 
 Credentials and remote configurations belong in `postkit.secrets.json` (gitignored). See [Configuration](/docs/getting-started/configuration) for the full reference.
 
-Run `postkit init` to create the `.postkit/` directory structure.
+Run `postkit init` to create the `.postkit/` directory structure, or scope it to one module with `postkit init db`, `postkit init auth`, or `postkit init stack` — see the [Init Command reference](/docs/reference/init).
