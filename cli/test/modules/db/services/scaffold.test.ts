@@ -153,6 +153,8 @@ describe("scaffoldStorageMigration()", () => {
     expect(registered.description).toBe("create storage.migrations table");
     expect(registered.sessionMigrations).toEqual([]);
     expect(typeof registered.committedAt).toBe("string");
+    // Must not block `db start` on a brand-new project that hasn't deployed anything yet
+    expect(registered.blocksSessionStart).toBe(false);
   });
 
   it("does not re-register when already tracked in committed.json, even though the file was missing", async () => {

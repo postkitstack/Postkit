@@ -42,6 +42,7 @@ import {
   addCommittedMigration,
   getAllCommittedMigrations,
   getPendingCommittedMigrations,
+  getBlockingPendingCommittedMigrations,
 } from "../../../../src/modules/db/utils/committed";
 
 const sampleMigration = {
@@ -171,6 +172,51 @@ describe("committed", () => {
 
       const pending = await getPendingCommittedMigrations(remoteUrl);
       expect(pending).toHaveLength(1);
+    });
+  });
+
+  describe("getBlockingPendingCommittedMigrations()", () => {
+    it("excludes migrations marked blocksSessionStart: false", async () => {
+      const bootstrapMigration = {
+        ...sampleMigration,
+        migrationFile: {name: "00000000000001_bootstrap.sql", path: "/migrations/00000000000001_bootstrap.sql", timestamp: "00000000000001"},
+        blocksSessionStart: false,
+      };
+      const userMigration = {
+        ...sampleMigration,
+        migrationFile: {name: "20240116_user.sql", path: "/migrations/20240116_user.sql", timestamp: "20240116"},
+      };
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({migrations: [bootstrapMigration, userMigration]}));
+
+      // Neither has been applied on remote
+      mockQuery.mockResolvedValueOnce({rows: []});
+
+      const blocking = await getBlockingPendingCommittedMigrations(remoteUrl);
+      expect(blocking).toHaveLength(1);
+      expect(blocking[0]!.migrationFile.name).toBe("20240116_user.sql");
+    });
+
+    it("treats a missing blocksSessionStart field as blocking (backward compatible)", async () => {
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({migrations: [sampleMigration]}));
+      mockQuery.mockResolvedValueOnce({rows: []});
+
+      const blocking = await getBlockingPendingCommittedMigrations(remoteUrl);
+      expect(blocking).toHaveLength(1);
+    });
+
+    it("returns empty when the only pending migration is non-blocking", async () => {
+      const bootstrapMigration = {
+        ...sampleMigration,
+        blocksSessionStart: false,
+      };
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({migrations: [bootstrapMigration]}));
+      mockQuery.mockResolvedValueOnce({rows: []});
+
+      const blocking = await getBlockingPendingCommittedMigrations(remoteUrl);
+      expect(blocking).toHaveLength(0);
     });
   });
 });

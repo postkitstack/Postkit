@@ -231,6 +231,8 @@ PostKit files in `.postkit/db/` are split between gitignored (ephemeral) and com
 
 Full `postkit init` (not the scoped `init db`) always scaffolds `00000000000001_create_storage_migrations_table.sql` — a committed migration creating a `storage.migrations` tracking table for a self-hosted storage service (e.g. Supabase storage-api) run against the `storage` schema. If your project doesn't run one, delete the file and its entry in `committed.json`.
 
+This migration is registered with `blocksSessionStart: false`, so it does **not** count toward `db start`'s "pending committed migrations" guard — a brand-new project can run `db start` immediately without deploying it first. `db deploy` and `db status` are unaffected and still treat it as a normal pending migration to deploy/list.
+
 ---
 
 ## 🚀 Commands

@@ -27,6 +27,14 @@ export interface CommittedMigration {
   description: string;
   sessionMigrations: {name: string; path: string}[];
   committedAt: string;
+  /**
+   * When false, this migration is excluded from the "pending migrations" check
+   * that blocks `db start`. Used for bootstrap migrations scaffolded by `init`
+   * (e.g. storage.migrations) that haven't gone through the session workflow
+   * and shouldn't stop a brand-new project's first session. Defaults to true
+   * (blocking) when omitted, so existing user-committed migrations are unaffected.
+   */
+  blocksSessionStart?: boolean;
 }
 
 export interface CommittedState {

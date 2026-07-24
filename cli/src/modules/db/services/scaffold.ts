@@ -130,6 +130,7 @@ export async function scaffoldStorageMigration(): Promise<boolean> {
       description: STORAGE_MIGRATION_DESCRIPTION,
       sessionMigrations: [],
       committedAt: new Date().toISOString(),
+      blocksSessionStart: false,
     });
   }
 

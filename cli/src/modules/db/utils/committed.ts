@@ -92,3 +92,16 @@ export async function getPendingCommittedMigrations(remoteUrl: string): Promise<
 
   return state.migrations.filter(m => !appliedVersions.has(m.migrationFile.timestamp));
 }
+
+/**
+ * Gets pending committed migrations that should block starting a new session,
+ * i.e. excludes migrations explicitly marked `blocksSessionStart: false`
+ * (e.g. the storage.migrations bootstrap scaffolded by `init`, which hasn't
+ * gone through the session workflow and shouldn't stop a brand-new project's
+ * first `db start`). `db deploy`/`db status` still use the unfiltered
+ * `getPendingCommittedMigrations()` so the migration is deployed/listed normally.
+ */
+export async function getBlockingPendingCommittedMigrations(remoteUrl: string): Promise<CommittedMigration[]> {
+  const pending = await getPendingCommittedMigrations(remoteUrl);
+  return pending.filter(m => m.blocksSessionStart !== false);
+}

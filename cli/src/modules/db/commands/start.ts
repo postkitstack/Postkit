@@ -17,7 +17,7 @@ import {runDbmateStatus} from "../services/dbmate";
 import {checkDbPrerequisites} from "../services/prerequisites";
 import {resolveLocalDb, cloneDatabaseViaContainer, stopSessionContainer, onContainerInterrupt} from "../services/container";
 import {applyInfraStep} from "../services/infra-generator";
-import {getPendingCommittedMigrations} from "../utils/committed";
+import {getBlockingPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
 import {PostkitError} from "../../../common/errors";
 
@@ -122,7 +122,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
     logger.step(4, totalSteps, "Verifying database state...");
 
     // Check 1: Pending committed migrations (check remote's schema_migrations table)
-    const pendingCommitted = await getPendingCommittedMigrations(targetRemoteUrl);
+    const pendingCommitted = await getBlockingPendingCommittedMigrations(targetRemoteUrl);
 
     if (pendingCommitted.length > 0) {
       logger.blank();

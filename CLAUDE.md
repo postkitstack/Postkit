@@ -145,6 +145,7 @@ PostKit files are split between committed (shared with team) and gitignored (use
 - `resolveApplyTarget(target?)` (`utils/apply-target.ts`) - Resolves `"local"` or `"remote"` apply target; used by infra and seed commands
 - `readJsonFile<T>(path)` / `writeJsonFile(path, data)` (`utils/json-file.ts`) - Typed JSON helpers used by remotes and committed migration tracking
 - `scaffoldDbInfra()` (`services/scaffold.ts`) - Scaffolds `db/infra/001_roles.sql`+`002_schemas.sql`; runs on both full `postkit init` and `init db`. `scaffoldStorageMigration()` scaffolds the `storage.migrations` bootstrap migration; full `postkit init` only. Both are idempotent (safe to call multiple times, never overwrite)
+- `getBlockingPendingCommittedMigrations()` (`utils/committed.ts`) - Like `getPendingCommittedMigrations()` but excludes entries with `blocksSessionStart: false` (e.g. the storage.migrations bootstrap). Used by `db start`'s pending-migrations guard so a brand-new project's first session isn't blocked by a migration nobody has deployed yet; `db deploy`/`db status` still use the unfiltered lookup so it's deployed and listed normally
 
 ### Stack Module Architecture
 

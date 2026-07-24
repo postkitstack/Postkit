@@ -53,7 +53,7 @@ postkit init -f
 - `postkit.secrets.json` + `postkit.secrets.example.json` — gitignored secrets file and a template for teammates
 - `.postkit/db/` — `session/`, `migrations/`, `committed.json`
 - `db/infra/001_roles.sql`, `db/infra/002_schemas.sql` — PostgREST roles and the `public`/`auth`/`storage` schemas
-- `.postkit/db/migrations/00000000000001_create_storage_migrations_table.sql` — a bootstrap migration for a self-hosted storage service (e.g. Supabase storage-api). Delete it (and its entry in `committed.json`) if you don't run one
+- `.postkit/db/migrations/00000000000001_create_storage_migrations_table.sql` — a bootstrap migration for a self-hosted storage service (e.g. Supabase storage-api). Delete it (and its entry in `committed.json`) if you don't run one. It never blocks `db start` on a brand-new project — `db deploy`/`db status` still treat it as a normal migration to deploy
 - `.postkit/auth/` — `raw/`, `realm/`, `providers/`. Keycloak provider JARs are synced and the realm template is scaffolded
 - `.postkit/stack/`
 - `.gitignore` entries covering all of the above
