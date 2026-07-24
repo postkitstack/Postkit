@@ -7,7 +7,7 @@ vi.mock("child_process", () => ({
 }));
 
 import {exec, spawn} from "child_process";
-import {runCommand, runSpawnCommand, runPipedCommands, commandExists} from "../../src/common/shell";
+import {runCommand, runSpawnCommand, runPipedCommands, commandExists, createLineTransform} from "../../src/common/shell";
 
 // Helper to create a mock spawn process
 function createMockSpawn() {
@@ -165,28 +165,9 @@ describe("shell", () => {
     });
 
     it("line-transform rewrites complete lines and tolerates chunk boundaries mid-line", async () => {
-      const {Transform} = await import("stream");
-      // Exercise the real transform logic end-to-end via a real Transform stream,
-      // by capturing what shell.ts builds internally through a spy on child_process
-      // is not feasible without exporting it, so instead verify the documented
-      // contract directly against Node's own Transform semantics used by shell.ts:
-      // splitting on chunk boundaries mid-line must not break the match.
       const output: string[] = [];
-      let buffer = "";
       const transformLine = (line: string) => line.replace(/^CREATE SCHEMA (?!IF NOT EXISTS)(.+);$/, "CREATE SCHEMA IF NOT EXISTS $1;");
-      const t = new Transform({
-        transform(chunk, _enc, cb) {
-          buffer += chunk.toString();
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) this.push(transformLine(line) + "\n");
-          cb();
-        },
-        flush(cb) {
-          if (buffer) this.push(transformLine(buffer));
-          cb();
-        },
-      });
+      const t = createLineTransform(transformLine);
       t.on("data", (d: Buffer) => output.push(d.toString()));
       const done = new Promise((resolve) => t.on("end", resolve));
       t.write("before\nCREATE SCH");
@@ -194,6 +175,26 @@ describe("shell", () => {
       t.end();
       await done;
       expect(output.join("")).toBe("before\nCREATE SCHEMA IF NOT EXISTS auth;\nafter\n");
+    });
+
+    it("line-transform tolerates a multi-byte UTF-8 character split across a chunk boundary", async () => {
+      // "café" — the "é" (U+00E9) encodes to two UTF-8 bytes (0xC3 0xA9).
+      // Split the buffer so those two bytes land in separate chunks.
+      const full = Buffer.from("café: name\n", "utf8");
+      const splitAt = full.indexOf(0xc3) + 1; // right after the first byte of "é"
+      const chunk1 = full.subarray(0, splitAt);
+      const chunk2 = full.subarray(splitAt);
+
+      const output: string[] = [];
+      const t = createLineTransform((line) => line);
+      t.on("data", (d: Buffer) => output.push(d.toString()));
+      const done = new Promise((resolve) => t.on("end", resolve));
+      t.write(chunk1);
+      t.write(chunk2);
+      t.end();
+      await done;
+
+      expect(output.join("")).toBe("café: name\n");
     });
   });
 

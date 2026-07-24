@@ -1,5 +1,6 @@
 import {exec, spawn} from "child_process";
 import {Transform} from "stream";
+import {StringDecoder} from "string_decoder";
 import {promisify} from "util";
 import type {ShellResult} from "./types";
 
@@ -111,12 +112,18 @@ export interface SpawnConfig {
  * Buffers chunks and rewrites complete lines via `transformLine`, so a regex
  * match never straddles a chunk boundary. Partial trailing data is held until
  * the next chunk (or flushed as-is at stream end).
+ *
+ * Chunks are decoded via `StringDecoder` rather than `chunk.toString()` so a
+ * multi-byte UTF-8 sequence split across a chunk boundary is buffered and
+ * completed on the next chunk, instead of each half decoding independently
+ * into replacement characters (`�`) and losing the original bytes.
  */
-function createLineTransform(transformLine: (line: string) => string): Transform {
+export function createLineTransform(transformLine: (line: string) => string): Transform {
   let buffer = "";
+  const decoder = new StringDecoder("utf8");
   return new Transform({
     transform(chunk, _encoding, callback) {
-      buffer += chunk.toString();
+      buffer += decoder.write(chunk);
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
       for (const line of lines) {
@@ -125,6 +132,7 @@ function createLineTransform(transformLine: (line: string) => string): Transform
       callback();
     },
     flush(callback) {
+      buffer += decoder.end();
       if (buffer) this.push(transformLine(buffer));
       callback();
     },

@@ -294,7 +294,7 @@ export async function deployCommand(options: DeployOptions): Promise<void> {
       );
     }
 
-    // Step 10: Drop local clone and stop temp container
+    // Step 11: Drop local clone and stop temp container
     logger.blank();
     logger.step(11, totalSteps, "Cleaning up local clone...");
     spinner.start("Dropping local clone database...");
