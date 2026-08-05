@@ -13,10 +13,12 @@ A session-based database migration workflow for safe schema changes. Clone your 
 │                                                                              │
 │   $ postkit db start                 $ postkit db plan                       │
 │   ┌──────────────────┐            ┌──────────────────┐                       │
-│   │ 1. Clone remote  │            │ 3. Generate      │                       │
-│   │    to local DB   │            │    schema.sql    │                       │
-│   │ 2. Start session │            │ 4. Run pgschema  │                       │
-│   │    (track state) │            │    plan (diff)   │                       │
+│   │ 1. Apply infra   │            │ 3. Generate      │                       │
+│   │    (roles/schemas)│            │    schema.sql    │                       │
+│   │ 1b. Clone remote │            │ 4. Run pgschema  │                       │
+│   │    structure only │            │    plan (diff)   │                       │
+│   │ 2. Start session │            │                  │                       │
+│   │    (track state) │            │                  │                       │
 │   └────────┬─────────┘            │ 5. Save schema   │                       │
 │            │                      │    fingerprint   │                       │
 │            ▼                      └────────┬─────────┘                       │
@@ -64,6 +66,7 @@ A session-based database migration workflow for safe schema changes. Clone your 
 
 - **pgschema** — Bundled with PostKit. Platform-specific binaries are shipped in `vendor/pgschema/` and resolved automatically. No separate installation needed.
 - **dbmate** — Installed automatically as an npm dependency. No separate installation needed.
+- **psql** (native PostgreSQL client) — Required on the host for `postkit db start` (applying `db/infra/` and, when `localDbUrl` is configured directly, cloning). Checked upfront with a clear error if missing — install via `brew install libpq` (macOS), `apt install postgresql-client` (Linux), or the PostgreSQL installer + PATH entry (Windows).
 - **Docker** _(optional)_ — Required only if `db.localDbUrl` is empty. PostKit will automatically spin up a version-matched `postgres:{version}-alpine` container for the session and tear it down when done.
 
 ---
@@ -203,6 +206,8 @@ db/
 
 **Note:** `db/infra/` and `seeds/` are excluded from pgschema processing and applied as separate steps. `grants/` is managed by pgschema. Use `postkit db schema add <name>` to scaffold a new schema directory.
 
+> ⚠️ **`db/infra/` must only ever contain roles, schema namespaces (`CREATE SCHEMA`), and extensions — never tables, views, functions, or any pgschema-managed object.** `postkit db start` now applies `db/infra/` to the local database *before* cloning the remote database's structure (see below). If a table were defined in `db/infra/`, it would already exist locally by the time the clone runs its own `CREATE TABLE` for that same table, which fails the clone outright. Tables (and everything else) belong in `db/schema/<name>/tables/` instead, where pgschema manages them declaratively.
+
 ### PostKit Directory Structure
 
 PostKit files in `.postkit/db/` are split between gitignored (ephemeral) and committed (shared with team):
@@ -237,15 +242,20 @@ postkit db start --remote staging   # Use specific remote
 ```
 
 **What it does:**
-1. Checks prerequisites (pgschema, dbmate installed)
+1. Checks prerequisites (pgschema, dbmate, **and `psql`** installed)
 2. Resolves target remote (default or specified)
 3. Tests connection to remote database and detects its PostgreSQL major version
 4. Checks for pending committed migrations by querying the remote's `postkit.schema_migrations` table
 5. **If `localDbUrl` is empty**: Checks Docker availability and starts a `postgres:{version}-alpine` container on a free port (15432–15532), where `{version}` matches the remote database's PostgreSQL major version
-6. Clones remote database to local. When using an auto-container, `pg_dump` and `psql` run inside the container via `docker exec` (version-matched tools, no host binary required)
-7. Creates a session file (`.postkit/db/session.json`) to track state, including the container ID if a container was started
+6. **Applies `db/infra/` (roles, schemas, extensions) to the local database** — before anything is cloned
+7. Clones the remote database's **structure only** (`pg_dump --schema-only`, no row data) to local. When using an auto-container, `pg_dump` and `psql` run inside the container via `docker exec` (version-matched tools, no host binary required); otherwise both run on the host, which is why `psql` must be installed
+8. Creates a session file (`.postkit/db/session.json`) to track state, including the container ID if a container was started
 
 **Auto-container:** When `localDbUrl` is not configured, PostKit manages the full container lifecycle — start on `db start`, stop on `db abort`. The container image always matches the remote PostgreSQL version.
+
+**Why infra is applied before cloning:** the remote's dump includes `CREATE POLICY ... TO <role>`, `GRANT ... TO <role>`, and `ALTER DEFAULT PRIVILEGES ... TO <role>` statements for every custom role referenced by your RLS policies and grants. Those statements fail with `role "<role>" does not exist` if replayed before the role exists — which is exactly what happens on a brand-new local DB/container. Applying `db/infra/` first (same roles/schemas your project already declares) means those statements succeed, so RLS policies and grants clone correctly. The clone's `psql` runs with `-v ON_ERROR_STOP=1`, so if a referenced role genuinely doesn't exist anywhere in `db/infra/`, the clone now fails loudly with a clear error instead of silently dropping that policy/grant.
+
+**Why the clone is schema-only:** copying full production row data (customer records, emails, tokens, etc.) into every disposable local dev container on every `db start` is unnecessary and a privacy/compliance risk. `db start` only needs to reproduce *structure* — tables, RLS policies, grants, indexes, triggers, functions — so it doesn't copy any rows. For synthetic local test data, use `db/schema/<name>/seeds/`, applied separately during `db plan`/`db apply`. (`postkit db deploy`'s own dry-run clone is unaffected by this — it still clones full data, since it's specifically verifying real migrations against realistic data before they touch production.)
 
 ---
 
@@ -323,12 +333,13 @@ postkit db deploy --dry-run              # Verify only, don't touch target
 3. If an active session exists, removes it (with confirmation unless `-f`)
 4. Tests the target database connection and detects its PostgreSQL major version
 5. **If `localDbUrl` is empty**: Starts a temporary `postgres:{version}-alpine` container (version-matched to the target) for the dry-run
-6. Clones the target database to the local URL. When using a temp container, cloning runs via `docker exec` inside the container
-7. Runs a full dry-run on the local clone: infra, dbmate migrate, seeds
-8. If `--dry-run` is set, stops here and reports results without touching the target
-9. Reports dry-run results and confirms deployment (unless `-f`)
-10. Applies to target: infra, dbmate migrate, seeds
-11. Drops the local clone database; stops and removes the temp container if one was used
+6. **Applies `db/infra/` (roles, schemas, extensions) to the local/temp database** — before cloning, for the same reason `db start` does (RLS policies and grants in the target's dump reference roles that must already exist)
+7. Clones the target database (full data — this dry-run intentionally tests against realistic data) to the local URL. When using a temp container, cloning runs via `docker exec` inside the container
+8. Runs a full dry-run on the local clone: infra (reapplied, idempotently), dbmate migrate, seeds
+9. If `--dry-run` is set, stops here and reports results without touching the target
+10. Reports dry-run results and confirms deployment (unless `-f`)
+11. Applies to target: infra, dbmate migrate, seeds
+12. Drops the local clone database; stops and removes the temp container if one was used
 
 If the dry run fails, deployment is aborted and no changes are made to the target database.
 
@@ -629,6 +640,7 @@ postkit db deploy
 | Cross-schema views / functions | Manual migration (`postkit db migration`) | dbmate only |
 | Schema namespace creation (`CREATE SCHEMA`) | `db/infra/` | infra step (psql) |
 | Role creation / extensions | `db/infra/` | infra step (psql) |
+| ❌ Tables, views, functions, policies, grants | **Never** `db/infra/` — use `db/schema/<name>/` | — |
 
 ---
 
@@ -648,6 +660,8 @@ This is why cross-schema constraints must be written as manual migrations rather
 |-------|----------|
 | `pgschema is not installed` | Should be bundled in `vendor/pgschema/`. Verify the binary for your platform exists, or install manually and set `db.pgSchemaBin` in config. |
 | `dbmate is not installed` | Should be installed via npm. Run `npm install` in the CLI directory, or install manually (`brew install dbmate`) and set `db.dbmateBin` in config. |
+| `psql binary not found` | Required by `postkit db start`. Install PostgreSQL client tools: `brew install libpq` (macOS, then `brew link --force libpq`), `apt install postgresql-client` (Linux), or the PostgreSQL installer + add its `bin/` folder to `PATH` (Windows). Open a new terminal and verify with `psql --version`. |
+| `role "<name>" does not exist` during clone | A custom role referenced by an RLS policy or grant isn't in `db/infra/`. Add it there (see **What belongs where** above) — `db start`/`db deploy` apply `db/infra/` before cloning specifically to prevent this. |
 | `Failed to connect to remote database` | Check the remote URL in `postkit db remote list` |
 | `No remotes configured` | Add a remote with `postkit db remote add <name> <url>` |
 | `No active migration session` | Run `postkit db start` first |

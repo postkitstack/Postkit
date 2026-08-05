@@ -58,6 +58,8 @@ The `db/` directory is organized into infrastructure and per-schema sections:
 |-----------|-------------|--------------|
 | `db/infra/` | DB-level: roles, extensions, CREATE SCHEMA | Applied separately (excluded from pgschema) |
 
+> ⚠️ **Only roles, schemas, and extensions belong in `db/infra/` — never tables, views, functions, or other pgschema-managed objects.** `postkit db start`/`db deploy` apply `db/infra/` to the local database *before* cloning, so RLS policies and grants that reference custom roles restore correctly. A table defined in `db/infra/` would already exist locally by the time the clone tries to create it, causing the clone to fail.
+
 ### Schema Objects (Processed by `postkit db plan`)
 
 Each schema has its own subdirectory under `db/schema/<name>/`:

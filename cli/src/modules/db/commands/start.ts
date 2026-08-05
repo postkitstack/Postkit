@@ -16,6 +16,7 @@ import {
 import {runDbmateStatus} from "../services/dbmate";
 import {checkDbPrerequisites} from "../services/prerequisites";
 import {resolveLocalDb, cloneDatabaseViaContainer, stopSessionContainer, onContainerInterrupt} from "../services/container";
+import {applyInfraStep} from "../services/infra-generator";
 import {getPendingCommittedMigrations} from "../utils/committed";
 import type {CommandOptions} from "../../../common/types";
 import {PostkitError} from "../../../common/errors";
@@ -43,7 +44,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
     // Step 1: Check prerequisites
     logger.step(1, 5, "Checking prerequisites...");
 
-    await checkDbPrerequisites(options.verbose ?? false);
+    await checkDbPrerequisites(options.verbose ?? false, {requirePsql: true});
 
     // Step 2: Load configuration
     logger.step(2, 5, "Loading configuration...");
@@ -54,8 +55,8 @@ export async function startCommand(options: StartOptions): Promise<void> {
     let localDbUrl = config.localDbUrl;
     const needsContainer = !localDbUrl;
 
-    // Total steps: 5 normally, 6 when auto-container is needed
-    const totalSteps = needsContainer ? 6 : 5;
+    // Total steps: 6 normally, 7 when auto-container is needed (extra step for infra apply)
+    const totalSteps = needsContainer ? 7 : 6;
 
     // Resolve remote
     let targetRemoteName: string;
@@ -197,24 +198,40 @@ export async function startCommand(options: StartOptions): Promise<void> {
       }
     }
 
-    // Step 5/6: Clone database
-    const cloneStep = needsContainer ? 6 : 5;
-    logger.step(cloneStep, totalSteps, "Cloning remote database to local...");
-    spinner.start("Cloning database (this may take a moment)...");
+    // Apply infra (roles, schemas, extensions) to the local DB BEFORE cloning.
+    // pg_dump's output includes CREATE POLICY / GRANT / ALTER DEFAULT PRIVILEGES
+    // statements that name custom roles (e.g. app_admin, employee, service_role).
+    // Those statements fail with "role does not exist" if replayed against a
+    // fresh local DB/container that doesn't have the roles yet — and since psql
+    // isn't run with ON_ERROR_STOP during the clone, those failures are silent,
+    // silently dropping RLS policies and grants from the local clone.
+    const infraStep = needsContainer ? 6 : 5;
+    logger.step(infraStep, totalSteps, "Applying infrastructure to local database...");
+    if (options.dryRun) {
+      spinner.info("Dry run - skipping infra apply");
+    } else {
+      await applyInfraStep(spinner, localDbUrl);
+    }
+
+    // Step: Clone database (structure only — no row data. RLS policies and
+    // grants still clone, since infra was applied above before this runs.)
+    const cloneStep = needsContainer ? 7 : 6;
+    logger.step(cloneStep, totalSteps, "Cloning remote database structure to local...");
+    spinner.start("Cloning database structure (this may take a moment)...");
 
     if (options.dryRun) {
       spinner.info("Dry run - skipping database clone");
     } else {
       if (containerID) {
         // Run pg_dump/psql inside the container — version-matched with remote
-        await cloneDatabaseViaContainer(containerID, targetRemoteUrl, localDbUrl);
+        await cloneDatabaseViaContainer(containerID, targetRemoteUrl, localDbUrl, true);
       } else {
-        await cloneDatabase(targetRemoteUrl, localDbUrl);
+        await cloneDatabase(targetRemoteUrl, localDbUrl, true);
       }
-      spinner.succeed("Database cloned successfully");
+      spinner.succeed("Database structure cloned successfully");
 
       const localTableCount = await getTableCount(localDbUrl);
-      logger.info(`Local clone has ${localTableCount} tables`);
+      logger.info(`Local database has ${localTableCount} tables (structure only, no row data)`);
     }
 
     // Final step: Create session

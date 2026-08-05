@@ -27,8 +27,10 @@ The `db` module provides a **session-based database migration workflow** for saf
 │   $ postkit db start                                                         │
 │   ┌────────────────────────────────────────────┐                             │
 │   │ 1. Detect remote PostgreSQL version        │                             │
-│   │ 2. Clone remote DB to local (or Docker)    │                             │
-│   │ 3. Start session (track state)             │                             │
+│   │ 2. Apply infra (roles, schemas, exts)      │                             │
+│   │ 3. Clone remote structure to local (or     │                             │
+│   │    Docker) — schema only, no row data      │                             │
+│   │ 3b. Start session (track state)            │                             │
 │   └────────────────────┬───────────────────────┘                             │
 │                        │                                                     │
 │                        ▼  (edit db/schema/<name>/ files)                    │
@@ -116,6 +118,8 @@ db/infra/
 
 **Note:** `db/infra/` holds DB-level objects and is NOT inside a schema subdirectory. Files here are **excluded from pgschema** and applied separately.
 
+**Keep this strictly to roles, schemas, and extensions — never tables, views, functions, or anything pgschema-managed.** `db start` and `db deploy` apply `db/infra/` to the local database *before* cloning (so RLS policies and grants that reference custom roles restore correctly). A table defined here would already exist locally by the time the clone tries to create it, causing the clone to fail outright. Tables belong in `db/schema/<name>/tables/`.
+
 ### 2. Schema Objects (Processed by `postkit db plan`)
 
 The `plan` command uses pgschema to process these directories per schema:
@@ -157,6 +161,7 @@ db/schema/<name>/
 
 - **pgschema** - Bundled with PostKit (no separate installation needed)
 - **dbmate** - Auto-installed via npm (no separate installation needed)
+- **psql** (native PostgreSQL client) - Required for `postkit db start` (applying `db/infra/`, and cloning when `localDbUrl` is set directly rather than using an auto-container). Install via `brew install libpq` (macOS), `apt install postgresql-client` (Linux), or the PostgreSQL installer + PATH entry (Windows).
 - **Docker** _(optional)_ - Required only when `db.localDbUrl` is empty. PostKit starts a `postgres:{version}-alpine` container automatically, version-matched to your remote DB.
 
 ## Troubleshooting
