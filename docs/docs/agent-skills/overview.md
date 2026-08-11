@@ -21,29 +21,44 @@ Use the [skills CLI](https://github.com/vercel-labs/skills) to install PostKit s
 
 ```bash
 # Install all PostKit skills (interactive)
-npx skills add appritechnologies/Postkit
+npx skills add postkitstack/Postkit
 
 # List available skills first
-npx skills add appritechnologies/Postkit --list
+npx skills add postkitstack/Postkit --list
 
 # Install specific skills only
-npx skills add appritechnologies/Postkit --skill postkit-migrate --skill postkit-schema
+npx skills add postkitstack/Postkit --skill postkit-migrate --skill postkit-schema
 
 # Install for a specific agent (e.g., Claude Code)
-npx skills add appritechnologies/Postkit -a claude-code
+npx skills add postkitstack/Postkit -a claude-code
 
-# Non-interactive (CI/CD friendly)
-npx skills add appritechnologies/Postkit --all -y
+# Non-interactive (CI/CD friendly) — name each skill explicitly.
+# Avoid `--all`: it expands to every skill *and* every agent, and it
+# bypasses the internal-skill filter, so it also pulls PostKit's own
+# repo-maintenance skills into your project.
+npx skills add postkitstack/Postkit -y --agent claude-code \
+  --skill postkit-migrate --skill postkit-setup \
+  --skill postkit-schema --skill postkit-auth
 ```
 
 ### Scope
 
-| Scope | Flag | Location | Use Case |
-|-------|------|----------|----------|
-| **Project** (default) | | `./<agent>/skills/` | Committed with your project, shared with team |
-| **Global** | `-g` | `~/<agent>/skills/` | Available across all your projects |
+| Scope | Flag | Location (Claude Code) | Use Case |
+|-------|------|------------------------|----------|
+| **Project** (default) | | `./.claude/skills/` | Committed with your project, shared with team |
+| **Global** | `-g` | `~/.claude/skills/` | Available across all your projects |
+
+The exact directory depends on the agent. Claude Code uses `.claude/skills/`; Cursor, Codex, Cline, Gemini CLI, and GitHub Copilot share the standard `.agents/skills/`; Windsurf and Roo Code use `.windsurf/skills/` and `.roo/skills/`. The CLI picks the right one for each agent you install to.
 
 By default, skills are **symlinked** — a single source of truth that's easy to update. Use `--copy` for independent copies when symlinks aren't supported.
+
+### Verify the Install
+
+```bash
+npx skills list
+```
+
+You should see the four `postkit-*` skills. In Claude Code, `/postkit-migrate` and friends become available in new sessions.
 
 ### Update Skills
 

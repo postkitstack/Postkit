@@ -22,8 +22,8 @@ const config: Config = {
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'appritechnologies', // Usually your GitHub org/user name.
-  projectName: 'postkit', // Usually your repo name.
+  organizationName: 'postkitstack', // Usually your GitHub org/user name.
+  projectName: 'Postkit', // Usually your repo name.
 
   onBrokenLinks: 'throw',
 
@@ -57,7 +57,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/appritechnologies/postkit/edit/main/docs/',
+            'https://github.com/postkitstack/Postkit/edit/main/docs/',
         },
         blog: {
           showReadingTime: true,
@@ -68,7 +68,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/appritechnologies/postkit/edit/main/docs/',
+            'https://github.com/postkitstack/Postkit/edit/main/docs/',
           // Useful options to enforce blogging best practices
           onInlineTags: 'warn',
           onInlineAuthors: 'warn',
@@ -106,7 +106,7 @@ const config: Config = {
           position: 'left',
         },
         {
-          href: 'https://github.com/appritechnologies/postkit',
+          href: 'https://github.com/postkitstack/Postkit',
           label: 'GitHub',
           position: 'right',
         },
@@ -137,7 +137,7 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/appritechnologies/postkit',
+              href: 'https://github.com/postkitstack/Postkit',
             },
             {
               label: 'Documentation',
