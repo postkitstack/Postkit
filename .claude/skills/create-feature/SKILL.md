@@ -1,6 +1,8 @@
 ---
 name: create-feature
-description: Implement new features end-to-end: gather info, plan, implement, test, validate, review.
+description: "Implement new features end-to-end: gather info, plan, implement, test, validate, review."
+metadata:
+  internal: true
 ---
 
 # Create Feature Skill

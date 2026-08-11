@@ -3,6 +3,8 @@ name: create-pr
 description: Generate a PR description for the current branch and save it to temp/pr-description.md. Analyzes commits against the base branch and fills in the project PR template exactly.
 argument-hint: "[base-branch]"
 allowed-tools: Bash, Read, Write
+metadata:
+  internal: true
 ---
 
 # Create PR Skill

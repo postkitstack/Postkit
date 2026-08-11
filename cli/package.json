@@ -46,11 +46,11 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/appritechnologies/postkit.git"
+    "url": "https://github.com/postkitstack/Postkit.git"
   },
-  "homepage": "https://github.com/appritechnologies/postkit#readme",
+  "homepage": "https://github.com/postkitstack/Postkit#readme",
   "bugs": {
-    "url": "https://github.com/appritechnologies/postkit/issues"
+    "url": "https://github.com/postkitstack/Postkit/issues"
   },
   "dependencies": {
     "chalk": "^5.3.0",

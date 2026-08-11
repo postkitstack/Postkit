@@ -81,15 +81,15 @@ No restart needed — Claude Code picks up changes automatically.
 
 Full documentation is available at [docs.postkitstack.com](https://docs.postkitstack.com/).
 
-For more help, see [Troubleshooting](https://docs.postkitstack.com/docs/modules/db/troubleshooting) or open an issue on [GitHub](https://github.com/appritechnologies/postkit/issues).
+For more help, see [Troubleshooting](https://docs.postkitstack.com/docs/modules/db/troubleshooting) or open an issue on [GitHub](https://github.com/postkitstack/Postkit/issues).
 
 ## Links
 
 - **CLI Tool**: [cli/README.md](cli/README.md)
 - **npm Package**: https://www.npmjs.com/package/@appritech/postkit
 - **Documentation**: https://docs.postkitstack.com/
-- **GitHub**: https://github.com/appritechnologies/postkit
-- **Issues**: https://github.com/appritechnologies/postkit/issues
+- **GitHub**: https://github.com/postkitstack/Postkit
+- **Issues**: https://github.com/postkitstack/Postkit/issues
 
 ## License
 
