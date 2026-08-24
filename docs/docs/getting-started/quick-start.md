@@ -23,6 +23,8 @@ This creates:
 - `db/schema/` - Your schema files directory
 - `.postkit/` - Runtime state (ephemeral files gitignored; committed migrations and auth config are tracked by git)
 
+To scaffold only one module instead of everything — e.g. to add auth to a project you only ever ran `postkit init db` on — pass its name: `postkit init db`, `postkit init auth`, or `postkit init stack`. See the [Init Command reference](/docs/reference/init) for what each variant creates.
+
 ## 2. Configure Remotes
 
 Add your remote databases (all remote data is stored in `postkit.secrets.json` — remotes are user-specific and never committed):

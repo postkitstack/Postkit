@@ -94,7 +94,7 @@ Keycloak provider JARs are mounted at `/opt/keycloak/providers` inside the conta
 
 **Destination:** `.postkit/auth/providers/` — gitignored, rebuilt by `postkit init`.
 
-If you add or update a project provider, re-run `postkit init` to sync the new JAR, then restart the stack.
+If you add or update a project provider, re-run `postkit init` (or the auth-only `postkit init auth`) to sync the new JAR, then restart the stack.
 
 ---
 
@@ -102,7 +102,7 @@ If you add or update a project provider, re-run `postkit init` to sync the new J
 
 On the first `stack up` (when `is_initial=true`), PostKit imports a Keycloak realm template.
 
-The template path is configured via `stack.keycloak.realmTemplate` (default: `.postkit/auth/realm/postkit.json`). Scaffolded automatically by `postkit init`.
+The template path is configured via `stack.keycloak.realmTemplate` (default: `.postkit/auth/realm/postkit.json`). Scaffolded automatically by `postkit init` (or the auth-only `postkit init auth`).
 
 Before importing, `cleanRealmTemplate()` transforms the raw template JSON:
 

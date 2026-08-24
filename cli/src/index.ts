@@ -31,12 +31,12 @@ program
 
 // Register init command
 program
-  .command("init")
-  .description("Initialize a new Postkit project")
+  .command("init [module]")
+  .description("Initialize a Postkit project, or scaffold a single module: db, auth, stack")
   .option("-f, --force", "Skip confirmation prompts")
-  .action(async (cmdOptions) => {
+  .action(async (moduleArg, cmdOptions) => {
     const options = {...program.opts(), ...cmdOptions};
-    await initCommand(options);
+    await initCommand(options, moduleArg);
   });
 
 // Register modules
