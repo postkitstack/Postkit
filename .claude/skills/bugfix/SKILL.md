@@ -1,6 +1,8 @@
 ---
 name: bugfix
-description: Diagnose and fix bugs with a 4-stage workflow: gather info, diagnose, fix, test, validate & review.
+description: "Diagnose and fix bugs with a 4-stage workflow: gather info, diagnose, fix, test, validate & review."
+metadata:
+  internal: true
 ---
 
 # Bugfix Skill

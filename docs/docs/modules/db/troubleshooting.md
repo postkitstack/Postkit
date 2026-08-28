@@ -102,4 +102,4 @@ The container ID is stored in `.postkit/db/session.json` under `containerID` if 
 
 ## Getting Help
 
-If you're still stuck, please open an issue on [GitHub](https://github.com/appritechnologies/postkit/issues).
+If you're still stuck, please open an issue on [GitHub](https://github.com/postkitstack/Postkit/issues).

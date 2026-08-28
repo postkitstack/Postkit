@@ -1,6 +1,8 @@
 ---
 name: update-docs
 description: Update project documentation when code changes occur.
+metadata:
+  internal: true
 ---
 
 # Update Docs Skill

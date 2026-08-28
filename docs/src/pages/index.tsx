@@ -35,7 +35,7 @@ function HomepageHero() {
           </Link>
           <Link
             className="button button--outline button--lg"
-            to="https://github.com/appritechnologies/postkit"
+            to="https://github.com/postkitstack/Postkit"
             target="_blank">
             GitHub
           </Link>

@@ -1,6 +1,8 @@
 ---
 name: write-test-unit
 description: Write unit tests for PostKit CLI using Vitest with proper mocking patterns.
+metadata:
+  internal: true
 ---
 
 # Write Unit Tests Skill
