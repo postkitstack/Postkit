@@ -41,7 +41,7 @@ npm --version
 ### From npm
 
 ```bash
-npm install -g @appritech/postkit
+npm install -g @postkitstack/postkit
 ```
 
 ### From source
