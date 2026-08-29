@@ -31,7 +31,7 @@ PostKit does not replace Supabase's auth, storage, or realtime features. If you 
 ## Step 1: Install PostKit
 
 ```bash
-npm install -g @appritech/postkit
+npm install -g @postkitstack/postkit
 ```
 
 Verify:
@@ -205,7 +205,7 @@ If you have existing Supabase migration files (`.sql` files in `supabase/migrati
 
 | Step | Command |
 |------|---------|
-| Install PostKit | `npm install -g @appritech/postkit` |
+| Install PostKit | `npm install -g @postkitstack/postkit` |
 | Init project | `postkit init` |
 | Add Supabase remote | `postkit db remote add supabase "postgres://..."` |
 | Import existing schema | `postkit db import --url "postgres://..."` |
