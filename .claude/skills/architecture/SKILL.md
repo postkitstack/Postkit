@@ -1,6 +1,8 @@
 ---
 name: architecture
 description: Review and propose system architecture decisions, generate ADRs.
+metadata:
+  internal: true
 ---
 
 # Architecture Skill

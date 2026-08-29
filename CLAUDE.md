@@ -384,10 +384,10 @@ PostKit ships with Claude Code agent skills that teach AI assistants how to work
 
 ### Skill Anatomy
 
-Each skill lives in its own directory under `agent/skills/`:
+Each skill lives in its own directory under `skills/`:
 
 ```
-agent/skills/
+skills/
 ├── postkit-migrate/
 │   └── SKILL.md      # Frontmatter (name, description, allowed-tools) + markdown instructions
 ├── postkit-setup/
@@ -423,19 +423,24 @@ Use the [skills CLI](https://github.com/vercel-labs/skills) to install PostKit s
 
 ```bash
 # Install all PostKit skills (interactive)
-npx skills add appritechnologies/Postkit
+npx skills add postkitstack/Postkit
 
 # List available skills first
-npx skills add appritechnologies/Postkit --list
+npx skills add postkitstack/Postkit --list
 
 # Install specific skills only
-npx skills add appritechnologies/Postkit --skill postkit-migrate --skill postkit-schema
+npx skills add postkitstack/Postkit --skill postkit-migrate --skill postkit-schema
 
 # Install for a specific agent (e.g., Claude Code)
-npx skills add appritechnologies/Postkit -a claude-code
+npx skills add postkitstack/Postkit -a claude-code
 
-# Non-interactive (CI/CD friendly)
-npx skills add appritechnologies/Postkit --all -y
+# Non-interactive (CI/CD friendly) — name each skill explicitly.
+# Avoid `--all`: it expands to every skill *and* every agent, and it
+# bypasses the internal-skill filter, so it also pulls PostKit's own
+# repo-maintenance skills into your project.
+npx skills add postkitstack/Postkit -y --agent claude-code \
+  --skill postkit-migrate --skill postkit-setup \
+  --skill postkit-schema --skill postkit-auth
 ```
 
 The CLI auto-detects which coding agents you have installed and places skills in the correct directory for each agent. By default, skills are symlinked (single source of truth, easy to update). Use `--copy` for independent copies.
@@ -454,7 +459,7 @@ npx skills update postkit-auth # Update a specific skill
 
 ### Adding a New Skill
 
-Create `agent/skills/<skill-name>/SKILL.md`:
+For a **public** skill (one PostKit users install), create `skills/<skill-name>/SKILL.md`. For internal contributor tooling, use `.claude/skills/` instead and read [Public vs Internal Skills](#public-vs-internal-skills) first.
 
 ```yaml
 ---
@@ -467,7 +472,7 @@ allowed-tools: Bash(postkit *)
 Skills can optionally include bundled resources for more complex workflows:
 
 ```
-agent/skills/<skill-name>/
+skills/<skill-name>/
 ├── SKILL.md           # Required — skill instructions
 ├── scripts/           # Optional — executable scripts for repetitive tasks
 ├── references/        # Optional — reference docs loaded into context as needed
@@ -475,6 +480,28 @@ agent/skills/<skill-name>/
 ```
 
 When a skill grows beyond ~500 lines, split domain-specific content into `references/` files and point to them from SKILL.md.
+
+### Public vs Internal Skills
+
+Two kinds of skills live in this repo, and the split is load-bearing for packaging:
+
+| Location | Kind | Shipped by `npx skills add` |
+|----------|------|-----------------------------|
+| `skills/` | Public — for people *using* PostKit | Yes |
+| `.claude/skills/` | Internal — for people *developing* PostKit | No |
+
+`skills/` is a directory the skills CLI searches by default; `agent/skills/` is **not**, which is why public skills live at `skills/`.
+
+`.claude/skills/` is also a directory the CLI searches, so every internal skill must carry:
+
+```yaml
+metadata:
+  internal: true
+```
+
+Without it, contributor tooling (`/bugfix`, `/create-pr`, …) gets installed into end users' projects. The flag hides the skill from discovery, `--list`, and interactive install; Claude Code ignores the field and loads the skill locally as normal. Contributors can still fetch internal skills with `INSTALL_INTERNAL_SKILLS=1` or an explicit `--skill <name>`.
+
+Descriptions containing `: ` (colon-space) **must be quoted** — unquoted, YAML parses them as a nested mapping and the skills CLI skips the file with a parse error.
 
 ## Important Notes
 
@@ -499,6 +526,8 @@ Skills are invoked via `/<skill-name>` in Claude Code. Agents are sub-processes 
 | `cli/docs/e2e-testing.md` | E2E testing guide and infrastructure |
 
 ### Skills Registry
+
+These are **internal** skills — they live in `.claude/skills/` and must each carry `metadata: internal: true` so they are not shipped to end users. See [Public vs Internal Skills](#public-vs-internal-skills).
 
 | Skill | Invocation | Purpose | Sub-Agents |
 |-------|-----------|---------|------------|

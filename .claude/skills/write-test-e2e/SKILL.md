@@ -1,6 +1,8 @@
 ---
 name: write-test-e2e
 description: Write end-to-end tests for PostKit CLI using testcontainers and black-box testing.
+metadata:
+  internal: true
 ---
 
 # Write E2E Tests Skill

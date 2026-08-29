@@ -1,11 +1,11 @@
-# @appritech/postkit
+# @postkitstack/postkit
 
 > Developer toolkit for database migrations and backend automation
 
 **Note:** This tool is still under development and not recommended for production use. APIs may change between versions.
 
-[![npm version](https://badge.fury.io/js/@appritech/postkit.svg)](https://www.npmjs.com/package/@appritech/postkit)
-[![License](https://img.shields.io/npm/l/@appritech/postkit.svg)](LICENSE)
+[![npm version](https://badge.fury.io/js/%40postkitstack%2Fpostkit.svg)](https://www.npmjs.com/package/@postkitstack/postkit)
+[![License](https://img.shields.io/npm/l/@postkitstack/postkit.svg)](LICENSE)
 
 PostKit CLI is a modular toolkit for backend development with the Appri stack. It provides safe database migrations, auth management, and more.
 
@@ -16,7 +16,7 @@ PostKit CLI is a modular toolkit for backend development with the Appri stack. I
 ### Installation
 
 ```bash
-npm install -g @appritech/postkit
+npm install -g @postkitstack/postkit
 ```
 
 ### Requirements
@@ -186,14 +186,14 @@ postkit db commit
 postkit db deploy --remote staging
 ```
 
-For more help, see [Troubleshooting](https://docs.postkitstack.com/docs/modules/db/troubleshooting) or open an issue on [GitHub](https://github.com/appritechnologies/postkit/issues).
+For more help, see [Troubleshooting](https://docs.postkitstack.com/docs/modules/db/troubleshooting) or open an issue on [GitHub](https://github.com/postkitstack/Postkit/issues).
 
 ## 🔗 Links
 
-- **npm Package**: https://www.npmjs.com/package/@appritech/postkit
+- **npm Package**: https://www.npmjs.com/package/@postkitstack/postkit
 - **Documentation**: https://docs.postkitstack.com/
-- **GitHub**: https://github.com/appritechnologies/postkit
-- **Issues**: https://github.com/appritechnologies/postkit/issues
+- **GitHub**: https://github.com/postkitstack/Postkit
+- **Issues**: https://github.com/postkitstack/Postkit/issues
 
 ## 📜 License
 

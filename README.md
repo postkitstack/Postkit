@@ -22,7 +22,7 @@ PostKit brings together the following components:
 
 ## PostKit CLI
 
-The PostKit CLI (`@appritech/postkit`) is the developer toolkit for working with the PostKit stack. It provides safe database migrations, auth management, and project scaffolding.
+The PostKit CLI (`@postkitstack/postkit`) is the developer toolkit for working with the PostKit stack. It provides safe database migrations, auth management, and project scaffolding.
 
 **Documentation:** [https://docs.postkitstack.com/](https://docs.postkitstack.com/)
 
@@ -30,7 +30,7 @@ The PostKit CLI (`@appritech/postkit`) is the developer toolkit for working with
 
 ```bash
 # Install the CLI
-npm install -g @appritech/postkit
+npm install -g @postkitstack/postkit
 
 # Initialize a new project
 postkit init
@@ -81,15 +81,15 @@ No restart needed — Claude Code picks up changes automatically.
 
 Full documentation is available at [docs.postkitstack.com](https://docs.postkitstack.com/).
 
-For more help, see [Troubleshooting](https://docs.postkitstack.com/docs/modules/db/troubleshooting) or open an issue on [GitHub](https://github.com/appritechnologies/postkit/issues).
+For more help, see [Troubleshooting](https://docs.postkitstack.com/docs/modules/db/troubleshooting) or open an issue on [GitHub](https://github.com/postkitstack/Postkit/issues).
 
 ## Links
 
 - **CLI Tool**: [cli/README.md](cli/README.md)
-- **npm Package**: https://www.npmjs.com/package/@appritech/postkit
+- **npm Package**: https://www.npmjs.com/package/@postkitstack/postkit
 - **Documentation**: https://docs.postkitstack.com/
-- **GitHub**: https://github.com/appritechnologies/postkit
-- **Issues**: https://github.com/appritechnologies/postkit/issues
+- **GitHub**: https://github.com/postkitstack/Postkit
+- **Issues**: https://github.com/postkitstack/Postkit/issues
 
 ## License
 

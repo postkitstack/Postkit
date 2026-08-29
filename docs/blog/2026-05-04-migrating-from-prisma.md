@@ -35,7 +35,7 @@ The transition has two phases: getting your current schema into PostKit, then sw
 PostKit's `db import` command reads your current PostgreSQL database (not your `schema.prisma`) and generates schema files:
 
 ```bash
-npm install -g @appritech/postkit
+npm install -g @postkitstack/postkit
 postkit init
 
 # Add your database as a remote

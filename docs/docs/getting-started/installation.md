@@ -41,15 +41,15 @@ npm --version
 ### From npm
 
 ```bash
-npm install -g @appritech/postkit
+npm install -g @postkitstack/postkit
 ```
 
 ### From source
 
 ```bash
 # Clone the repository
-git clone https://github.com/appritechnologies/postkit.git
-cd postkit/cli
+git clone https://github.com/postkitstack/Postkit.git
+cd Postkit/cli
 
 # Install dependencies
 npm install

@@ -113,7 +113,7 @@ For databases where a full clone is impractical (100GB+), you can use a represen
 ## Getting Started
 
 ```bash
-npm install -g @appritech/postkit
+npm install -g @postkitstack/postkit
 postkit init
 postkit db remote add prod "postgres://..." --default
 postkit db start    # clone happens here
