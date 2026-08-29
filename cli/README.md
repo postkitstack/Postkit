@@ -4,7 +4,7 @@
 
 **Note:** This tool is still under development and not recommended for production use. APIs may change between versions.
 
-[![npm version](https://badge.fury.io/js/@postkitstack/postkit.svg)](https://www.npmjs.com/package/@postkitstack/postkit)
+[![npm version](https://badge.fury.io/js/%40postkitstack%2Fpostkit.svg)](https://www.npmjs.com/package/@postkitstack/postkit)
 [![License](https://img.shields.io/npm/l/@postkitstack/postkit.svg)](LICENSE)
 
 PostKit CLI is a modular toolkit for backend development with the Appri stack. It provides safe database migrations, auth management, and more.
